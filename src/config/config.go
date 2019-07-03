@@ -7,9 +7,10 @@ import (
 )
 
 type ConfigList struct {
-	ApiKey    string
-	ApiSecret string
-	LogFile   string
+	ApiKey      string
+	ApiSecret   string
+	LogFile     string
+	ProductCode string
 }
 
 var BaseURL string
@@ -24,9 +25,10 @@ func init() {
 	}
 
 	Config = ConfigList{
-		ApiKey:    cfg.Section("bitflyer").Key("api_key").String(),
-		ApiSecret: cfg.Section("bitflyer").Key("api_secret").String(),
-		LogFile:   cfg.Section("tradeSetting").Key("logfile_path").String(),
+		ApiKey:        cfg.Section("bitflyer").Key("api_key").String(),
+		ApiSecret:     cfg.Section("bitflyer").Key("api_secret").String(),
+		LogFile:       cfg.Section("tradeSetting").Key("logfile_path").String(),
+		ProductCode:   cfg.Section("tradeSetting").Key("product_code").String(),		
 	}
 	
 	BaseURL = cfg.Section("bitflyer").Key("base_url").String()

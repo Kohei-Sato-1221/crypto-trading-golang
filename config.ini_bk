@@ -1,0 +1,6 @@
+[bitflyer]
+base_url=https://api.bitflyer.com/v1/
+
+[tradeSetting]
+logfile_path=trading.log
+product_code=BTC_JPY
