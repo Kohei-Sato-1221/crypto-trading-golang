@@ -260,7 +260,7 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*ResponseSendChildOrder, e
 	return &response, nil
 }
 
-func (apiClient *APIClient) getOrderInfo(query map[string]string) ([]Order, error){
+func (apiClient *APIClient) GetOrderInfo(query map[string]string) ([]Order, error){
 	resp, err := apiClient.doGETPOST("GET", "me/getchildorders", query, nil)
 	if err != nil {
 		return nil, err

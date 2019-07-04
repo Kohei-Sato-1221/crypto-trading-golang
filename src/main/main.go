@@ -13,17 +13,24 @@ func main(){
 	utils.LogSetting(config.Config.LogFile)
 	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
 	
-	order := &bitflyer.Order{
-	    ProductCode     : config.Config.ProductCode,
-		ChildOrderType  : "LIMIT",
-		Side            : "BUY",
-		Price           : 800000,
-		Size            : 0.001,
-		MinuteToExpires : 1,
-		TimeInForce     : "GTC",
+//	order := &bitflyer.Order{
+//	    ProductCode     : config.Config.ProductCode,
+//		ChildOrderType  : "LIMIT",
+//		Side            : "BUY",
+//		Price           : 1000000,
+//		Size            : 0.001,
+//		MinuteToExpires : 1,
+//		TimeInForce     : "GTC",
+//	}
+//	res, _ := apiClient.PlaceOrder(order)
+//	fmt.Println(res.ChildOrderAcceptanceID)
+//	
+	params := map[string]string{
+		"product_code"              : config.Config.ProductCode,
+		"child_order_acceptance_id" : "JRF20190704-131322-262181",
 	}
-	res, _ := apiClient.PlaceOrder(order)
-	fmt.Println(res.ChildOrderAcceptanceID)
+	r, _ := apiClient.GetOrderInfo(params)
+	fmt.Println(r)
 	
 //	tickerChan := make(chan bitflyer.Ticker)
 //	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChan)

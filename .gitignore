@@ -2,5 +2,5 @@
 /pkg
 *.log
 .project
-config.ini
+private_config.ini
 /src/config.ini
