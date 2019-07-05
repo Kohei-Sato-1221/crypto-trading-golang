@@ -3,4 +3,4 @@
 *.log
 .project
 private_config.ini
-/src/config.ini
+/src/private_config.ini
