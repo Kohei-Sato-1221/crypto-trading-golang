@@ -5,14 +5,17 @@ import (
 	"config"
 	"utils"
 	"models"
+	"controller"
 //	"time"
 //	"log"
 //	"bitflyer"
 )
 
-func main(){
+func main() {
 	utils.LogSetting(config.Config.LogFile)
 	fmt.Println(models.DbConnection)
+	controller.StreamIngestionData()
+	controller.StartWebServer()
 //	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
 	
 //	order := &bitflyer.Order{
