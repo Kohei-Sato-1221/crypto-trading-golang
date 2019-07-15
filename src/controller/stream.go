@@ -1,10 +1,12 @@
 package controller
 
 import (
-	"models"
+	"strconv"
 	"bitflyer"
 	"config"
-//	"log"
+	"fmt"
+	"github.com/carlescere/scheduler"
+	"log"
 )
 
 func StreamIngestionData() {
@@ -12,15 +14,15 @@ func StreamIngestionData() {
 	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
-	go func() {
-		for ticker := range tickerChannl {
-//			log.Printf("action=StreamIngestionData, %v", ticker)
-			for _, duration := range config.Config.Durations {
-				isCreated := models.CreateCandleWithDuration(ticker, ticker.ProductCode, duration)
-				if isCreated == true && duration == config.Config.TradeDuration {
-					// TODO
-				}
-			}
-		}
-	}()
+	buyingJob := func(){
+		ticker, _ := apiClient.GetTicker("BTC_JPY")
+		log.Printf("BTC price :%s", strconv.FormatFloat(ticker.GetMiddlePrice(), 'f', 4, 64))
+	}
+	
+	sellingJob := func(){
+		fmt.Println("sell")
+	}
+	
+	scheduler.Every(10).Seconds().Run(buyingJob)
+	scheduler.Every(5).Seconds().Run(sellingJob)
 }

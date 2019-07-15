@@ -56,7 +56,7 @@ func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]s
 		return
 	}
 	endpoint := baseURL.ResolveReference(apiURL).String()
-	log.Printf("action=doGETPOST endpoint=%s", endpoint)
+//	log.Printf("action=doGETPOST endpoint=%s", endpoint)
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(data))
 	if err != nil{
 		return

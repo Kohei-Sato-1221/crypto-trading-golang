@@ -1,21 +1,50 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"config"
 	"utils"
+	"fmt"
 	"models"
 	"controller"
-//	"time"
-//	"log"
-//	"bitflyer"
 )
 
-func main() {
+func main(){
 	utils.LogSetting(config.Config.LogFile)
 	fmt.Println(models.DbConnection)
 	controller.StreamIngestionData()
-	controller.StartWebServer()
+	log.Println(controller.StartWebServer())
+//	controller.StartWebServer()
+//	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
+}
+
+
+//func main(){
+//	s := models.NewSignalEvents()
+//	df, _ := models.GetAllCandle("BTC_JPY", time.Minute, 10)
+//	c1 := df.Candles[0]
+//	c2 := df.Candles[5]
+//	s.Buy("BTC_JPY", c1.Time.UTC(), c1.Close, 1.0, true)
+//	s.Sell("BTC_JPY", c2.Time.UTC(), c2.Close, 1.0, true)
+//}
+
+
+//import (
+//	"fmt"
+//	"config"
+//	"utils"
+//	"models"
+//	"controller"
+//	"time"
+//	"log"
+//	"bitflyer"
+//)
+//
+//func main() {
+//	utils.LogSetting(config.Config.LogFile)
+//	fmt.Println(models.DbConnection)
+//	controller.StreamIngestionData()
+//	controller.StartWebServer()
 //	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
 	
 //	order := &bitflyer.Order{
@@ -58,4 +87,4 @@ func main() {
 //	log.Println("test test")
 //	fmt.Println(config.Config.ApiKey)
 //	fmt.Println(config.Config.ApiSecret)
-}
+//}
