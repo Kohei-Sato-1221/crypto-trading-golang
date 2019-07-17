@@ -27,6 +27,31 @@ func init(){
 	}
 	
 	cmd := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS buy_orders (
+			orderid STRING,
+			time DATETIME NOT NULL,
+			product_code STRING,
+			side STRING,
+			price FLOAT,
+			size FLOAT,
+			exchange STRING,
+			filled INTEGER DEFAULT 0)`)
+	DbConnection.Exec(cmd)
+
+	cmd = fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS sell_orders (
+			parentid STRING,
+			orderid STRING,
+			time DATETIME NOT NULL,
+			product_code STRING,
+			side STRING,
+			price FLOAT,
+			size FLOAT,
+			exchange STRING,
+			filled INTEGER DEFAULT 0)`)
+	DbConnection.Exec(cmd)
+	
+	cmd  = fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s (
 			time DATETIME PRIMARY KEY NOT NULL,
 			product_code STRING,

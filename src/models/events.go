@@ -9,6 +9,31 @@ import (
 	"config"
 )
 
+type OrderEvent struct {
+	OrderId     string    `json:"orderid"`
+	Time        time.Time `json:"time"`
+	ProductCode string    `json:"product_code"`
+	Side        string    `json:"side"`
+	Price       float64   `json:"price"`
+	Size        float64   `json:"size"`
+	Exchange    string    `json:"exchange"`
+}
+
+
+func (e *OrderEvent) BuyOrder() bool {
+	cmd := fmt.Sprintf("INSERT INTO buy_orders (orderid, time, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	_, err := DbConnection.Exec(cmd, e.OrderId, e.Time.Format(time.RFC3339), e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			log.Println(err)
+			return true
+		}
+		return false
+	}
+	return true
+}
+
+
 type SignalEvent struct {
 	Time        time.Time `json:"time"`
 	ProductCode string    `json:"product_code"`
@@ -16,6 +41,7 @@ type SignalEvent struct {
 	Price       float64   `json:"price"`
 	Size        float64   `json:"size"`
 }
+
 
 func (s *SignalEvent) Save() bool {
 	cmd := fmt.Sprintf("INSERT INTO %s (time, product_code, side, price, size) VALUES (?, ?, ?, ?, ?)", tableNameSignalEvents)
@@ -92,6 +118,11 @@ func (s *SignalEvents) CanBuy() bool {
 func (s *SignalEvents) CanSell() bool {
 	return true
 }
+
+func (s *SignalEvents) Sugar() bool {
+	return true
+}
+
 
 func (s *SignalEvents) Buy(ProductCode string, time time.Time, price, size float64, save bool) bool {
 	if !s.CanBuy() {
