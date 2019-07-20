@@ -34,19 +34,38 @@ func (e *OrderEvent) BuyOrder() error {
 	return nil
 }
 
-func FilledCheck() {
-	cmd := fmt.Sprintf(`SELECT orderid FROM buy_orders WHERE filled = 0;`)
+func FilledCheck() []string{
+	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0;`
 	rows, err := DbConnection.Query(cmd)
 	if err != nil {
-		return
+		return nil
 	}
 	defer rows.Close()
 
+	var cnt int = 0
+	var ids []string;
 	for rows.Next() {
-		var oe OrderEvent
+//		var oe OrderEvent
+		var orderId string
 		//todo
-		log.Printf("Filled rows: %s", rows.Scan(&oe.OrderId))
+		
+		if err := rows.Scan(&orderId); err != nil {
+			log.Fatal("Failure to get records.....")
+			return nil
+		}
+		cnt++
+		ids = append(ids, orderId)
 	}
+	return ids
+}
+
+func UpdateFilledOrder(orderId string) error{
+	cmd := fmt.Sprintf("update buy_orders set filled = 1 where orderid = ?")
+	_, err := DbConnection.Exec(cmd, orderId)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 

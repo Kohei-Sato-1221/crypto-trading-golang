@@ -105,6 +105,32 @@ func (apiClient *APIClient) GetBalance() ([]Balance, error) {
 	return balance, nil
 }
 
+func (apiClient *APIClient) GetOrderByOrderId(orderId string) (*Order, error) {
+	url := "me/getchildorders"
+	params := make(map[string]string)
+	params["child_order_acceptance_id"] = orderId
+	params["product_code"] = "BTC_JPY"
+	params["child_order_state"] = "COMPLETED"
+	resp, err := apiClient.doGETPOST("GET", url, params, nil)
+	log.Printf("url=%s resp=%s", url, string(resp))
+	if err != nil{
+		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
+		return nil, err
+	}
+	var orders []Order
+	err = json.Unmarshal(resp, &orders)
+	if err != nil{
+		log.Printf("action=GetOrderByOrderId err=%s, orderId:%s", err.Error(), orderId)
+		return nil, err
+	}
+	
+	if len(orders) == 0 {
+		log.Printf("action=GetOrderByOrderId No Order correspond to orderId:%s", orderId)
+		return nil, nil
+	}
+	return &orders[0], nil
+}
+
 
 // easy to convert json to struct with https://mholt.github.io/json-to-go/
 type Ticker struct {

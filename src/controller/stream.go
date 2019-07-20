@@ -7,7 +7,7 @@ import (
 //	"fmt"
 	"models"
 	"github.com/carlescere/scheduler"
-//	"log"
+	"log"
 //	"time"
 )
 
@@ -60,11 +60,33 @@ func StreamIngestionData() {
 	filledCheckJob := func(){
 //		fmt.Println("sell")
 //		var ordersList []Order = apiClient.GetOrderInfo()
-		models.FilledCheck()
+		ids := models.FilledCheck()
+		if ids == nil{
+			log.Fatal("error in filledCheckJob.....")
+			return
+		}
+		
+		for i, orderId := range ids {
+			log.Printf("No%d.Id:%v", i, orderId)
+			order, err := apiClient.GetOrderByOrderId(orderId)
+			if err != nil{
+				log.Fatal("error in filledCheckJob.....")
+				return
+			}
+			
+			if order != nil{
+				err := models.UpdateFilledOrder(orderId)
+				if err != nil {
+					log.Fatal("Failure to update records.....")
+					return
+				}
+				log.Printf("Order updated successfully!! orderId:%s", orderId)								
+			}
+		}
 	}
 	
 //	scheduler.Every(10).Seconds().Run(buyingJob)
-	scheduler.Every(5).Seconds().Run(filledCheckJob)
+	scheduler.Every(1000).Seconds().Run(filledCheckJob)
 }
 
 /*
