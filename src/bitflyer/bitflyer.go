@@ -238,11 +238,11 @@ type Order struct {
 	After                  int     `json:"after"`
 }
 
-type ResponseSendChildOrder struct {
-	ChildOrderAcceptanceID string `json:"child_order_acceptance_id"`
+type PlaceOrderResponse struct {
+	OrderId string `json:"child_order_acceptance_id"`
 }
 
-func (apiClient *APIClient) PlaceOrder(order *Order) (*ResponseSendChildOrder, error) {
+func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error) {
 	data, err := json.Marshal(order)
 	if err != nil {
 		return nil, err
@@ -252,7 +252,7 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*ResponseSendChildOrder, e
 	if err != nil {
 		return nil, err
 	}
-	var response ResponseSendChildOrder
+	var response PlaceOrderResponse
 	err = json.Unmarshal(resp, &response)
 	if err != nil {
 		return nil, err

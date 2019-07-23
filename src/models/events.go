@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	"config"
+	"errors"
 )
 
 type OrderEvent struct {
@@ -20,17 +21,17 @@ type OrderEvent struct {
 }
 
 
-func (e *OrderEvent) BuyOrder() bool {
+func (e *OrderEvent) BuyOrder() error {
 	cmd := fmt.Sprintf("INSERT INTO buy_orders (orderid, time, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	_, err := DbConnection.Exec(cmd, e.OrderId, e.Time.Format(time.RFC3339), e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			log.Println(err)
-			return true
+			return nil
 		}
-		return false
+		return errors.New("Error in BuyOrder()")
 	}
-	return true
+	return nil
 }
 
 

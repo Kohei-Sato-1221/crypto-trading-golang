@@ -17,19 +17,42 @@ func StreamIngestionData() {
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
 	buyingJob := func(){
-//		ticker, _ := apiClient.GetTicker("BTC_JPY")
-		e := models.OrderEvent{
-			OrderId:     "or12234",
+		ticker, _ := apiClient.GetTicker("BTC_JPY")
+		
+		buyPrice :=  (ticker.Ltp * 0.8 + ticker.BestBid * 0.2)
+		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
+		
+		order := &bitflyer.Order{
+			ProductCode:     config.Config.ProductCode,
+			ChildOrderType:  "LIMIT",
+			Side:            "BUY",
+			Price:           buyPrice,
+			Size:            0.001,
+			MinuteToExpires: 1000,
+			TimeInForce:     "GTC",
+		}
+		res, err := apiClient.PlaceOrder(order)
+		if err != nil{
+			log.Println("BuyOrder failed.... Failure in [apiClient.PlaceOrder()]")
+			return
+		}
+		
+		event := models.OrderEvent{
+			OrderId:     res.OrderId,
 			Time:        time.Now(),
 			ProductCode: "BTC_JPY",
 			Side:        "BUY",
-			Price:       100000.0,
+			Price:       buyPrice,
 			Size:        0.001,
 			Exchange:    "bitflyer",
 		}
-		isSuccessfull := e.BuyOrder()
-//		log.Printf("BTC price :%s", strconv.FormatFloat(ticker.GetMiddlePrice(), 'f', 4, 64))
-		log.Printf("BuyOrder :%s", isSuccessfull)
+		err = event.BuyOrder()
+		if err != nil{
+			log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
+			return
+		}else{
+			log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
+		}
 	}
 	
 	sellingJob := func(){
