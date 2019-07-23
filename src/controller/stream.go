@@ -7,8 +7,8 @@ import (
 //	"fmt"
 	"models"
 	"github.com/carlescere/scheduler"
-	"log"
-	"time"
+//	"log"
+//	"time"
 )
 
 func StreamIngestionData() {
@@ -16,10 +16,11 @@ func StreamIngestionData() {
 	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
+	/*
 	buyingJob := func(){
 		ticker, _ := apiClient.GetTicker("BTC_JPY")
 		
-		buyPrice :=  (ticker.Ltp * 0.8 + ticker.BestBid * 0.2)
+		buyPrice :=  (ticker.Ltp * 0.6 + ticker.BestBid * 0.4)
 		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
 		
 		order := &bitflyer.Order{
@@ -54,13 +55,16 @@ func StreamIngestionData() {
 			log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
 		}
 	}
+	*/
 	
-	sellingJob := func(){
+	filledCheckJob := func(){
 //		fmt.Println("sell")
+//		var ordersList []Order = apiClient.GetOrderInfo()
+		models.FilledCheck()
 	}
 	
-	scheduler.Every(10).Seconds().Run(buyingJob)
-	scheduler.Every(5).Seconds().Run(sellingJob)
+//	scheduler.Every(10).Seconds().Run(buyingJob)
+	scheduler.Every(5).Seconds().Run(filledCheckJob)
 }
 
 /*

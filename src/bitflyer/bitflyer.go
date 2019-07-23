@@ -260,18 +260,24 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 	return &response, nil
 }
 
-func (apiClient *APIClient) GetOrderInfo(query map[string]string) ([]Order, error){
-	resp, err := apiClient.doGETPOST("GET", "me/getchildorders", query, nil)
-	if err != nil {
-		return nil, err
-	}
-	var ordersList []Order
-	err = json.Unmarshal(resp, &ordersList)
-	if err != nil {
-		return nil, err
-	}
-	return ordersList, nil
-}
+//func (apiClient *APIClient) GetFilledBuyOrderInfo() ([]Order, error){
+//	query := map[string]string {"child_order_state":"COMPLETED"}
+//	return GetOrderInfo(query)
+//}
+//
+//
+//func (apiClient *APIClient) GetOrderInfo(query map[string]string) ([]Order, error){
+//	resp, err := apiClient.doGETPOST("GET", "me/getchildorders", query, nil)
+//	if err != nil {
+//		return nil, err
+//	}
+//	var ordersList []Order
+//	err = json.Unmarshal(resp, &ordersList)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return ordersList, nil
+//}
 
 
 

@@ -34,6 +34,21 @@ func (e *OrderEvent) BuyOrder() error {
 	return nil
 }
 
+func FilledCheck() {
+	cmd := fmt.Sprintf(`SELECT orderid FROM buy_orders WHERE filled = 0;`)
+	rows, err := DbConnection.Query(cmd)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var oe OrderEvent
+		//todo
+		log.Printf("Filled rows: %s", rows.Scan(&oe.OrderId))
+	}
+}
+
 
 type SignalEvent struct {
 	Time        time.Time `json:"time"`
