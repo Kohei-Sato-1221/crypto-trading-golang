@@ -8,7 +8,7 @@ import (
 	"models"
 	"github.com/carlescere/scheduler"
 	"log"
-//	"time"
+	"time"
 )
 
 func StreamIngestionData() {
@@ -16,7 +16,6 @@ func StreamIngestionData() {
 	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
-	/*
 	buyingJob := func(){
 		ticker, _ := apiClient.GetTicker("BTC_JPY")
 		
@@ -55,17 +54,16 @@ func StreamIngestionData() {
 			log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
 		}
 	}
-	*/
 	
 	filledCheckJob := func(){
-//		fmt.Println("sell")
-//		var ordersList []Order = apiClient.GetOrderInfo()
+		// Get list of unfilled buy orders in local Database
 		ids := models.FilledCheck()
 		if ids == nil{
 			log.Fatal("error in filledCheckJob.....")
 			return
 		}
 		
+		// check if an order is filled for each orders calling API
 		for i, orderId := range ids {
 			log.Printf("No%d.Id:%v", i, orderId)
 			order, err := apiClient.GetOrderByOrderId(orderId)
@@ -85,8 +83,51 @@ func StreamIngestionData() {
 		}
 	}
 	
-//	scheduler.Every(10).Seconds().Run(buyingJob)
-	scheduler.Every(1000).Seconds().Run(filledCheckJob)
+	sellOrderJob := func(){
+		ticker, _ := apiClient.GetTicker("BTC_JPY")
+		ids := models.FilledCheckWithSellOrder()
+		if ids == nil{
+			log.Fatal("error in filledCheckJob.....")
+			return
+		}
+		
+		for i, orderId := range ids {
+			log.Printf("No%d.Id:%v", i, orderId)
+			sellPrice :=  (ticker.Ltp * 1.01)
+			log.Printf("LTP:%10.2f  myPrice:%10.2f", ticker.Ltp, sellPrice)
+		
+			sellOrder := &bitflyer.Order{
+				ProductCode:     config.Config.ProductCode,
+				ChildOrderType:  "LIMIT",
+				Side:            "BUY",
+				Price:           sellPrice,
+				Size:            0.001,
+				MinuteToExpires: 1000,
+				TimeInForce:     "GTC",
+			}
+			res, _ := apiClient.PlaceOrder(sellOrder)
+			if res != nil{
+				log.Println("SellOrder failed.... Failure in [apiClient.PlaceOrder()]")
+				return
+			}
+			
+			if sellOrder != nil{
+				err := models.UpdateFilledOrderWithBuyOrder(orderId)
+				if err != nil {
+					log.Fatal("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
+					return
+				}
+				log.Printf("Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderId)								
+			}
+		}
+	}
+	
+	testFlg := false
+	if(testFlg){
+		scheduler.Every(10).Seconds().Run(buyingJob)		
+		scheduler.Every(1000).Seconds().Run(filledCheckJob)
+	} 
+	scheduler.Every(1000).Seconds().Run(sellOrderJob)
 }
 
 /*
