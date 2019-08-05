@@ -276,11 +276,13 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 	url := "me/sendchildorder"
 	resp, err := apiClient.doGETPOST("POST", url, map[string]string{}, data)
 	if err != nil {
+		fmt.Printf("res:%s\n", resp)
 		return nil, err
 	}
 	var response PlaceOrderResponse
 	err = json.Unmarshal(resp, &response)
 	if err != nil {
+		fmt.Printf("err:%s\n", err)
 		return nil, err
 	}
 	return &response, nil

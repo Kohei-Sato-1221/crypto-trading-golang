@@ -34,33 +34,37 @@ func (e *OrderEvent) BuyOrder() error {
 	return nil
 }
 
-func FilledCheck() []string{
-	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0;`
+
+func FilledCheck() ([]string, error){
+	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '';`
 	rows, err := DbConnection.Query(cmd)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 
 	var cnt int = 0
-	var ids []string;
+	var ids []string
 	for rows.Next() {
-//		var oe OrderEvent
 		var orderId string
-		//todo
 		
 		if err := rows.Scan(&orderId); err != nil {
 			log.Fatal("Failure to get records.....")
-			return nil
+			return nil, err
 		}
 		cnt++
 		ids = append(ids, orderId)
 	}
-	return ids
+	return ids, nil
 }
 
-func FilledCheckWithSellOrder() []string{
-	cmd := `SELECT orderid FROM buy_orders WHERE filled = 1;`
+type Idprice struct {
+	OrderId     string    `json:"orderid"`
+	Price       float64   `json:"price"`
+}
+
+func FilledCheckWithSellOrder() []Idprice{
+	cmd := `SELECT orderid, price FROM buy_orders WHERE filled = 1 and orderid != '';`
 	rows, err := DbConnection.Query(cmd)
 	if err != nil {
 		return nil
@@ -68,20 +72,22 @@ func FilledCheckWithSellOrder() []string{
 	defer rows.Close()
 
 	var cnt int = 0
-	var ids []string;
+	var idprices []Idprice;
 	for rows.Next() {
 //		var oe OrderEvent
 		var orderId string
+		var price float64
 		//todo
 		
-		if err := rows.Scan(&orderId); err != nil {
+		if err := rows.Scan(&orderId, &price); err != nil {
 			log.Fatal("Failure to get records.....")
 			return nil
 		}
 		cnt++
-		ids = append(ids, orderId)
+		idprice := Idprice{OrderId: orderId, Price: price}
+		idprices = append(idprices, idprice)
 	}
-	return ids
+	return idprices
 }
 
 func UpdateFilledOrder(orderId string) error{

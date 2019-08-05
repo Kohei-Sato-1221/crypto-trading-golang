@@ -1,14 +1,13 @@
 package controller
 
 import (
-//	"strconv"
 	"bitflyer"
 	"config"
-//	"fmt"
 	"models"
 	"github.com/carlescere/scheduler"
 	"log"
 	"time"
+	"math"
 )
 
 func StreamIngestionData() {
@@ -17,13 +16,14 @@ func StreamIngestionData() {
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
 	buyingJob := func(){
+		shouldBreak := false
 		ticker, _ := apiClient.GetTicker("BTC_JPY")
 		
-		buyPrice :=  (ticker.Ltp * 0.6 + ticker.BestBid * 0.4)
+		buyPrice :=  Round((ticker.Ltp * 0.4 + ticker.BestBid * 0.6))
 		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
 		
 		order := &bitflyer.Order{
-			ProductCode:     config.Config.ProductCode,
+			ProductCode:     "BTC_JPY",
 			ChildOrderType:  "LIMIT",
 			Side:            "BUY",
 			Price:           buyPrice,
@@ -32,124 +32,122 @@ func StreamIngestionData() {
 			TimeInForce:     "GTC",
 		}
 		res, err := apiClient.PlaceOrder(order)
-		if err != nil{
+		if err != nil || res == nil {
 			log.Println("BuyOrder failed.... Failure in [apiClient.PlaceOrder()]")
-			return
+			shouldBreak = true
 		}
-		
-		event := models.OrderEvent{
-			OrderId:     res.OrderId,
-			Time:        time.Now(),
-			ProductCode: "BTC_JPY",
-			Side:        "BUY",
-			Price:       buyPrice,
-			Size:        0.001,
-			Exchange:    "bitflyer",
+		if !shouldBreak {
+			event := models.OrderEvent{
+				OrderId:     res.OrderId,
+				Time:        time.Now(),
+				ProductCode: "BTC_JPY",
+				Side:        "BUY",
+				Price:       buyPrice,
+				Size:        0.001,
+				Exchange:    "bitflyer",
+			}
+			err = event.BuyOrder()
+			if err != nil{
+				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
+			}else{
+				log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
+			}	
 		}
-		err = event.BuyOrder()
-		if err != nil{
-			log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
-			return
-		}else{
-			log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
-		}
+		log.Println("【buyingJob】end of job")
 	}
 	
 	filledCheckJob := func(){
 		// Get list of unfilled buy orders in local Database
-		ids := models.FilledCheck()
-		if ids == nil{
+		ids, err1 := models.FilledCheck()
+		if err1 != nil{
 			log.Fatal("error in filledCheckJob.....")
-			return
+			goto ENDOFFILLEDCHECK
+		}
+		
+		if ids == nil{
+			goto ENDOFFILLEDCHECK
 		}
 		
 		// check if an order is filled for each orders calling API
 		for i, orderId := range ids {
-			log.Printf("No%d.Id:%v", i, orderId)
+			log.Printf("No%d Id:%v", i, orderId)
 			order, err := apiClient.GetOrderByOrderId(orderId)
 			if err != nil{
 				log.Fatal("error in filledCheckJob.....")
-				return
+				break
 			}
 			
 			if order != nil{
 				err := models.UpdateFilledOrder(orderId)
 				if err != nil {
 					log.Fatal("Failure to update records.....")
-					return
+					break
 				}
 				log.Printf("Order updated successfully!! orderId:%s", orderId)								
 			}
 		}
+		ENDOFFILLEDCHECK:
+			log.Println("【filledCheckJob】end of job")
 	}
 	
 	sellOrderJob := func(){
-		ticker, _ := apiClient.GetTicker("BTC_JPY")
-		ids := models.FilledCheckWithSellOrder()
-		if ids == nil{
-			log.Fatal("error in filledCheckJob.....")
-			return
+		idprices := models.FilledCheckWithSellOrder()
+		if idprices == nil{
+			log.Println("【sellOrderjob】 : No order ids ")
+			goto ENDOFSELLORDER
 		}
 		
-		for i, orderId := range ids {
+		for i, idprice := range idprices {
+			orderId := idprice.OrderId
+			buyprice := idprice.Price
 			log.Printf("No%d.Id:%v", i, orderId)
-			sellPrice :=  (ticker.Ltp * 1.01)
-			log.Printf("LTP:%10.2f  myPrice:%10.2f", ticker.Ltp, sellPrice)
-		
+			sellPrice :=  Round((buyprice * 1.005))
+			log.Printf("buyprice:%10.2f  myPrice:%10.2f", buyprice, sellPrice)
+
 			sellOrder := &bitflyer.Order{
 				ProductCode:     config.Config.ProductCode,
 				ChildOrderType:  "LIMIT",
-				Side:            "BUY",
+				Side:            "SELL",
 				Price:           sellPrice,
 				Size:            0.001,
 				MinuteToExpires: 1000,
 				TimeInForce:     "GTC",
 			}
-			res, _ := apiClient.PlaceOrder(sellOrder)
-			if res != nil{
-				log.Println("SellOrder failed.... Failure in [apiClient.PlaceOrder()]")
-				return
+			
+			log.Printf("sell order:%v\n", sellOrder)
+			res, err := apiClient.PlaceOrder(sellOrder)
+			if err != nil{
+				log.Fatal("SellOrder failed.... Failure in [apiClient.PlaceOrder()]")
+				break
+			}
+			if res == nil{
+				log.Fatal("SellOrder failed.... no response")
 			}
 			
 			if sellOrder != nil{
 				err := models.UpdateFilledOrderWithBuyOrder(orderId)
 				if err != nil {
 					log.Fatal("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
-					return
+					break
 				}
 				log.Printf("Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderId)								
 			}
 		}
+		ENDOFSELLORDER:
+			log.Println("【sellOrderjob】end of job")
 	}
 	
 	testFlg := false
 	if(testFlg){
-		scheduler.Every(10).Seconds().Run(buyingJob)		
-		scheduler.Every(1000).Seconds().Run(filledCheckJob)
+		scheduler.Every(60).Seconds().Run(buyingJob)
+		scheduler.Every(20).Seconds().Run(sellOrderJob)
 	} 
-	scheduler.Every(1000).Seconds().Run(sellOrderJob)
+	scheduler.Every(10).Seconds().Run(filledCheckJob)
 }
 
-/*
-【jobの種類】
-
-1.buyOrderJob:
-・指定の周期で買い注文を発注するジョブ
-・買い注文が発注したら以下のデータをinsertする
-　[Table:buyorder]orderid, pair, volume, price, orderdate, exchange, filled 
-
-2.filledCheckJob:
-・指定の周期で買い注文の約定具合をチェックするジョブ
-・買い注文が約定していた場合、buyorderテーブルのfilledをtrueにする
-
-3.sellOrderJob:
-・指定の周期で売り注文を発注するジョブ
-・buyoerderのレコードでfilledがtrueかつ、sellorderに該当のorderidがない場合売り注文を出す。
-・売り注文が発注できたら以下のデータをinsertする。
-　[Table:sellorder]buyorderid, orderid, pair, volume, price, orderdate, exchange, filled 
-
-
-*/
+func Round(f float64) float64{
+	return math.Floor(f + .5) 
+}
 
 
 
