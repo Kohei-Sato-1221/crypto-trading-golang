@@ -28,6 +28,7 @@ func init(){
 		log.Println("Successfully got DB connection!!")
 	}
 	
+	// filled 0:買い注文発注済 1:買い注文約定済み 2:対応する売り注文発注済
 	cmd := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS buy_orders (
 			orderid STRING,
@@ -40,6 +41,7 @@ func init(){
 			filled INTEGER DEFAULT 0)`)
 	DbConnection.Exec(cmd)
 
+	// filled 0:売り注文発注 1:売り注文約定済み
 	cmd = fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS sell_orders (
 			parentid STRING,

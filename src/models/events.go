@@ -34,9 +34,22 @@ func (e *OrderEvent) BuyOrder() error {
 	return nil
 }
 
+func (e *OrderEvent) SellOrder(pid string) error {
+	cmd := fmt.Sprintf("INSERT INTO sell_orders (parentid, orderid, time, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+	_, err := DbConnection.Exec(cmd, pid, e.OrderId, e.Time.Format(time.RFC3339), e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			log.Println(err)
+			return nil
+		}
+		return errors.New("Error in SellOrder()")
+	}
+	return nil
+}
+
 
 func FilledCheck() ([]string, error){
-	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '';`
+	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '' union SELECT orderid FROM sell_orders WHERE filled = 0 and orderid != '';`
 	rows, err := DbConnection.Query(cmd)
 	if err != nil {
 		return nil, err
@@ -74,10 +87,8 @@ func FilledCheckWithSellOrder() []Idprice{
 	var cnt int = 0
 	var idprices []Idprice;
 	for rows.Next() {
-//		var oe OrderEvent
 		var orderId string
 		var price float64
-		//todo
 		
 		if err := rows.Scan(&orderId, &price); err != nil {
 			log.Fatal("Failure to get records.....")
@@ -96,11 +107,25 @@ func UpdateFilledOrder(orderId string) error{
 	if err != nil {
 		return err
 	}
+	cmd = fmt.Sprintf("update sell_orders set filled = 1 where orderid = ?")
+	_, err = DbConnection.Exec(cmd, orderId)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func UpdateFilledOrderWithBuyOrder(orderId string) error{
 	cmd := fmt.Sprintf("update buy_orders set filled = 2 where orderid = ?")
+	_, err := DbConnection.Exec(cmd, orderId)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func UpdateFilledSellOrder(orderId string) error{
+	cmd := fmt.Sprintf("update sell_orders set filled = 1 where orderid = ?")
 	_, err := DbConnection.Exec(cmd, orderId)
 	if err != nil {
 		return err

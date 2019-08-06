@@ -51,7 +51,7 @@ func StreamIngestionData() {
 				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
 			}else{
 				log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
-			}	
+			}
 		}
 		log.Println("【buyingJob】end of job")
 	}
@@ -100,7 +100,7 @@ func StreamIngestionData() {
 		for i, idprice := range idprices {
 			orderId := idprice.OrderId
 			buyprice := idprice.Price
-			log.Printf("No%d.Id:%v", i, orderId)
+			log.Printf("No%d Id:%v", i, orderId)
 			sellPrice :=  Round((buyprice * 1.005))
 			log.Printf("buyprice:%10.2f  myPrice:%10.2f", buyprice, sellPrice)
 
@@ -124,13 +124,27 @@ func StreamIngestionData() {
 				log.Fatal("SellOrder failed.... no response")
 			}
 			
-			if sellOrder != nil{
-				err := models.UpdateFilledOrderWithBuyOrder(orderId)
-				if err != nil {
-					log.Fatal("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
-					break
-				}
-				log.Printf("Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderId)								
+			err = models.UpdateFilledOrderWithBuyOrder(orderId)
+			if err != nil {
+				log.Fatal("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
+				break
+			}
+			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderId)
+			
+			event := models.OrderEvent{
+				OrderId:     res.OrderId,
+				Time:        time.Now(),
+				ProductCode: "BTC_JPY",
+				Side:        "Sell",
+				Price:       sellPrice,
+				Size:        0.001,
+				Exchange:    "bitflyer",
+			}
+			err = event.SellOrder(orderId)
+			if err != nil{
+				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
+			}else{
+				log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
 			}
 		}
 		ENDOFSELLORDER:
