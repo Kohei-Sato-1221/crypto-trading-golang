@@ -71,6 +71,25 @@ func FilledCheck() ([]string, error){
 	return ids, nil
 }
 
+func CountUnfilledBuyOrders() int{
+	cmd := `SELECT COUNT(orderid) FROM buy_orders WHERE filled = 0 and orderid != '';`
+	rows, err := DbConnection.Query(cmd)
+	if err != nil {
+		return 999
+	}
+	defer rows.Close()
+
+	var cnt int
+	for rows.Next() {
+		if err := rows.Scan(&cnt); err != nil {
+			log.Fatal("Failure to get records.....")
+			return 999
+		}
+		break
+	}
+	return cnt
+}
+
 type Idprice struct {
 	OrderId     string    `json:"orderid"`
 	Price       float64   `json:"price"`

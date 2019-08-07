@@ -8,16 +8,17 @@ import (
 )
 
 type ConfigList struct {
-	ApiKey      string
-	ApiSecret   string
-	LogFile     string
-	ProductCode string
+	ApiKey          string
+	ApiSecret       string
+	LogFile         string
+	ProductCode     string
 	
 	TradeDuration	time.Duration
 	Durations		map[string]time.Duration
 	DbName			string
 	SQLDriver		string
-	Port				int
+	Port			int
+	ParallelOrders  int
 }
 
 var BaseURL string
@@ -53,7 +54,7 @@ func init() {
 		DbName: cfg.Section("db").Key("name").String(),
 		SQLDriver: cfg.Section("db").Key("driver").String(),
 		Port: cfg.Section("web").Key("port").MustInt(),
-				
+		ParallelOrders: cfg.Section("tradeSetting").Key("parallel_orders").MustInt(),
 	}
 	
 	BaseURL = pcfg.Section("bitflyer").Key("base_url").String()

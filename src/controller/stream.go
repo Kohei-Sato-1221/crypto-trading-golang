@@ -8,35 +8,50 @@ import (
 	"log"
 	"time"
 	"math"
+	"runtime"
 )
 
 func StreamIngestionData() {
+	log.Println("【StreamIngestionData】start")
 	var tickerChannl = make(chan bitflyer.Ticker)
 	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
+	numParallelOrders := config.Config.ParallelOrders
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
 	buyingJob := func(){
-		shouldBreak := false
-		ticker, _ := apiClient.GetTicker("BTC_JPY")
-		
-		buyPrice :=  Round((ticker.Ltp * 0.4 + ticker.BestBid * 0.6))
-		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
-		
-		order := &bitflyer.Order{
-			ProductCode:     "BTC_JPY",
-			ChildOrderType:  "LIMIT",
-			Side:            "BUY",
-			Price:           buyPrice,
-			Size:            0.001,
-			MinuteToExpires: 1000,
-			TimeInForce:     "GTC",
+		log.Println("【buyingJob】start of job")
+		cnt := models.CountUnfilledBuyOrders()
+		log.Printf("Number of unfilled :%v  parall:%v", cnt, numParallelOrders)
+		shouldSkip := false
+		if cnt >= numParallelOrders {
+			shouldSkip = true
 		}
-		res, err := apiClient.PlaceOrder(order)
-		if err != nil || res == nil {
-			log.Println("BuyOrder failed.... Failure in [apiClient.PlaceOrder()]")
-			shouldBreak = true
+		
+		buyPrice := 0.0
+		var res *bitflyer.PlaceOrderResponse
+		var err error
+		if !shouldSkip{
+			ticker, _ := apiClient.GetTicker("BTC_JPY")
+			
+			buyPrice =  Round((ticker.Ltp * 0.4 + ticker.BestBid * 0.6))
+			log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
+			
+			order := &bitflyer.Order{
+				ProductCode:     "BTC_JPY",
+				ChildOrderType:  "LIMIT",
+				Side:            "BUY",
+				Price:           buyPrice,
+				Size:            0.001,
+				MinuteToExpires: 1000,
+				TimeInForce:     "GTC",
+			}
+			res, err = apiClient.PlaceOrder(order)
+			if err != nil || res == nil {
+				log.Println("BuyOrder failed.... Failure in [apiClient.PlaceOrder()]")
+				shouldSkip = true
+			}
 		}
-		if !shouldBreak {
+		if !shouldSkip {
 			event := models.OrderEvent{
 				OrderId:     res.OrderId,
 				Time:        time.Now(),
@@ -57,6 +72,7 @@ func StreamIngestionData() {
 	}
 	
 	filledCheckJob := func(){
+		log.Println("【filledCheckJob】start of job")
 		// Get list of unfilled buy orders in local Database
 		ids, err1 := models.FilledCheck()
 		if err1 != nil{
@@ -91,6 +107,7 @@ func StreamIngestionData() {
 	}
 	
 	sellOrderJob := func(){
+		log.Println("【sellOrderjob】start of job")
 		idprices := models.FilledCheckWithSellOrder()
 		if idprices == nil{
 			log.Println("【sellOrderjob】 : No order ids ")
@@ -150,13 +167,13 @@ func StreamIngestionData() {
 		ENDOFSELLORDER:
 			log.Println("【sellOrderjob】end of job")
 	}
-	
-	testFlg := false
+	testFlg := true
 	if(testFlg){
 		scheduler.Every(60).Seconds().Run(buyingJob)
 		scheduler.Every(20).Seconds().Run(sellOrderJob)
 	} 
 	scheduler.Every(10).Seconds().Run(filledCheckJob)
+	runtime.Goexit()
 }
 
 func Round(f float64) float64{

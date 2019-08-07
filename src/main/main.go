@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+//	"log"
 	"config"
 	"utils"
 	"fmt"
@@ -13,7 +13,7 @@ func main(){
 	utils.LogSetting(config.Config.LogFile)
 	fmt.Println(models.DbConnection)
 	controller.StreamIngestionData()
-	log.Println(controller.StartWebServer())
+//	log.Println(controller.StartWebServer())
 //	controller.StartWebServer()
 //	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
 }
