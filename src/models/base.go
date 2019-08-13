@@ -24,6 +24,7 @@ func init(){
 	DbConnection, err = sql.Open(config.Config.SQLDriver, config.Config.DbName)
 	if err != nil {
 		log.Fatalln(err)
+		log.Println(err)
 	}else{
 		log.Println("Successfully got DB connection!!")
 	}

@@ -52,6 +52,7 @@ func FilledCheck() ([]string, error){
 	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '' union SELECT orderid FROM sell_orders WHERE filled = 0 and orderid != '';`
 	rows, err := DbConnection.Query(cmd)
 	if err != nil {
+		log.Printf("Failure to exec query..... %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -62,6 +63,7 @@ func FilledCheck() ([]string, error){
 		var orderId string
 		
 		if err := rows.Scan(&orderId); err != nil {
+			log.Printf("Failure to get records..... %v", err)
 			log.Fatal("Failure to get records.....")
 			return nil, err
 		}

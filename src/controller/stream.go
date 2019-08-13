@@ -167,12 +167,9 @@ func StreamIngestionData() {
 		ENDOFSELLORDER:
 			log.Println("【sellOrderjob】end of job")
 	}
-	testFlg := true
-	if(testFlg){
-		scheduler.Every(60).Seconds().Run(buyingJob)
-		scheduler.Every(20).Seconds().Run(sellOrderJob)
-	} 
-	scheduler.Every(10).Seconds().Run(filledCheckJob)
+	scheduler.Every(60).Seconds().Run(sellOrderJob)
+	scheduler.Every(30).Seconds().Run(filledCheckJob)
+	scheduler.Every(120).Seconds().Run(buyingJob)
 	runtime.Goexit()
 }
 
