@@ -73,23 +73,30 @@ func FilledCheck() ([]string, error){
 	return ids, nil
 }
 
-func CountUnfilledBuyOrders() int{
-	cmd := `SELECT COUNT(orderid) FROM buy_orders WHERE filled = 0 and orderid != '';`
+func ShouldPlaceBuyOrder() bool{
+	cmd := `SELECT COUNT(orderid) FROM buy_orders WHERE filled = 0 and orderid != '' union all SELECT COUNT(orderid) FROM sell_orders WHERE filled = 0 and orderid != '';`
 	rows, err := DbConnection.Query(cmd)
 	if err != nil {
-		return 999
+		return true
 	}
 	defer rows.Close()
 
 	var cnt int
+	var rowCnt := 0
 	for rows.Next() {
 		if err := rows.Scan(&cnt); err != nil {
 			log.Fatal("Failure to get records.....")
-			return 999
+			return true
 		}
-		break
+		if rowCnt == 0 && cnt >= 3 {
+			return true
+		}
+		if rowCnt != 0 && cnt >= 5 {
+			return true
+		}
+		rowCnt = rowCnt + 1
 	}
-	return cnt
+	return false
 }
 
 type Idprice struct {

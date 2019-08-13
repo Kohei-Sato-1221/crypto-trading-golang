@@ -20,12 +20,8 @@ func StreamIngestionData() {
 	
 	buyingJob := func(){
 		log.Println("【buyingJob】start of job")
-		cnt := models.CountUnfilledBuyOrders()
-		log.Printf("Number of unfilled :%v  parall:%v", cnt, numParallelOrders)
-		shouldSkip := false
-		if cnt >= numParallelOrders {
-			shouldSkip = true
-		}
+		shouldSkip := models.ShouldPlaceBuyOrder()
+		log.Printf("ShouldSkip  :%v", shouldSkip)
 		
 		buyPrice := 0.0
 		var res *bitflyer.PlaceOrderResponse
@@ -167,9 +163,9 @@ func StreamIngestionData() {
 		ENDOFSELLORDER:
 			log.Println("【sellOrderjob】end of job")
 	}
-	scheduler.Every(60).Seconds().Run(sellOrderJob)
+	scheduler.Every(30).Seconds().Run(sellOrderJob)
 	scheduler.Every(30).Seconds().Run(filledCheckJob)
-	scheduler.Every(120).Seconds().Run(buyingJob)
+	scheduler.Every(3600).Seconds().Run(buyingJob)
 	runtime.Goexit()
 }
 
