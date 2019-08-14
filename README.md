@@ -11,16 +11,16 @@ scp -i ~/.ssh/xxxxxxx.pem ./private_config.ini ec2-user@xx.xx.xx.xx:/home/ec2-us
 
 
 【kind of jobs】  
-1.buyOrderJob:
+1.buyOrderJob:  
 ・指定の周期で買い注文を発注するジョブ
 ・買い注文が発注したら以下のデータをinsertする(filledはデフォルトの0)
 　[Table:buyorder]orderid, pair, volume, price, orderdate, exchange, filled 
 
-2.filledCheckJob:
+2.filledCheckJob:  
 ・指定の周期で買い・売り注文の約定具合をチェックするジョブ
 ・買い注文が約定していた場合、buy_orders, sell_ordersテーブルのfilledを1にする
 
-3.sellOrderJob:
+3.sellOrderJob:  
 ・指定の周期で売り注文を発注するジョブ
 ・buy_oerdersのレコードでfilledが1の場合売り注文を出す。
 ・売り注文が発注できたら以下のデータをinsertする。
@@ -28,7 +28,7 @@ scp -i ~/.ssh/xxxxxxx.pem ./private_config.ini ec2-user@xx.xx.xx.xx:/home/ec2-us
 ・また、buy_ordersのfilledを2にupdateする
 
 
-【TODO】
+【TODO】  
 ・買い注文を取り消す機能  
 ・Filledが0のレコードが一定以下であれば、フラグをONにして、注文を開始するロジック 
 ・複数の注文パターン（売値・買値のロジックを複数に）
