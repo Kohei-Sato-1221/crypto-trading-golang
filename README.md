@@ -1,16 +1,16 @@
 # BitcoinTrading_Golang
 Automated Bitcoin trading web application implemented by Go Lang(Under development)
 
-【Build for Amazon Linux】
+【Build for Amazon Linux】  
 GOOS=linux GOARCH=amd64 go build src/main/main.go
 
-【Send binary file to EC2】
+【Send binary file to EC2】  
 scp -i ~/.ssh/xxxxxxx.pem ./main ec2-user@xx.xx.xx.xx:/home/ec2-user/application/
 scp -i ~/.ssh/xxxxxxx.pem ./config.ini ec2-user@xx.xx.xx.xx:/home/ec2-user/application/
 scp -i ~/.ssh/xxxxxxx.pem ./private_config.ini ec2-user@xx.xx.xx.xx:/home/ec2-user/application/
 
 
-【kind of jobs】
+【kind of jobs】  
 1.buyOrderJob:
 ・指定の周期で買い注文を発注するジョブ
 ・買い注文が発注したら以下のデータをinsertする(filledはデフォルトの0)
