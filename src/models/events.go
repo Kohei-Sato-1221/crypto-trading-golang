@@ -82,7 +82,7 @@ func ShouldPlaceBuyOrder() bool{
 	defer rows.Close()
 
 	var cnt int
-	var rowCnt := 0
+	rowCnt := 0
 	for rows.Next() {
 		if err := rows.Scan(&cnt); err != nil {
 			log.Fatal("Failure to get records.....")

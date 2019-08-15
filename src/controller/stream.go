@@ -9,13 +9,13 @@ import (
 	"time"
 	"math"
 	"runtime"
+	"bitbank"
 )
 
 func StreamIngestionData() {
 	log.Println("【StreamIngestionData】start")
 	var tickerChannl = make(chan bitflyer.Ticker)
 	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
-	numParallelOrders := config.Config.ParallelOrders
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
 	buyingJob := func(){
@@ -26,6 +26,14 @@ func StreamIngestionData() {
 		buyPrice := 0.0
 		var res *bitflyer.PlaceOrderResponse
 		var err error
+		
+		bitbankClient := bitbank.GetBBTicker()
+		log.Printf("bitbankClient  %v", bitbankClient)
+		
+		// for test 
+		shouldSkip = true
+		//
+		
 		if !shouldSkip{
 			ticker, _ := apiClient.GetTicker("BTC_JPY")
 			
@@ -38,7 +46,7 @@ func StreamIngestionData() {
 				Side:            "BUY",
 				Price:           buyPrice,
 				Size:            0.001,
-				MinuteToExpires: 1000,
+				MinuteToExpires: 518400, //360 days 
 				TimeInForce:     "GTC",
 			}
 			res, err = apiClient.PlaceOrder(order)
@@ -123,7 +131,7 @@ func StreamIngestionData() {
 				Side:            "SELL",
 				Price:           sellPrice,
 				Size:            0.001,
-				MinuteToExpires: 1000,
+				MinuteToExpires: 518400, //360 days 
 				TimeInForce:     "GTC",
 			}
 			
@@ -163,9 +171,12 @@ func StreamIngestionData() {
 		ENDOFSELLORDER:
 			log.Println("【sellOrderjob】end of job")
 	}
-	scheduler.Every(30).Seconds().Run(sellOrderJob)
-	scheduler.Every(30).Seconds().Run(filledCheckJob)
-	scheduler.Every(3600).Seconds().Run(buyingJob)
+	isTest := true
+	if !isTest {
+		scheduler.Every(30).Seconds().Run(filledCheckJob)
+		scheduler.Every(30).Seconds().Run(sellOrderJob)
+		scheduler.Every(3600).Seconds().Run(buyingJob)
+	}
 	runtime.Goexit()
 }
 
