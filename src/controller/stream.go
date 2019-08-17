@@ -7,9 +7,9 @@ import (
 	"github.com/carlescere/scheduler"
 	"log"
 	"time"
-	"math"
 	"runtime"
 	"bitbank"
+	"utils"
 )
 
 func StreamIngestionData() {
@@ -28,16 +28,16 @@ func StreamIngestionData() {
 		var err error
 		
 		bitbankClient := bitbank.GetBBTicker()
-		log.Printf("bitbankClient  %v", bitbankClient)
+		log.Printf("bitbankClient  %f", bitbankClient)
 		
 		// for test 
-		shouldSkip = true
+		// shouldSkip = false
 		//
 		
 		if !shouldSkip{
 			ticker, _ := apiClient.GetTicker("BTC_JPY")
 			
-			buyPrice =  Round((ticker.Ltp * 0.4 + ticker.BestBid * 0.6))
+			buyPrice := bitbankClient.CalculateBuyPrice()
 			log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
 			
 			order := &bitflyer.Order{
@@ -122,7 +122,7 @@ func StreamIngestionData() {
 			orderId := idprice.OrderId
 			buyprice := idprice.Price
 			log.Printf("No%d Id:%v", i, orderId)
-			sellPrice :=  Round((buyprice * 1.005))
+			sellPrice :=  utils.Round((buyprice * 1.015))
 			log.Printf("buyprice:%10.2f  myPrice:%10.2f", buyprice, sellPrice)
 
 			sellOrder := &bitflyer.Order{
@@ -175,13 +175,9 @@ func StreamIngestionData() {
 	if !isTest {
 		scheduler.Every(30).Seconds().Run(filledCheckJob)
 		scheduler.Every(30).Seconds().Run(sellOrderJob)
-		scheduler.Every(3600).Seconds().Run(buyingJob)
 	}
+	scheduler.Every(3600).Seconds().Run(buyingJob)
 	runtime.Goexit()
-}
-
-func Round(f float64) float64{
-	return math.Floor(f + .5) 
 }
 
 

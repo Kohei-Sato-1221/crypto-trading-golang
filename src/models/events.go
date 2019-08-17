@@ -10,6 +10,10 @@ import (
 	"errors"
 )
 
+// todo : 以下はConfig Fileから読みたい
+const max_buy_orders = 3
+const max_sell_orders = 3
+
 type OrderEvent struct {
 	OrderId     string    `json:"orderid"`
 	Time        time.Time `json:"time"`
@@ -73,6 +77,11 @@ func FilledCheck() ([]string, error){
 	return ids, nil
 }
 
+
+/*
+ * 注文前の判断メソッド
+ * 買り注文・売り注文の前に呼ばれ、既存の注文数が最大値を超えている場合は注文falseを返却
+ */
 func ShouldPlaceBuyOrder() bool{
 	cmd := `SELECT COUNT(orderid) FROM buy_orders WHERE filled = 0 and orderid != '' union all SELECT COUNT(orderid) FROM sell_orders WHERE filled = 0 and orderid != '';`
 	rows, err := DbConnection.Query(cmd)
@@ -88,10 +97,12 @@ func ShouldPlaceBuyOrder() bool{
 			log.Fatal("Failure to get records.....")
 			return true
 		}
-		if rowCnt == 0 && cnt >= 3 {
+		// 買い注文の判断
+		if rowCnt == 0 && cnt >= max_buy_orders {
 			return true
 		}
-		if rowCnt != 0 && cnt >= 5 {
+		// 売り注文の判断
+		if rowCnt != 0 && cnt >= max_sell_orders {
 			return true
 		}
 		rowCnt = rowCnt + 1
