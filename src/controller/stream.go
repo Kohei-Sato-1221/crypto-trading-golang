@@ -171,12 +171,12 @@ func StreamIngestionData() {
 		ENDOFSELLORDER:
 			log.Println("【sellOrderjob】end of job")
 	}
-	isTest := true
+	isTest := false
 	if !isTest {
 		scheduler.Every(30).Seconds().Run(filledCheckJob)
 		scheduler.Every(30).Seconds().Run(sellOrderJob)
+		scheduler.Every(43200).Seconds().Run(buyingJob)
 	}
-	scheduler.Every(3600).Seconds().Run(buyingJob)
 	runtime.Goexit()
 }
 
