@@ -33,11 +33,10 @@ func StreamIngestionData() {
 		// for test 
 		// shouldSkip = false
 		//
-		
 		if !shouldSkip{
 			ticker, _ := apiClient.GetTicker("BTC_JPY")
 			
-			buyPrice := bitbankClient.CalculateBuyPrice()
+			buyPrice = bitbankClient.CalculateBuyPrice()
 			log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
 			
 			order := &bitflyer.Order{
@@ -80,7 +79,7 @@ func StreamIngestionData() {
 		// Get list of unfilled buy orders in local Database
 		ids, err1 := models.FilledCheck()
 		if err1 != nil{
-			log.Fatal("error in filledCheckJob.....")
+			log.Println("error in filledCheckJob.....")
 			goto ENDOFFILLEDCHECK
 		}
 		
@@ -93,14 +92,14 @@ func StreamIngestionData() {
 			log.Printf("No%d Id:%v", i, orderId)
 			order, err := apiClient.GetOrderByOrderId(orderId)
 			if err != nil{
-				log.Fatal("error in filledCheckJob.....")
+				log.Println("error in filledCheckJob.....")
 				break
 			}
 			
 			if order != nil{
 				err := models.UpdateFilledOrder(orderId)
 				if err != nil {
-					log.Fatal("Failure to update records.....")
+					log.Println("Failure to update records.....")
 					break
 				}
 				log.Printf("Order updated successfully!! orderId:%s", orderId)								
@@ -138,16 +137,17 @@ func StreamIngestionData() {
 			log.Printf("sell order:%v\n", sellOrder)
 			res, err := apiClient.PlaceOrder(sellOrder)
 			if err != nil{
-				log.Fatal("SellOrder failed.... Failure in [apiClient.PlaceOrder()]")
+				log.Println("SellOrder failed.... Failure in [apiClient.PlaceOrder()]")
 				break
 			}
 			if res == nil{
-				log.Fatal("SellOrder failed.... no response")
+				log.Println("SellOrder failed.... no response")
+				break
 			}
 			
 			err = models.UpdateFilledOrderWithBuyOrder(orderId)
 			if err != nil {
-				log.Fatal("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
+				log.Println("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
 				break
 			}
 			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderId)
@@ -171,11 +171,12 @@ func StreamIngestionData() {
 		ENDOFSELLORDER:
 			log.Println("【sellOrderjob】end of job")
 	}
+	
 	isTest := false
 	if !isTest {
-		scheduler.Every(30).Seconds().Run(filledCheckJob)
-		scheduler.Every(30).Seconds().Run(sellOrderJob)
 		scheduler.Every(43200).Seconds().Run(buyingJob)
+		scheduler.Every(30).Seconds().Run(sellOrderJob)
+		scheduler.Every(30).Seconds().Run(filledCheckJob)
 	}
 	runtime.Goexit()
 }

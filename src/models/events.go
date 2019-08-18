@@ -27,6 +27,7 @@ type OrderEvent struct {
 
 func (e *OrderEvent) BuyOrder() error {
 	cmd := fmt.Sprintf("INSERT INTO buy_orders (orderid, time, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	log.Printf("BuyOrder() orderid:%s price:%10.2f size:%s side:%s", e.OrderId, e.Price, e.Side, e.Size)
 	_, err := DbConnection.Exec(cmd, e.OrderId, e.Time.Format(time.RFC3339), e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -68,7 +69,7 @@ func FilledCheck() ([]string, error){
 		
 		if err := rows.Scan(&orderId); err != nil {
 			log.Printf("Failure to get records..... %v", err)
-			log.Fatal("Failure to get records.....")
+			log.Println("Failure to get records.....")
 			return nil, err
 		}
 		cnt++
@@ -94,7 +95,7 @@ func ShouldPlaceBuyOrder() bool{
 	rowCnt := 0
 	for rows.Next() {
 		if err := rows.Scan(&cnt); err != nil {
-			log.Fatal("Failure to get records.....")
+			log.Println("Failure to get records.....")
 			return true
 		}
 		// 買い注文の判断
@@ -130,7 +131,7 @@ func FilledCheckWithSellOrder() []Idprice{
 		var price float64
 		
 		if err := rows.Scan(&orderId, &price); err != nil {
-			log.Fatal("Failure to get records.....")
+			log.Println("Failure to get records.....")
 			return nil
 		}
 		cnt++
