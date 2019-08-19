@@ -10,81 +10,15 @@ import (
 )
 
 func main(){
+	useExchange := config.Config.Exchange
 	utils.LogSetting(config.Config.LogFile)
-	fmt.Println(models.DbConnection)
-	controller.StreamIngestionData()
-//	log.Println(controller.StartWebServer())
-//	controller.StartWebServer()
-//	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
+	
+	if useExchange == "bitflyer" {
+		fmt.Println(models.DbConnection)	
+		controller.StreamIngestionData()
+	}
+	if useExchange == "okex" {
+		fmt.Println(models.DbConnection)
+		controller.StartOKEXService()
+	}
 }
-
-
-//func main(){
-//	s := models.NewSignalEvents()
-//	df, _ := models.GetAllCandle("BTC_JPY", time.Minute, 10)
-//	c1 := df.Candles[0]
-//	c2 := df.Candles[5]
-//	s.Buy("BTC_JPY", c1.Time.UTC(), c1.Close, 1.0, true)
-//	s.Sell("BTC_JPY", c2.Time.UTC(), c2.Close, 1.0, true)
-//}
-
-
-//import (
-//	"fmt"
-//	"config"
-//	"utils"
-//	"models"
-//	"controller"
-//	"time"
-//	"log"
-//	"bitflyer"
-//)
-//
-//func main() {
-//	utils.LogSetting(config.Config.LogFile)
-//	fmt.Println(models.DbConnection)
-//	controller.StreamIngestionData()
-//	controller.StartWebServer()
-//	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
-	
-//	order := &bitflyer.Order{
-//	    ProductCode     : config.Config.ProductCode,
-//		ChildOrderType  : "LIMIT",
-//		Side            : "BUY",
-//		Price           : 1000000,
-//		Size            : 0.001,
-//		MinuteToExpires : 1,
-//		TimeInForce     : "GTC",
-//	}
-//	res, _ := apiClient.PlaceOrder(order)
-//	fmt.Println(res.ChildOrderAcceptanceID)
-//	
-
-//	params := map[string]string{
-//		"product_code"              : config.Config.ProductCode,
-//		"child_order_acceptance_id" : "JRF20190704-131322-262181",
-//	}
-//	r, _ := apiClient.GetOrderInfo(params)
-//	fmt.Println(r)
-	
-//	tickerChan := make(chan bitflyer.Ticker)
-//	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChan)
-//	for ticker := range tickerChan {
-//		fmt.Println(ticker)
-//		fmt.Println(ticker.GetMiddlePrice())
-//		fmt.Println(ticker.DateTime())
-//		fmt.Println(ticker.TruncateDateTime(time.Second))
-//		fmt.Println(ticker.TruncateDateTime(time.Minute))
-//		fmt.Println(ticker.TruncateDateTime(time.Hour))
-//	}
-	
-//	ticker, _ := apiCli?ent.GetTicker("BTC_USD")
-//	fmt.Println(ticker)
-//	fmt.Println(ticker.GetMiddlePrice())
-//	fmt.Println(ticker.DateTime())
-//	fmt.Println(ticker.TruncateDateTime(time.Hour))
-//	fmt.Println(apiClient.GetBalance())
-//	log.Println("test test")
-//	fmt.Println(config.Config.ApiKey)
-//	fmt.Println(config.Config.ApiSecret)
-//}

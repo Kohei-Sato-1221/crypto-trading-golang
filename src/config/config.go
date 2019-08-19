@@ -8,10 +8,16 @@ import (
 )
 
 type ConfigList struct {
+	Exchange        string
+	
 	ApiKey          string
 	ApiSecret       string
 	LogFile         string
 	ProductCode     string
+	
+	OKApiKey        string
+	OKApiSecret     string
+	OKPassPhrase    string
 	
 	TradeDuration	time.Duration
 	Durations		map[string]time.Duration
@@ -46,8 +52,13 @@ func init() {
 	Config = ConfigList{
 		ApiKey:        pcfg.Section("bitflyer").Key("api_key").String(),
 		ApiSecret:     pcfg.Section("bitflyer").Key("api_secret").String(),
+		OKApiKey:      pcfg.Section("okex").Key("api_key").String(),
+		OKApiSecret:   pcfg.Section("okex").Key("api_secret").String(),
+		OKPassPhrase:  pcfg.Section("okex").Key("pass_phrase").String(),
+
 		LogFile:       cfg.Section("tradeSetting").Key("logfile_path").String(),
-		ProductCode:   cfg.Section("tradeSetting").Key("product_code").String(),
+		ProductCode:   cfg.Section("tradeSetting").Key("product_code").String(),	
+		Exchange:      cfg.Section("exchange").Key("exchange").String(),
 		
 		Durations: durations,
 		TradeDuration: durations[cfg.Section("tradeSetting").Key("trade_duration").String()],
