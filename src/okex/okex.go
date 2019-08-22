@@ -2,9 +2,9 @@ package okex
 
 import (
 	"net/http"
-	"net/url"
+//	"net/url"
 	"fmt"
-	"strconv"
+//	"strconv"
 	"time"
 	"bytes"
 	"crypto/hmac"
@@ -30,8 +30,11 @@ func New(key, secret, passphrase string) *APIClient {
 }
 
 func (apiClient APIClient) header(method, requestPath string, body []byte) map[string]string{
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+//	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	timestamp := time.Now().Format("2006-01-02T15:04:05.123Z")
 	message := timestamp + method + requestPath + string(body)
+	
+	log.Printf("message:%s ", message)
 	
 	mac := hmac.New(sha256.New, []byte(apiClient.apisecret))
 	mac.Write([]byte(message))
@@ -68,8 +71,8 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 	if err != nil {
 		return nil, err
 	}
-	url := "/api/spot/v3/orders"
-	resp, err := apiClient.doHttpRequest("POST", url, map[string]string{}, data)
+	requestPath := "/api/spot/v3/orders"
+	resp, err := apiClient.doHttpRequest("POST", requestPath, map[string]string{}, data)
 	if err != nil {
 		fmt.Printf("res:%s\n", resp)
 		return nil, err
@@ -84,16 +87,8 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 }
 
 
-func (apiClient *APIClient) doHttpRequest(method, urlPath string, query map[string]string, data []byte) (body []byte, err error){
-	baseURL, err := url.Parse(okexBaseURL)
-	if err != nil{
-		return
-	}
-	apiURL, err := url.Parse(urlPath)
-	if err != nil{
-		return
-	}
-	endpoint := baseURL.ResolveReference(apiURL).String()
+func (apiClient *APIClient) doHttpRequest(method, requestPath string, query map[string]string, data []byte) (body []byte, err error){
+	endpoint :=  okexBaseURL + requestPath
 	log.Printf("action=doGETPOST endpoint=%s", endpoint)
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(data))
 	if err != nil{
@@ -105,7 +100,8 @@ func (apiClient *APIClient) doHttpRequest(method, urlPath string, query map[stri
 	}
 	req.URL.RawQuery = q.Encode()
 	
-	for key, value := range apiClient.header(method, req.URL.RequestURI(), data){
+	for key, value := range apiClient.header(method, requestPath, data){
+		log.Printf("k:%s v:%s", key, value)
 		req.Header.Add(key, value)
 	}
 	resp, err := apiClient.httpClient.Do(req)

@@ -31,7 +31,7 @@ func StartOKEXService() {
 		log.Println("Buyorder failed.... no response")
 		return
 	}else{
-		log.Println("Buyorder response %s", res)
+		log.Println("Buyorder response %v %s", res)
 	}
 //	apiClient.ShowParams()
 	//runtime.Goexit()
