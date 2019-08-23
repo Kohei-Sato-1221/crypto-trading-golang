@@ -17,7 +17,7 @@ func StartOKEXService() {
 		Side:           "buy",
 		InstrumentId:   "ETH-USDT",
 		OrderType:      "1",
-		Price:          "195.10",
+		Price:          "182.10",
 		Size:           "0.01",
 	}
 	

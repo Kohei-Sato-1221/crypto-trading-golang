@@ -2,70 +2,24 @@ package okex
 
 import (
 	"net/http"
-//	"net/url"
 	"fmt"
-//	"strconv"
+	"strings"
 	"time"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
-	"encoding/hex"
 	"io/ioutil"
 	"log"
 )
 
 const okexBaseURL = "https://www.okex.com"
 
-type APIClient struct{
-	apikey     string
-	apisecret  string
-	passphrase string
-	httpClient *http.Client
-}
-
-func New(key, secret, passphrase string) *APIClient {
-	apiClient := &APIClient{key, secret, passphrase, &http.Client{}}
-	return apiClient
-}
-
-func (apiClient APIClient) header(method, requestPath string, body []byte) map[string]string{
-//	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	timestamp := time.Now().Format("2006-01-02T15:04:05.123Z")
-	message := timestamp + method + requestPath + string(body)
-	
-	log.Printf("message:%s ", message)
-	
-	mac := hmac.New(sha256.New, []byte(apiClient.apisecret))
-	mac.Write([]byte(message))
-	sign := hex.EncodeToString(mac.Sum(nil))
-	return map[string]string{
-		"OK-ACCESS-KEY":       apiClient.apikey,
-		"OK-ACCESS-SIGN":      sign,
-		"OK-ACCESS-TIMESTAMP": timestamp,
-		"OK-ACCESS-PASSPHRASE": apiClient.passphrase,
-		"Content-Type":     "application/json",
-	}
-}
-
-type Order struct {
-	ClientOid      string  `json:"client_oid"`
-	Type           string  `json:"type"`
-	Side           string  `json:"side"`
-	InstrumentId   string  `json:"instrument_id"`
-	OrderType      string  `json:"order_type"`
-	Price          string  `json:"price"`
-	Size           string  `json:"size"`
-} 
-
-type PlaceOrderResponse struct {
-	OrderId    string `json:"order_id"`
-	ClientOid  string `json:"client_oid"`
-	Result     bool   `json:"result"`
-	ErrorCode  string `json:"error_code"`
-	ErrorMsg   string `json:"error_message"`
-}
-
+/*
+ * Place an Order 
+ *
+ */
 func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error) {
 	data, err := json.Marshal(order)
 	if err != nil {
@@ -86,6 +40,58 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 	return &response, nil
 }
 
+type Order struct {
+	ClientOid      string  `json:"client_oid"`
+	Type           string  `json:"type"`
+	Side           string  `json:"side"`
+	InstrumentId   string  `json:"instrument_id"`
+	OrderType      string  `json:"order_type"`
+	Price          string  `json:"price"`
+	Size           string  `json:"size"`
+} 
+
+type PlaceOrderResponse struct {
+	OrderId    string `json:"order_id"`
+	ClientOid  string `json:"client_oid"`
+	Result     bool   `json:"result"`
+	ErrorCode  string `json:"error_code"`
+	ErrorMsg   string `json:"error_message"`
+}
+
+type APIClient struct{
+	apikey     string
+	apisecret  string
+	passphrase string
+	httpClient *http.Client
+}
+
+
+func New(key, secret, passphrase string) *APIClient {
+	apiClient := &APIClient{key, secret, passphrase, &http.Client{}}
+	return apiClient
+}
+
+func (apiClient APIClient) header(method, requestPath string, body []byte) map[string]string{
+	timestamp := getIsoTime()
+	message := timestamp + method + requestPath + string(body)
+	
+	preHashStr := getPreHashString(timestamp, method, requestPath, string(body))
+	
+	log.Printf("preHashStr:%s ", preHashStr)
+	log.Printf("timeStamp:%s ", timestamp)
+	
+	log.Printf("message:%s ", message)
+	
+	sign := signBySha256Base64(preHashStr, apiClient.apisecret)
+	return map[string]string{
+		"OK-ACCESS-KEY":        apiClient.apikey,
+		"OK-ACCESS-SIGN":       sign,
+		"OK-ACCESS-TIMESTAMP":  timestamp,
+		"OK-ACCESS-PASSPHRASE": apiClient.passphrase,
+		"Accept"              : "application/json",
+		"Content-Type":         "application/json; charset=UTF-8",
+	}
+}
 
 func (apiClient *APIClient) doHttpRequest(method, requestPath string, query map[string]string, data []byte) (body []byte, err error){
 	endpoint :=  okexBaseURL + requestPath
@@ -101,7 +107,6 @@ func (apiClient *APIClient) doHttpRequest(method, requestPath string, query map[
 	req.URL.RawQuery = q.Encode()
 	
 	for key, value := range apiClient.header(method, requestPath, data){
-		log.Printf("k:%s v:%s", key, value)
 		req.Header.Add(key, value)
 	}
 	resp, err := apiClient.httpClient.Do(req)
@@ -116,6 +121,41 @@ func (apiClient *APIClient) doHttpRequest(method, requestPath string, query map[
 	return body, nil
 }
 
-func (apiClient *APIClient) ShowParams() {
-	fmt.Printf("ex: %s %s %s", apiClient.apikey, apiClient.apisecret, apiClient.passphrase)
+/*
+ Get Iso Format time
+  example: 2019-08-23T18:02:48.284Z
+*/
+func getIsoTime() string {
+	utcTime := time.Now().UTC()
+	iso := utcTime.String()
+	isoBytes := []byte(iso)
+	iso = string(isoBytes[:10]) + "T" + string(isoBytes[11:23]) + "Z"
+	return iso
+}
+
+/*
+ Get Pre Hash String
+ Params:
+    timestamp    = 2019-08-15T11:22:2.123Z
+    method       = POST
+    request_path = /orders?before=2&limit=30
+    body         = {"product_id":"ETH-USD","order_id":"1233455"}
+  
+  Return:
+    2019-08-15T11:22:2.123ZPOST/orders?before=2&limit=30{"product_id":"ETH-USD","order_id":"1233455"}
+*/
+func getPreHashString(timestamp string, method string, requestPath string, body string) string {
+	return timestamp + strings.ToUpper(method) + requestPath + body
+}
+
+/*
+ To sign using sha256 + base64
+*/
+func signBySha256Base64(preHashStr, secretKey string) string{
+	mac := hmac.New(sha256.New, []byte(secretKey))
+	_, err := mac.Write([]byte(preHashStr))
+	if err != nil{
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
