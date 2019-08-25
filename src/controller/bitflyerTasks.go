@@ -12,71 +12,29 @@ import (
 	"utils"
 )
 
-func StreamIngestionData() {
-	log.Println("【StreamIngestionData】start")
+func StartBfService() {
+	log.Println("【StartBfService】start")
 	var tickerChannl = make(chan bitflyer.Ticker)
-	apiClient := bitflyer.New(config.Config.ApiKey, config.Config.ApiSecret)
+	apiClient := bitflyer.New(
+		config.Config.ApiKey,
+		config.Config.ApiSecret,
+		config.Config.BFMaxSell,
+		config.Config.BFMaxBuy,
+	)
 	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 	
+	
 	buyingJob := func(){
-		log.Println("【buyingJob】start of job")
-		shouldSkip := models.ShouldPlaceBuyOrder()
-		log.Printf("ShouldSkip  :%v", shouldSkip)
-		
-		buyPrice := 0.0
-		var res *bitflyer.PlaceOrderResponse
-		var err error
-		
-		bitbankClient := bitbank.GetBBTicker()
-		log.Printf("bitbankClient  %f", bitbankClient)
-		
-		// for test 
-		// shouldSkip = false
-		//
-		if !shouldSkip{
-			ticker, _ := apiClient.GetTicker("BTC_JPY")
-			
-			buyPrice = bitbankClient.CalculateBuyPrice()
-			log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
-			
-			order := &bitflyer.Order{
-				ProductCode:     "BTC_JPY",
-				ChildOrderType:  "LIMIT",
-				Side:            "BUY",
-				Price:           buyPrice,
-				Size:            0.001,
-				MinuteToExpires: 518400, //360 days 
-				TimeInForce:     "GTC",
-			}
-			res, err = apiClient.PlaceOrder(order)
-			if err != nil || res == nil {
-				log.Println("BuyOrder failed.... Failure in [apiClient.PlaceOrder()]")
-				shouldSkip = true
-			}
-		}
-		if !shouldSkip {
-			event := models.OrderEvent{
-				OrderId:     res.OrderId,
-				Time:        time.Now(),
-				ProductCode: "BTC_JPY",
-				Side:        "BUY",
-				Price:       buyPrice,
-				Size:        0.001,
-				Exchange:    "bitflyer",
-			}
-			err = event.BuyOrder()
-			if err != nil{
-				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
-			}else{
-				log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
-			}
-		}
-		log.Println("【buyingJob】end of job")
+		placeBuyOrder(0, apiClient)
+	}
+	
+	buyingJob02 := func(){
+		placeBuyOrder(1, apiClient)
 	}
 	
 	filledCheckJob := func(){
 		log.Println("【filledCheckJob】start of job")
-		// Get list of unfilled buy orders in local Database
+		// Get list of unfilled buy orders in local Database(buy_orders & sell_orders)
 		ids, err1 := models.FilledCheck()
 		if err1 != nil{
 			log.Println("error in filledCheckJob.....")
@@ -111,6 +69,7 @@ func StreamIngestionData() {
 	
 	sellOrderJob := func(){
 		log.Println("【sellOrderjob】start of job")
+		// get list of orderis whose filled param equqls "1"
 		idprices := models.FilledCheckWithSellOrder()
 		if idprices == nil{
 			log.Println("【sellOrderjob】 : No order ids ")
@@ -174,12 +133,74 @@ func StreamIngestionData() {
 	
 	isTest := false
 	if !isTest {
-		scheduler.Every(43200).Seconds().Run(buyingJob)
+//		scheduler.Every(43200).Seconds().Run(buyingJob)
+		scheduler.Every().Day().At("05:55").Run(buyingJob)
+		scheduler.Every().Day().At("17:55").Run(buyingJob)
+		scheduler.Every().Day().At("12:25").Run(buyingJob02)
 		scheduler.Every(30).Seconds().Run(sellOrderJob)
 		scheduler.Every(30).Seconds().Run(filledCheckJob)
 	}
 	runtime.Goexit()
 }
+
+func placeBuyOrder(strategy int, apiClient *bitflyer.APIClient){
+	log.Printf("strategy:%v", strategy)
+	log.Println("【buyingJob】start of job")
+	shouldSkip := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
+	log.Printf("ShouldSkip :%v max:%v", shouldSkip, apiClient.Max_sell_orders)
+	
+	buyPrice := 0.0
+	var res *bitflyer.PlaceOrderResponse
+	var err error
+	
+	bitbankClient := bitbank.GetBBTicker()
+	log.Printf("bitbankClient  %f", bitbankClient)
+	
+	// for test 
+	// shouldSkip = false
+	//
+	if !shouldSkip{
+		ticker, _ := apiClient.GetTicker("BTC_JPY")
+		
+		buyPrice = utils.CalculateBuyPrice(bitbankClient.Last, bitbankClient.Low, strategy)
+		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
+		
+		order := &bitflyer.Order{
+			ProductCode:     "BTC_JPY",
+			ChildOrderType:  "LIMIT",
+			Side:            "BUY",
+			Price:           buyPrice,
+			Size:            0.001,
+			MinuteToExpires: 518400, //360 days 
+			TimeInForce:     "GTC",
+		}
+		
+		res, err = apiClient.PlaceOrder(order)
+		if err != nil || res == nil {
+			log.Println("BuyOrder failed.... Failure in [apiClient.PlaceOrder()]")
+			shouldSkip = true
+		}
+	}
+	if !shouldSkip {
+		event := models.OrderEvent{
+			OrderId:     res.OrderId,
+			Time:        time.Now(),
+			ProductCode: "BTC_JPY",
+			Side:        "BUY",
+			Price:       buyPrice,
+			Size:        0.001,
+			Exchange:    "bitflyer",
+		}
+		err = event.BuyOrder()
+		if err != nil{
+			log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
+		}else{
+			log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)			
+		}
+	}
+	log.Println("【buyingJob】end of job")
+}
+
 
 
 

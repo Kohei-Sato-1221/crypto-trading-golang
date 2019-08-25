@@ -10,10 +10,6 @@ import (
 	"errors"
 )
 
-// todo : 以下はConfig Fileから読みたい
-const max_buy_orders = 3
-const max_sell_orders = 3
-
 type OrderEvent struct {
 	OrderId     string    `json:"orderid"`
 	Time        time.Time `json:"time"`
@@ -81,9 +77,12 @@ func FilledCheck() ([]string, error){
 
 /*
  * 注文前の判断メソッド
- * 買り注文・売り注文の前に呼ばれ、既存の注文数が最大値を超えている場合は注文falseを返却
+ * 買り注文の前に呼ばれ、
+ 　 1. 未約定の買い注文数 < 最大買い注文数
+ 　 2. 未約定の売り注文数 < 最大売り注文数
+   を両方満たす場合にtrueを返却。
  */
-func ShouldPlaceBuyOrder() bool{
+func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) bool{
 	cmd := `SELECT COUNT(orderid) FROM buy_orders WHERE filled = 0 and orderid != '' union all SELECT COUNT(orderid) FROM sell_orders WHERE filled = 0 and orderid != '';`
 	rows, err := DbConnection.Query(cmd)
 	if err != nil {
@@ -93,20 +92,24 @@ func ShouldPlaceBuyOrder() bool{
 
 	var cnt int
 	rowCnt := 0
+	numberOfExistingBuyOrders  := 0
+	numberOfExistingSellOrders := 0
 	for rows.Next() {
 		if err := rows.Scan(&cnt); err != nil {
 			log.Println("Failure to get records.....")
 			return true
 		}
-		// 買い注文の判断
-		if rowCnt == 0 && cnt >= max_buy_orders {
-			return true
+		if rowCnt == 0 {
+			numberOfExistingBuyOrders = cnt
 		}
-		// 売り注文の判断
-		if rowCnt != 0 && cnt >= max_sell_orders {
-			return true
+		if rowCnt == 0 {
+			numberOfExistingSellOrders = cnt
 		}
 		rowCnt = rowCnt + 1
+	}
+	if numberOfExistingBuyOrders < max_buy_orders && 
+	   numberOfExistingSellOrders < max_sell_orders {
+		return true
 	}
 	return false
 }

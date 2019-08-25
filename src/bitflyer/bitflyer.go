@@ -19,15 +19,18 @@ import (
 
 const baseURL = "https://api.bitflyer.com/v1/"
 
+
 type APIClient struct{
-	apikey     string
-	apisecret  string
-	httpClient *http.Client
+	apikey           string
+	apisecret        string
+	Max_buy_orders   int
+	Max_sell_orders  int
+	httpClient       *http.Client
 }
 
 
-func New(key, secret string) *APIClient {
-	apiClient := &APIClient{key, secret, &http.Client{}}
+func New(key, secret string, max_buy_orders, max_sell_orders int) *APIClient {
+	apiClient := &APIClient{key, secret, max_buy_orders, max_sell_orders, &http.Client{}}
 	return apiClient
 }
 
@@ -56,7 +59,6 @@ func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]s
 		return
 	}
 	endpoint := baseURL.ResolveReference(apiURL).String()
-//	log.Printf("action=doGETPOST endpoint=%s", endpoint)
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(data))
 	if err != nil{
 		return

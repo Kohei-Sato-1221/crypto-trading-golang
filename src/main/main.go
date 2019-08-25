@@ -15,7 +15,7 @@ func main(){
 	
 	if useExchange == "bitflyer" {
 		fmt.Println(models.DbConnection)	
-		controller.StreamIngestionData()
+		controller.StartBfService()
 	}
 	if useExchange == "okex" {
 		fmt.Println(models.DbConnection)

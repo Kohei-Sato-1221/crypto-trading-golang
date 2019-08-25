@@ -10,6 +10,11 @@ import (
 type ConfigList struct {
 	Exchange        string
 	
+	BFMaxSell       int
+	BFMaxBuy        int
+	OKMaxBuy        int
+	OKMaxSell       int
+	
 	ApiKey          string
 	ApiSecret       string
 	LogFile         string
@@ -23,7 +28,7 @@ type ConfigList struct {
 	Durations		map[string]time.Duration
 	DbName			string
 	SQLDriver		string
-	Port			int
+	Port			    int
 	ParallelOrders  int
 }
 
@@ -56,6 +61,13 @@ func init() {
 		OKApiSecret:   pcfg.Section("okex").Key("api_secret").String(),
 		OKPassPhrase:  pcfg.Section("okex").Key("pass_phrase").String(),
 
+		BFMaxBuy:      cfg.Section("bitflyer").Key("max_buy_orders").MustInt(),
+		BFMaxSell:     cfg.Section("bitflyer").Key("max_sell_orders").MustInt(),
+		
+		OKMaxBuy:      cfg.Section("okex").Key("max_buy_orders").MustInt(),
+		OKMaxSell:     cfg.Section("okex").Key("max_sell_orders").MustInt(),
+		
+		
 		LogFile:       cfg.Section("tradeSetting").Key("logfile_path").String(),
 		ProductCode:   cfg.Section("tradeSetting").Key("product_code").String(),	
 		Exchange:      cfg.Section("exchange").Key("exchange").String(),

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log"
 	"strconv"
-	"utils"
 )
 
 const baseUrl = "https://public.bitbank.cc/"
@@ -65,10 +64,6 @@ func GetBBTicker() *ReturnTicker{
 		Timestamp  : ticker01.Data.Timestamp,
 	}	
 	return &retTicker
-}
-
-func (ticker *ReturnTicker) CalculateBuyPrice() float64 {
-	return utils.Round(ticker.Last * 0.3  + ticker.Low * 0.7)
 }
 
 
