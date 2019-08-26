@@ -109,9 +109,9 @@ func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) bool{
 	}
 	if numberOfExistingBuyOrders < max_buy_orders && 
 	   numberOfExistingSellOrders < max_sell_orders {
-		return true
+		return false
 	}
-	return false
+	return true
 }
 
 type Idprice struct {

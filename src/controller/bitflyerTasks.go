@@ -136,7 +136,7 @@ func StartBfService() {
 //		scheduler.Every(43200).Seconds().Run(buyingJob)
 		scheduler.Every().Day().At("05:55").Run(buyingJob)
 		scheduler.Every().Day().At("17:55").Run(buyingJob)
-		scheduler.Every().Day().At("12:25").Run(buyingJob02)
+		scheduler.Every().Day().At("13:05").Run(buyingJob02)
 		scheduler.Every(30).Seconds().Run(sellOrderJob)
 		scheduler.Every(30).Seconds().Run(filledCheckJob)
 	}
