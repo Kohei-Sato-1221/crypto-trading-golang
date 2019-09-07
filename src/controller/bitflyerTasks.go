@@ -131,7 +131,16 @@ func StartBfService() {
 			log.Println("【sellOrderjob】end of job")
 	}
 	
-	isTest := false
+	cancelBuyOrderJob := func(){
+		log.Println("【cancelBuyOrderJob】Start of job")
+		noNeedToCancal := "NoNeedToCancel"
+		orderid := models.DetermineCancelledOrder(3, noNeedToCancal);
+		log.Printf(" id : %v", orderid)
+		log.Println("【cancelBuyOrderJob】End of job")
+	}
+	
+	isTest := true
+	scheduler.Every(30).Seconds().Run(cancelBuyOrderJob)
 	if !isTest {
 //		scheduler.Every(43200).Seconds().Run(buyingJob)
 		scheduler.Every().Day().At("05:55").Run(buyingJob)

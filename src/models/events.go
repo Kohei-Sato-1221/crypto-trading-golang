@@ -74,6 +74,27 @@ func FilledCheck() ([]string, error){
 	return ids, nil
 }
 
+func DetermineCancelledOrder(max_buy_orders int, noNeedToCancal string) (string){
+	cmd := `SELECT CASE WHEN MAX(t1.c1) < ? THEN ? ELSE MAX(t2.c2) END FROM (SELECT COUNT(orderid) c1 FROM buy_orders WHERE filled = 0 and orderid != '') t1, (SELECT orderid c2 FROM buy_orders WHERE filled = 0 and orderid != '' ORDER BY price ASC LIMIT 1) t2;`
+	rows, err := DbConnection.Query(cmd, max_buy_orders, noNeedToCancal)
+	if err != nil {
+		return noNeedToCancal
+	}
+	defer rows.Close()
+
+	var orderid string
+	for rows.Next() {
+		if err := rows.Scan(&orderid); err != nil {
+			log.Println("Failure to get record.....")
+			return noNeedToCancal
+		}
+	}
+	if orderid == "" {
+		return noNeedToCancal
+	}
+	return orderid
+}
+
 
 /*
  * 注文前の判断メソッド
