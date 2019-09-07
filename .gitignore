@@ -2,6 +2,7 @@
 /pkg
 *.log
 .project
+bitcoindata.sql
 private_config.ini
 /src/private_config.ini
 main

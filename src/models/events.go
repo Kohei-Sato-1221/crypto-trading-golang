@@ -179,6 +179,20 @@ func UpdateFilledOrder(orderId string) error{
 	return nil
 }
 
+func UpdateCancelledOrder(orderId string) error{
+	cmd := fmt.Sprintf("update buy_orders set filled = -1 where orderid = ?")
+	_, err := DbConnection.Exec(cmd, orderId)
+	if err != nil {
+		return err
+	}
+	cmd = fmt.Sprintf("update sell_orders set filled = -1 where orderid = ?")
+	_, err = DbConnection.Exec(cmd, orderId)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func UpdateFilledOrderWithBuyOrder(orderId string) error{
 	cmd := fmt.Sprintf("update buy_orders set filled = 2 where orderid = ?")
 	_, err := DbConnection.Exec(cmd, orderId)
