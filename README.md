@@ -10,7 +10,7 @@ scp -i ~/.ssh/xxxxxxx.pem ./config.ini ec2-user@xx.xx.xx.xx:/home/ec2-user/appli
 scp -i ~/.ssh/xxxxxxx.pem ./private_config.ini ec2-user@xx.xx.xx.xx:/home/ec2-user/application/
 
 
-【kind of jobs】  
+# jobs   
 1.buyOrderJob:  
 ・指定の周期で買い注文を発注するジョブ  
 ・買い注文が発注したら以下のデータをinsertする(filledはデフォルトの0)  
@@ -29,8 +29,8 @@ scp -i ~/.ssh/xxxxxxx.pem ./private_config.ini ec2-user@xx.xx.xx.xx:/home/ec2-us
 
 
 ## TODO 
-・手動で入れた買い注文をDBに登録するジョブ
+・手動で入れた買い注文をDBに登録するジョブ  
 ・買い注文を取り消す機能  
-・複数の注文パターン（売値・買値のロジックを複数に）
+・複数の注文パターン（売値・買値のロジックを複数に）  
 ・注文量・注文金額・最大並行注文数・ジョブの実行間隔をパラメーター化  
 ・利益計算の方法（bitflyerの機能の損益見れるから、優先度は低い   
