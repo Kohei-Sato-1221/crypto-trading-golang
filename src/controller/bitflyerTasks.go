@@ -136,10 +136,7 @@ func StartBfService() {
 	}
 	
 	syncBuyOrderJob := func(){
-		log.Println("【syncBuyOrderJob】Start of job")
-		cnt := models.DeleteStrangeBuyOrderRecords();
-		log.Printf("DELETE strange buy_order records :  %v rows deleted", cnt)
-		
+		log.Println("【syncBuyOrderJob】Start of job")		
 		orders, err := apiClient.GetActiveOrders()
 		if err != nil{
 			log.Println("GetActiveOrders failed....")
@@ -159,6 +156,14 @@ func StartBfService() {
 			log.Printf("【order】%v", event)
 		}
 		models.SyncBuyOrders(&orderEvents)
+		log.Println("【syncBuyOrderJob】End of job")
+	}
+	
+	deleteRecordJob := func(){
+		log.Println("【deleteRecordJob】Start of job")
+		cnt := models.DeleteStrangeBuyOrderRecords();
+		log.Printf("DELETE strange buy_order records :  %v rows deleted", cnt)
+		log.Println("【deleteRecordJob】End of job")
 	}
 	
 	cancelBuyOrderJob := func(){
@@ -204,6 +209,7 @@ func StartBfService() {
 		scheduler.Every(45).Seconds().Run(sellOrderJob)
 		scheduler.Every(45).Seconds().Run(filledCheckJob)
 		scheduler.Every(20).Seconds().Run(syncBuyOrderJob)
+		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
 	}
 	runtime.Goexit()
 }

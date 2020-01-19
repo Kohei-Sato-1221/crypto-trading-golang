@@ -133,7 +133,6 @@ func (apiClient *APIClient) GetOrderByOrderId(orderId string) (*Order, error) {
 	return &orders[0], nil
 }
 
-// to get list of unfilled(active) orders from bitflyer
 func (apiClient *APIClient) GetActiveOrders() (*[]Order, error) {
 	url := "me/getchildorders"
 	params := make(map[string]string)

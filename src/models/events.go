@@ -74,31 +74,14 @@ func FilledCheck() ([]string, error){
 	return ids, nil
 }
 
-func DeleteStrangeBuyOrderRecords() (int64){
+func DeleteStrangeBuyOrderRecords() (int){
 	cmd := `DELETE FROM buy_orders WHERE orderid = '';`
-	rows, _ := DbConnection.Exec(cmd)
-	cnt, _ := rows.RowsAffected()
+	DbConnection.Query(cmd)
+	cnt := 0
+//	for rows.Next(){
+//		rows.Scan(&cnt)
+//	}
 	return cnt
-}
-
-func SyncBuyOrders(events *[]OrderEvent)(){
-	cmd1 := fmt.Sprintf("SELECT COUNT(*) FROM buy_orders WHERE orderid = ?")
-	cmd2 := fmt.Sprintf("INSERT INTO buy_orders (orderid, time, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
-	for _, e := range *events {
-		rows, _ := DbConnection.Query(cmd1, e.OrderId)
-		cnt := 0
-		for rows.Next(){
-			rows.Scan(&cnt)
-		}
-		if cnt == 0 {
-			_, err := DbConnection.Exec(cmd2, e.OrderId, e.Time.Format(time.RFC3339), e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)		
-			if err != nil {
-				log.Println("Failure to do SyncBuyOrders.....")
-			}else{
-				log.Printf("orderid %v has been newly inserted!", e.OrderId)
-			}
-		}
-	}
 }
 
 func DetermineCancelledOrder(max_buy_orders int, noNeedToCancal string) (string){
@@ -233,13 +216,26 @@ func UpdateFilledOrderWithBuyOrder(orderId string) error{
 	return nil
 }
 
-func UpdateFilledSellOrder(orderId string) error{
-	cmd := fmt.Sprintf("update sell_orders set filled = 1 where orderid = ?")
-	_, err := DbConnection.Exec(cmd, orderId)
-	if err != nil {
-		return err
+func SyncBuyOrders(events *[]OrderEvent)(){
+	cmd1 := fmt.Sprintf("SELECT COUNT(*) FROM buy_orders WHERE orderid = ?")
+	cmd2 := fmt.Sprintf("INSERT INTO buy_orders (orderid, time, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	for _, e := range *events {
+		rowsExist, _ := DbConnection.Query(cmd1, e.OrderId)
+		cnt := 0
+		for rowsExist.Next(){
+			rowsExist.Scan(&cnt)			
+		}
+		defer rowsExist.Close()
+		if cnt == 0 {
+			_, err := DbConnection.Exec(cmd2, e.OrderId, e.Time.Format(time.RFC3339), e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)		
+			if err != nil {
+				log.Println("Failure to do SyncBuyOrders.....")
+			}else{
+				log.Printf("orderid %v has been newly inserted!", e.OrderId)
+			}
+		}
+		rowsExist.Close()
 	}
-	return nil
 }
 
 
