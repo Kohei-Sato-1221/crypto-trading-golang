@@ -135,6 +135,32 @@ func StartBfService() {
 			log.Println("【sellOrderjob】end of job")
 	}
 	
+	syncBuyOrderJob := func(){
+		log.Println("【syncBuyOrderJob】Start of job")
+		cnt := models.DeleteStrangeBuyOrderRecords();
+		log.Printf("DELETE strange buy_order records :  %v rows deleted", cnt)
+		
+		orders, err := apiClient.GetActiveOrders()
+		if err != nil{
+			log.Println("GetActiveOrders failed....")
+		}
+		var orderEvents []models.OrderEvent
+		for _, order := range *orders {
+			event := models.OrderEvent{
+				OrderId:     order.ChildOrderAcceptanceID,
+				Time:        time.Now(),
+				ProductCode: order.ProductCode,
+				Side:        order.Side,
+				Price:       order.Price,
+				Size:        order.Size,
+				Exchange:    "bitflyer",
+			}
+			orderEvents = append(orderEvents, event)
+			log.Printf("【order】%v", event)
+		}
+		models.SyncBuyOrders(&orderEvents)
+	}
+	
 	cancelBuyOrderJob := func(){
 		log.Println("【cancelBuyOrderJob】Start of job")
 		noNeedToCancal := "NoNeedToCancel"
@@ -170,12 +196,14 @@ func StartBfService() {
 	if !isTest {
 //		scheduler.Every(30).Seconds().Run(buyingJob03)
 //		scheduler.Every(43200).Seconds().Run(buyingJob)
+		
 		scheduler.Every().Day().At("05:55").Run(buyingJob)
 		scheduler.Every().Day().At("13:05").Run(buyingJob02)
 		scheduler.Every().Day().At("17:55").Run(buyingJob)
 		scheduler.Every().Day().At("19:55").Run(cancelBuyOrderJob)
-		scheduler.Every(30).Seconds().Run(sellOrderJob)
-		scheduler.Every(30).Seconds().Run(filledCheckJob)
+		scheduler.Every(45).Seconds().Run(sellOrderJob)
+		scheduler.Every(45).Seconds().Run(filledCheckJob)
+		scheduler.Every(20).Seconds().Run(syncBuyOrderJob)
 	}
 	runtime.Goexit()
 }

@@ -133,6 +133,23 @@ func (apiClient *APIClient) GetOrderByOrderId(orderId string) (*Order, error) {
 	return &orders[0], nil
 }
 
+// to get list of unfilled(active) orders from bitflyer
+func (apiClient *APIClient) GetActiveOrders() (*[]Order, error) {
+	url := "me/getchildorders"
+	params := make(map[string]string)
+	params["product_code"] = "BTC_JPY"
+	params["child_order_state"] = "ACTIVE"
+	resp, err := apiClient.doGETPOST("GET", url, params, nil)
+	log.Printf("url=%s resp=%s", url, string(resp))
+	if err != nil{
+		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
+		return nil, err
+	}
+	var orders []Order
+	err = json.Unmarshal(resp, &orders)
+	return &orders, nil
+}
+
 
 // easy to convert json to struct with https://mholt.github.io/json-to-go/
 type Ticker struct {

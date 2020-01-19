@@ -74,9 +74,40 @@ func FilledCheck() ([]string, error){
 	return ids, nil
 }
 
+func DeleteStrangeBuyOrderRecords() (int64){
+	cmd := `DELETE FROM buy_orders WHERE orderid = '';`
+	rows, _ := DbConnection.Exec(cmd)
+	cnt, _ := rows.RowsAffected()
+	return cnt
+}
+
+func SyncBuyOrders(events *[]OrderEvent)(){
+	cmd1 := fmt.Sprintf("SELECT COUNT(*) FROM buy_orders WHERE orderid = ?")
+	cmd2 := fmt.Sprintf("INSERT INTO buy_orders (orderid, time, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	for _, e := range *events {
+		rows, _ := DbConnection.Query(cmd1, e.OrderId)
+		cnt := 0
+		for rows.Next(){
+			rows.Scan(&cnt)
+		}
+		if cnt == 0 {
+			_, err := DbConnection.Exec(cmd2, e.OrderId, e.Time.Format(time.RFC3339), e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)		
+			if err != nil {
+				log.Println("Failure to do SyncBuyOrders.....")
+			}else{
+				log.Printf("orderid %v has been newly inserted!", e.OrderId)
+			}
+		}
+	}
+}
+
 func DetermineCancelledOrder(max_buy_orders int, noNeedToCancal string) (string){
 	cmd := `SELECT CASE WHEN MAX(t1.c1) < ? THEN ? ELSE MAX(t2.c2) END FROM (SELECT COUNT(orderid) c1 FROM buy_orders WHERE filled = 0 and orderid != '') t1, (SELECT orderid c2 FROM buy_orders WHERE filled = 0 and orderid != '' ORDER BY price ASC LIMIT 1) t2;`
-	rows, err := DbConnection.Query(cmd, max_buy_orders, noNeedToCancal)
+	var buy_orders_limit int = max_buy_orders;
+	if max_buy_orders > 8 {
+		buy_orders_limit = 8;
+	}
+	rows, err := DbConnection.Query(cmd, buy_orders_limit, noNeedToCancal)
 	if err != nil {
 		return noNeedToCancal
 	}
