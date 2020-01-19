@@ -137,23 +137,25 @@ func StartBfService() {
 	
 	syncBuyOrderJob := func(){
 		log.Println("【syncBuyOrderJob】Start of job")		
-		orders, err := apiClient.GetActiveOrders()
+		orders, err := apiClient.GetActiveBuyOrders()
 		if err != nil{
 			log.Println("GetActiveOrders failed....")
 		}
 		var orderEvents []models.OrderEvent
 		for _, order := range *orders {
-			event := models.OrderEvent{
-				OrderId:     order.ChildOrderAcceptanceID,
-				Time:        time.Now(),
-				ProductCode: order.ProductCode,
-				Side:        order.Side,
-				Price:       order.Price,
-				Size:        order.Size,
-				Exchange:    "bitflyer",
+			if order.Side == "BUY" {
+				event := models.OrderEvent{
+					OrderId:     order.ChildOrderAcceptanceID,
+					Time:        time.Now(),
+					ProductCode: order.ProductCode,
+					Side:        order.Side,
+					Price:       order.Price,
+					Size:        order.Size,
+					Exchange:    "bitflyer",
+				}
+				orderEvents = append(orderEvents, event)
+				log.Printf("【order】%v", event)
 			}
-			orderEvents = append(orderEvents, event)
-			log.Printf("【order】%v", event)
 		}
 		models.SyncBuyOrders(&orderEvents)
 		log.Println("【syncBuyOrderJob】End of job")

@@ -133,7 +133,7 @@ func (apiClient *APIClient) GetOrderByOrderId(orderId string) (*Order, error) {
 	return &orders[0], nil
 }
 
-func (apiClient *APIClient) GetActiveOrders() (*[]Order, error) {
+func (apiClient *APIClient) GetActiveBuyOrders() (*[]Order, error) {
 	url := "me/getchildorders"
 	params := make(map[string]string)
 	params["product_code"] = "BTC_JPY"
