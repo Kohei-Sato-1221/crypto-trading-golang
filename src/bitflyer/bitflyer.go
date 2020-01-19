@@ -290,6 +290,24 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 	return &response, nil
 }
 
+type CancelOrderResponse struct {
+	OrderId string `json:"child_order_acceptance_id"`
+}
+
+func (apiClient *APIClient) CancelOrder(order *Order) (error) {
+	data, err := json.Marshal(order)
+	if err != nil {
+		return err
+	}
+	url := "me/cancelchildorder"
+	resp, err := apiClient.doGETPOST("POST", url, map[string]string{}, data)
+	if err != nil {
+		fmt.Printf("res:%s\n", resp)
+		return err
+	}
+	return nil
+}
+
 //func (apiClient *APIClient) GetFilledBuyOrderInfo() ([]Order, error){
 //	query := map[string]string {"child_order_state":"COMPLETED"}
 //	return GetOrderInfo(query)

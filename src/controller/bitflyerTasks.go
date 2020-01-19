@@ -32,6 +32,10 @@ func StartBfService() {
 		placeBuyOrder(1, apiClient)
 	}
 	
+//	buyingJob03 := func(){
+//		placeBuyOrder(-1, apiClient)
+//	}
+	
 	filledCheckJob := func(){
 		log.Println("【filledCheckJob】start of job")
 		// Get list of unfilled buy orders in local Database(buy_orders & sell_orders)
@@ -131,12 +135,45 @@ func StartBfService() {
 			log.Println("【sellOrderjob】end of job")
 	}
 	
+	cancelBuyOrderJob := func(){
+		log.Println("【cancelBuyOrderJob】Start of job")
+		noNeedToCancal := "NoNeedToCancel"
+		orderid := models.DetermineCancelledOrder(apiClient.Max_buy_orders, noNeedToCancal);
+		log.Printf(" id : %v", orderid)
+		var err error
+		
+		order := &bitflyer.Order{
+			ProductCode:     "BTC_JPY",
+			ChildOrderAcceptanceID:  orderid,
+		}
+		
+		if orderid == noNeedToCancal {
+			goto ENDOFCENCELORDER
+		}
+		
+		err = apiClient.CancelOrder(order)
+		if err == nil{
+			log.Printf("## Successfully canceled order!! orderid:%v", orderid)
+			err = models.UpdateCancelledOrder(orderid)
+			if err != nil {
+				log.Println("Failure to update records.....")
+			}
+		}else{
+			log.Printf("## Failed to cancel order.... orderid:%v", orderid)			
+		}
+		
+		ENDOFCENCELORDER:
+			log.Println("【cancelBuyOrderJob】End of job")
+	}
+	
 	isTest := false
 	if !isTest {
+//		scheduler.Every(30).Seconds().Run(buyingJob03)
 //		scheduler.Every(43200).Seconds().Run(buyingJob)
 		scheduler.Every().Day().At("05:55").Run(buyingJob)
-		scheduler.Every().Day().At("17:55").Run(buyingJob)
 		scheduler.Every().Day().At("13:05").Run(buyingJob02)
+		scheduler.Every().Day().At("17:55").Run(buyingJob)
+		scheduler.Every().Day().At("19:55").Run(cancelBuyOrderJob)
 		scheduler.Every(30).Seconds().Run(sellOrderJob)
 		scheduler.Every(30).Seconds().Run(filledCheckJob)
 	}
@@ -147,6 +184,11 @@ func placeBuyOrder(strategy int, apiClient *bitflyer.APIClient){
 	log.Printf("strategy:%v", strategy)
 	log.Println("【buyingJob】start of job")
 	shouldSkip := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
+	
+	// for test
+	if strategy == -1 {
+		shouldSkip = false
+	}
 	log.Printf("ShouldSkip :%v max:%v", shouldSkip, apiClient.Max_sell_orders)
 	
 	buyPrice := 0.0
