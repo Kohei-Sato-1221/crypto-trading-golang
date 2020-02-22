@@ -1,43 +1,42 @@
 package bitflyer
 
 import (
-	"fmt"
+	"bytes"
+	"config"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"bytes"
 	"strconv"
 	"time"
-	"config"
-	"io/ioutil"
-	"encoding/json"
-	"encoding/hex"
+
 	"github.com/gorilla/websocket"
 )
 
 const baseURL = "https://api.bitflyer.com/v1/"
 
-
-type APIClient struct{
-	apikey           string
-	apisecret        string
-	Max_buy_orders   int
-	Max_sell_orders  int
-	httpClient       *http.Client
+type APIClient struct {
+	apikey          string
+	apisecret       string
+	Max_buy_orders  int
+	Max_sell_orders int
+	httpClient      *http.Client
 }
-
 
 func New(key, secret string, max_buy_orders, max_sell_orders int) *APIClient {
 	apiClient := &APIClient{key, secret, max_buy_orders, max_sell_orders, &http.Client{}}
 	return apiClient
 }
 
-func (apiClient APIClient) header(method, endpoint string, body []byte) map[string]string{
+func (apiClient APIClient) header(method, endpoint string, body []byte) map[string]string {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	message := timestamp + method + endpoint + string(body)
-	
+
 	mac := hmac.New(sha256.New, []byte(apiClient.apisecret))
 	mac.Write([]byte(message))
 	sign := hex.EncodeToString(mac.Sum(nil))
@@ -49,18 +48,18 @@ func (apiClient APIClient) header(method, endpoint string, body []byte) map[stri
 	}
 }
 
-func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]string, data []byte) (body []byte, err error){
+func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]string, data []byte) (body []byte, err error) {
 	baseURL, err := url.Parse(config.BaseURL)
-	if err != nil{
+	if err != nil {
 		return
 	}
 	apiURL, err := url.Parse(urlPath)
-	if err != nil{
+	if err != nil {
 		return
 	}
 	endpoint := baseURL.ResolveReference(apiURL).String()
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(data))
-	if err != nil{
+	if err != nil {
 		return
 	}
 	q := req.URL.Query()
@@ -68,17 +67,17 @@ func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]s
 		q.Add(key, value)
 	}
 	req.URL.RawQuery = q.Encode()
-	
-	for key, value := range apiClient.header(method, req.URL.RequestURI(), data){
+
+	for key, value := range apiClient.header(method, req.URL.RequestURI(), data) {
 		req.Header.Add(key, value)
 	}
 	resp, err := apiClient.httpClient.Do(req)
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 	return body, nil
@@ -94,13 +93,13 @@ func (apiClient *APIClient) GetBalance() ([]Balance, error) {
 	url := "me/getbalance"
 	resp, err := apiClient.doGETPOST("GET", url, map[string]string{}, nil)
 	log.Printf("url=%s resp=%s", url, string(resp))
-	if err != nil{
+	if err != nil {
 		log.Printf("action=GetBalance err=%s", err.Error())
 		return nil, err
 	}
 	var balance []Balance
 	err = json.Unmarshal(resp, &balance)
-	if err != nil{
+	if err != nil {
 		log.Printf("action=GetBalance err=%s", err.Error())
 		return nil, err
 	}
@@ -115,17 +114,17 @@ func (apiClient *APIClient) GetOrderByOrderId(orderId string) (*Order, error) {
 	params["child_order_state"] = "COMPLETED"
 	resp, err := apiClient.doGETPOST("GET", url, params, nil)
 	log.Printf("url=%s resp=%s", url, string(resp))
-	if err != nil{
+	if err != nil {
 		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
 		return nil, err
 	}
 	var orders []Order
 	err = json.Unmarshal(resp, &orders)
-	if err != nil{
+	if err != nil {
 		log.Printf("action=GetOrderByOrderId err=%s, orderId:%s", err.Error(), orderId)
 		return nil, err
 	}
-	
+
 	if len(orders) == 0 {
 		log.Printf("action=GetOrderByOrderId No Order correspond to orderId:%s", orderId)
 		return nil, nil
@@ -133,14 +132,14 @@ func (apiClient *APIClient) GetOrderByOrderId(orderId string) (*Order, error) {
 	return &orders[0], nil
 }
 
-func (apiClient *APIClient) GetActiveBuyOrders() (*[]Order, error) {
+func (apiClient *APIClient) GetActiveBuyOrders(product_code, order_status string) (*[]Order, error) {
 	url := "me/getchildorders"
 	params := make(map[string]string)
-	params["product_code"] = "BTC_JPY"
-	params["child_order_state"] = "ACTIVE"
+	params["product_code"] = product_code
+	params["child_order_state"] = order_status
 	resp, err := apiClient.doGETPOST("GET", url, params, nil)
 	log.Printf("url=%s resp=%s", url, string(resp))
-	if err != nil{
+	if err != nil {
 		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
 		return nil, err
 	}
@@ -148,7 +147,6 @@ func (apiClient *APIClient) GetActiveBuyOrders() (*[]Order, error) {
 	err = json.Unmarshal(resp, &orders)
 	return &orders, nil
 }
-
 
 // easy to convert json to struct with https://mholt.github.io/json-to-go/
 type Ticker struct {
@@ -186,13 +184,13 @@ func (apiClient *APIClient) GetTicker(productCode string) (*Ticker, error) {
 	url := "ticker"
 	resp, err := apiClient.doGETPOST("GET", url, map[string]string{"product_code": productCode}, nil)
 	log.Printf("url=%s resp=%s", url, string(resp))
-	if err != nil{
+	if err != nil {
 		log.Printf("action=GetBalance err=%s", err.Error())
 		return nil, err
 	}
 	var ticker Ticker
 	err = json.Unmarshal(resp, &ticker)
-	if err != nil{
+	if err != nil {
 		log.Printf("action=GetBalance err=%s", err.Error())
 		return nil, err
 	}
@@ -200,61 +198,60 @@ func (apiClient *APIClient) GetTicker(productCode string) (*Ticker, error) {
 }
 
 type JsonRPC2 struct {
-    Version string      `json:"jsonrpc"`
-    Method  string      `json:"method"`
-    Params  interface{} `json:"params"`
-    Result  interface{} `json:"result,omitempty"`
-    Id      *int        `json:"id,omitempty"`
+	Version string      `json:"jsonrpc"`
+	Method  string      `json:"method"`
+	Params  interface{} `json:"params"`
+	Result  interface{} `json:"result,omitempty"`
+	Id      *int        `json:"id,omitempty"`
 }
 
 type SubscribeParams struct {
 	Channel string `json:"channel"`
 }
 
-
-func (apiClient *APIClient) GetRealTimeTicker(symbol string, ch chan <- Ticker){
+func (apiClient *APIClient) GetRealTimeTicker(symbol string, ch chan<- Ticker) {
 	u := url.URL{Scheme: "wss", Host: "ws.lightstream.bitflyer.com", Path: "/json-rpc"}
 	log.Printf("connecting to %s", u.String())
-	
+
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil{
+	if err != nil {
 		log.Println("dial:", err)
 	}
 	defer c.Close()
-	
+
 	channel := fmt.Sprintf("lightning_ticker_%s", symbol)
 	if err := c.WriteJSON(&JsonRPC2{Version: "2.0", Method: "subscribe", Params: &SubscribeParams{channel}}); err != nil {
 		log.Println("subscribe:", err)
 		return
 	}
-	
-	OUTER:
-		for{
-			message := new(JsonRPC2)
-			if err := c.ReadJSON(message); err != nil{
-				log.Println("read:", err)
-				return
-			}
-			
-			if message.Method == "channelMessage" {
-				switch v := message.Params.(type){
-					case map[string]interface{}:
-					for key, binary := range v {
-						if key == "message" {
-							marshaTic, err := json.Marshal(binary)
-							if err != nil {
-								continue OUTER
-							}
-							var ticker Ticker
-							if err := json.Unmarshal(marshaTic, &ticker); err != nil {
-								continue OUTER
-							}
-							ch <- ticker
-						}	
+
+OUTER:
+	for {
+		message := new(JsonRPC2)
+		if err := c.ReadJSON(message); err != nil {
+			log.Println("read:", err)
+			return
+		}
+
+		if message.Method == "channelMessage" {
+			switch v := message.Params.(type) {
+			case map[string]interface{}:
+				for key, binary := range v {
+					if key == "message" {
+						marshaTic, err := json.Marshal(binary)
+						if err != nil {
+							continue OUTER
+						}
+						var ticker Ticker
+						if err := json.Unmarshal(marshaTic, &ticker); err != nil {
+							continue OUTER
+						}
+						ch <- ticker
 					}
 				}
 			}
 		}
+	}
 }
 
 type Order struct {
@@ -310,7 +307,7 @@ type CancelOrderResponse struct {
 	OrderId string `json:"child_order_acceptance_id"`
 }
 
-func (apiClient *APIClient) CancelOrder(order *Order) (error) {
+func (apiClient *APIClient) CancelOrder(order *Order) error {
 	data, err := json.Marshal(order)
 	if err != nil {
 		return err
@@ -323,30 +320,3 @@ func (apiClient *APIClient) CancelOrder(order *Order) (error) {
 	}
 	return nil
 }
-
-//func (apiClient *APIClient) GetFilledBuyOrderInfo() ([]Order, error){
-//	query := map[string]string {"child_order_state":"COMPLETED"}
-//	return GetOrderInfo(query)
-//}
-//
-//
-//func (apiClient *APIClient) GetOrderInfo(query map[string]string) ([]Order, error){
-//	resp, err := apiClient.doGETPOST("GET", "me/getchildorders", query, nil)
-//	if err != nil {
-//		return nil, err
-//	}
-//	var ordersList []Order
-//	err = json.Unmarshal(resp, &ordersList)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return ordersList, nil
-//}
-
-
-
-
-
-
-
-
