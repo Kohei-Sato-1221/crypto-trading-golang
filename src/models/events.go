@@ -48,9 +48,9 @@ func (e *OrderEvent) SellOrder(pid string) error {
 	return nil
 }
 
-func FilledCheck() ([]string, error) {
-	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '' union SELECT orderid FROM sell_orders WHERE filled = 0 and orderid != '';`
-	rows, err := DbConnection.Query(cmd)
+func FilledCheck(productCode string) ([]string, error) {
+	cmd := `SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '' and product_code = ? union SELECT orderid FROM sell_orders WHERE filled = 0 and orderid != ''  and product_code = ?;`
+	rows, err := DbConnection.Query(cmd, productCode, productCode)
 	if err != nil {
 		log.Printf("Failure to exec query..... %v", err)
 		return nil, err

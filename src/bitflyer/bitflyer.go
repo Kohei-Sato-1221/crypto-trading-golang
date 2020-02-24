@@ -106,11 +106,11 @@ func (apiClient *APIClient) GetBalance() ([]Balance, error) {
 	return balance, nil
 }
 
-func (apiClient *APIClient) GetOrderByOrderId(orderId string) (*Order, error) {
+func (apiClient *APIClient) GetOrderByOrderId(orderId, productCode string) (*Order, error) {
 	url := "me/getchildorders"
 	params := make(map[string]string)
 	params["child_order_acceptance_id"] = orderId
-	params["product_code"] = "BTC_JPY"
+	params["product_code"] = productCode
 	params["child_order_state"] = "COMPLETED"
 	resp, err := apiClient.doGETPOST("GET", url, params, nil)
 	log.Printf("url=%s resp=%s", url, string(resp))

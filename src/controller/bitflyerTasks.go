@@ -45,39 +45,12 @@ func StartBfService() {
 	//		placeBuyOrder(-1, apiClient)
 	//	}
 
-	filledCheckJob := func() {
-		log.Println("【filledCheckJob】start of job")
-		// Get list of unfilled buy orders in local Database(buy_orders & sell_orders)
-		ids, err1 := models.FilledCheck()
-		if err1 != nil {
-			log.Println("error in filledCheckJob.....")
-			goto ENDOFFILLEDCHECK
-		}
+	btcFilledCheckJob := func() {
+		filledCheckJob("BTC_JPY", apiClient)
+	}
 
-		if ids == nil {
-			goto ENDOFFILLEDCHECK
-		}
-
-		// check if an order is filled for each orders calling API
-		for i, orderId := range ids {
-			log.Printf("No%d Id:%v", i, orderId)
-			order, err := apiClient.GetOrderByOrderId(orderId)
-			if err != nil {
-				log.Println("error in filledCheckJob.....")
-				break
-			}
-
-			if order != nil {
-				err := models.UpdateFilledOrder(orderId)
-				if err != nil {
-					log.Println("Failure to update records.....")
-					break
-				}
-				log.Printf("Order updated successfully!! orderId:%s", orderId)
-			}
-		}
-	ENDOFFILLEDCHECK:
-		log.Println("【filledCheckJob】end of job")
+	ethFilledCheckJob := func() {
+		filledCheckJob("ETH_JPY", apiClient)
 	}
 
 	sellOrderJob := func() {
@@ -201,8 +174,8 @@ func StartBfService() {
 	isTest := false
 	if !isTest {
 		scheduler.Every(45).Seconds().Run(sellOrderJob)
-		scheduler.Every(20).Seconds().Run(syncETHBuyOrderJob)
 		scheduler.Every(20).Seconds().Run(syncBTCBuyOrderJob)
+		scheduler.Every(20).Seconds().Run(syncETHBuyOrderJob)
 		scheduler.Every().Day().At("05:55").Run(buyingJob)
 		scheduler.Every().Day().At("13:05").Run(buyingJob02)
 		scheduler.Every().Day().At("17:55").Run(buyingJob)
@@ -210,7 +183,8 @@ func StartBfService() {
 		scheduler.Every().Day().At("12:05").Run(buyingETHJob02)
 		scheduler.Every().Day().At("16:55").Run(buyingETHJob)
 		scheduler.Every().Day().At("19:55").Run(cancelBuyOrderJob)
-		scheduler.Every(45).Seconds().Run(filledCheckJob)
+		scheduler.Every(45).Seconds().Run(ethFilledCheckJob)
+		scheduler.Every(45).Seconds().Run(btcFilledCheckJob)
 		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
 	}
 	runtime.Goexit()
@@ -263,6 +237,42 @@ func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 		}
 	}
 	models.SyncBuyOrders(&orderEvents)
+}
+
+func filledCheckJob(productCode string, apiClient *bitflyer.APIClient) {
+	log.Println("【filledCheckJob】start of job %v", productCode)
+	// Get list of unfilled buy orders in local Database(buy_orders & sell_orders)
+	ids, err1 := models.FilledCheck(productCode)
+	if err1 != nil {
+		log.Println("error in filledCheckJob.....")
+		goto ENDOFFILLEDCHECK
+	}
+
+	if ids == nil {
+		goto ENDOFFILLEDCHECK
+	}
+
+	// check if an order is filled for each orders calling API
+	for i, orderId := range ids {
+		log.Printf("No%d Id:%v", i, orderId)
+		order, err := apiClient.GetOrderByOrderId(orderId, productCode)
+		if err != nil {
+			log.Println("error in filledCheckJob.....")
+			break
+		}
+
+		if order != nil {
+			err := models.UpdateFilledOrder(orderId)
+			if err != nil {
+				log.Println("Failure to update records.....")
+				break
+			}
+			log.Printf("Order updated successfully!! orderId:%s", orderId)
+		}
+	}
+ENDOFFILLEDCHECK:
+	log.Println("【filledCheckJob】end of job %v", productCode)
+
 }
 
 func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient) {
