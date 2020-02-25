@@ -74,11 +74,11 @@ func (apiClient *APIClient) GetOrderList(productCode, state string) (*[]Order, e
 }
 
 type Order struct {
-	OrderId      string `json:"order_id"`
+	OrderID      string `json:"order_id"`
 	ClientOid    string `json:"client_oid"`
 	Type         string `json:"type"`
 	Side         string `json:"side"`
-	InstrumentId string `json:"instrument_id"`
+	InstrumentID string `json:"instrument_id"`
 	OrderType    string `json:"order_type"`
 	Price        string `json:"price"`
 	Size         string `json:"size"`
