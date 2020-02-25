@@ -13,10 +13,10 @@ func main() {
 	useExchange := "okex"
 	utils.LogSetting(config.Config.LogFile)
 
-	if useExchange == "bitflyer" {
-		fmt.Println(models.DbConnection)
-		controller.StartBfService()
-	}
+	// if useExchange == "bitflyer" {
+	// 	fmt.Println(models.DbConnection)
+	// 	controller.StartBfService()
+	// }
 	if useExchange == "okex" {
 		fmt.Println(models.MysqlDbConn)
 		controller.StartOKEXService()
