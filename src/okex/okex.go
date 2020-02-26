@@ -39,7 +39,7 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 
 // GetTickerInfo
 func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
-	requestPath := "/api/spot/v3/instruments/EOS-USDT/ticker"
+	requestPath := "/api/spot/v3/instruments/" + productCode + "/ticker"
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
 	if err != nil {

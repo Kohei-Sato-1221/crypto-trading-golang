@@ -6,6 +6,7 @@ import (
 	"math"
 	"models"
 	"okex"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -104,15 +105,16 @@ func StartOKEXService() {
 		log.Println("【syncOrderListJob】End of job")
 	}
 
-	isTest := false
+	isTest := true
 	if !isTest {
+		scheduler.Every(45).Seconds().Run(placeSellOrderJob)
+		scheduler.Every(20).Seconds().Run(syncOrderListJob)
 		scheduler.Every(28800).Seconds().Run(buyingJob)
 		scheduler.Every(57600).Seconds().Run(buyingOKBJob)
 		scheduler.Every(57600).Seconds().Run(buyingBCHJob)
 		scheduler.Every(57600).Seconds().Run(buyingBSVJob)
-		scheduler.Every(45).Seconds().Run(placeSellOrderJob)
-		scheduler.Every(20).Seconds().Run(syncOrderListJob)
 	}
+	runtime.Goexit()
 }
 
 func syncOrderList(productCode, state string, apiClient *okex.APIClient) bool {
@@ -208,14 +210,26 @@ func placeOkexOrder(side, clientOid, productCode string, size, price float64, ap
 	log.Printf("placeOkexOrder:%v\n", order)
 	res, err := apiClient.PlaceOrder(order)
 	if err != nil {
-		log.Println("Buyorder failed.... Failure in [apiClient.PlaceOrder()]")
+		log.Println("Place Order(1) failed.... Failure in [apiClient.PlaceOrder()]")
 		return false
 	}
 	if res == nil {
-		log.Println("Buyorder failed.... no response")
+		log.Println("Place Order(1) failed.... no response")
 		return false
-	} else {
-		log.Printf("Buyorder response %v", res)
+	} else if res.ErrorCode == "33017" {
+		log.Printf("Place Order(1) response %v %v", res.ErrorCode, res.ErrorMsg)
+		order.Size = fTs(roundDecimal(size * 0.5))
+		res2, err2 := apiClient.PlaceOrder(order)
+		if res2 == nil || err2 != nil {
+			log.Println("Place Order(2) failed.... no response")
+			return false
+		} else if res.ErrorCode != "0" {
+			log.Printf("Place Order(2) failed.... bad response %v %v", res.ErrorCode, res.ErrorMsg)
+			return false
+		}
+	} else if res.ErrorCode != "0" {
+		log.Println("Place Order(1) failed.... bad response")
+		return false
 	}
 	log.Println("【placeOkexOrder】end of job")
 	return true
