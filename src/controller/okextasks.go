@@ -6,7 +6,6 @@ import (
 	"math"
 	"models"
 	"okex"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -114,7 +113,6 @@ func StartOKEXService() {
 		scheduler.Every(45).Seconds().Run(placeSellOrderJob)
 		scheduler.Every(20).Seconds().Run(syncOrderListJob)
 	}
-	runtime.Goexit()
 }
 
 func syncOrderList(productCode, state string, apiClient *okex.APIClient) bool {
