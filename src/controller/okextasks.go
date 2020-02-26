@@ -105,7 +105,7 @@ func StartOKEXService() {
 		log.Println("【syncOrderListJob】End of job")
 	}
 
-	isTest := true
+	isTest := false
 	if !isTest {
 		scheduler.Every(45).Seconds().Run(placeSellOrderJob)
 		scheduler.Every(20).Seconds().Run(syncOrderListJob)
