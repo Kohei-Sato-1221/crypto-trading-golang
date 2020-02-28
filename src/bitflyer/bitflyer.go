@@ -106,31 +106,31 @@ func (apiClient *APIClient) GetBalance() ([]Balance, error) {
 	return balance, nil
 }
 
-func (apiClient *APIClient) GetOrderByOrderId(orderId, productCode string) (*Order, error) {
-	url := "me/getchildorders"
-	params := make(map[string]string)
-	params["child_order_acceptance_id"] = orderId
-	params["product_code"] = productCode
-	params["child_order_state"] = "COMPLETED"
-	resp, err := apiClient.doGETPOST("GET", url, params, nil)
-	log.Printf("url=%s resp=%s", url, string(resp))
-	if err != nil {
-		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
-		return nil, err
-	}
-	var orders []Order
-	err = json.Unmarshal(resp, &orders)
-	if err != nil {
-		log.Printf("action=GetOrderByOrderId err=%s, orderId:%s", err.Error(), orderId)
-		return nil, err
-	}
+// func (apiClient *APIClient) GetOrderByOrderId(orderId, productCode string) (*Order, error) {
+// 	url := "me/getchildorders"
+// 	params := make(map[string]string)
+// 	params["child_order_acceptance_id"] = orderId
+// 	params["product_code"] = productCode
+// 	params["child_order_state"] = "COMPLETED"
+// 	resp, err := apiClient.doGETPOST("GET", url, params, nil)
+// 	log.Printf("url=%s resp=%s", url, string(resp))
+// 	if err != nil {
+// 		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
+// 		return nil, err
+// 	}
+// 	var orders []Order
+// 	err = json.Unmarshal(resp, &orders)
+// 	if err != nil {
+// 		log.Printf("action=GetOrderByOrderId err=%s, orderId:%s", err.Error(), orderId)
+// 		return nil, err
+// 	}
 
-	if len(orders) == 0 {
-		log.Printf("action=GetOrderByOrderId No Order correspond to orderId:%s", orderId)
-		return nil, nil
-	}
-	return &orders[0], nil
-}
+// 	if len(orders) == 0 {
+// 		log.Printf("action=GetOrderByOrderId No Order correspond to orderId:%s", orderId)
+// 		return nil, nil
+// 	}
+// 	return &orders[0], nil
+// }
 
 func (apiClient *APIClient) GetActiveBuyOrders(product_code, order_status string) (*[]Order, error) {
 	url := "me/getchildorders"
