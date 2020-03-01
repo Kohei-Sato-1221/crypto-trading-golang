@@ -109,10 +109,10 @@ func StartOKEXService() {
 	if !isTest {
 		scheduler.Every(45).Seconds().Run(placeSellOrderJob)
 		scheduler.Every(20).Seconds().Run(syncOrderListJob)
-		scheduler.Every(28800).Seconds().Run(buyingJob)
-		scheduler.Every(57600).Seconds().Run(buyingOKBJob)
-		scheduler.Every(57600).Seconds().Run(buyingBCHJob)
-		scheduler.Every(57600).Seconds().Run(buyingBSVJob)
+		scheduler.Every(18000).Seconds().Run(buyingJob)
+		scheduler.Every(18000).Seconds().Run(buyingOKBJob)
+		scheduler.Every(18000).Seconds().Run(buyingBCHJob)
+		scheduler.Every(18000).Seconds().Run(buyingBSVJob)
 	}
 	runtime.Goexit()
 }
