@@ -202,7 +202,7 @@ func placeOkexOrder(side, clientOid, productCode string, size, price float64, ap
 		Type:         "limit",
 		Side:         side,
 		InstrumentID: productCode,
-		OrderType:    "1",
+		OrderType:    "0",
 		Price:        fTs(roundDecimal(price)),
 		Size:         fTs(size),
 	}
