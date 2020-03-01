@@ -164,7 +164,7 @@ func placeSellOrders(pair string, apiClient *okex.APIClient) bool {
 		if !shouldSkip {
 			log.Println("placeSellOrder failed.... Failure in [placeSellOrders]")
 		} else {
-			models.UpdateOkexSellOrders(orderID)
+			models.UpdateOkexSellOrders(orderID, price)
 		}
 	}
 	return true

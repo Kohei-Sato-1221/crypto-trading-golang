@@ -59,10 +59,10 @@ func SyncOkexBuyOrders(orders *[]OkexOrderEvent) {
 	}
 }
 
-func UpdateOkexSellOrders(orderID string) {
-	cmd1, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET sellOrderState = 1 WHERE orderid = ?")
+func UpdateOkexSellOrders(orderID string, sellPrice float64) {
+	cmd1, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET sellOrderState = 1, sellPrice = ? WHERE orderid = ?")
 	defer cmd1.Close()
-	_, err := cmd1.Exec(orderID)
+	_, err := cmd1.Exec(sellPrice, orderID)
 	if err != nil {
 		log.Println("Failure to do updateOkexSellOrders.....")
 	} else {
