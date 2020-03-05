@@ -25,10 +25,10 @@ func StartOKEXService() {
 		price03 := roundDecimal(sTf(ticker.Ltp) * 0.97)
 		price04 := roundDecimal(sTf(ticker.Ltp) * 0.994)
 		log.Printf("#### EOS-USDT price01:%v price02:%v price03:%v", price01, price02, price03)
-		placeOkexBuyOrder("EOS-USDT", 0.2, price01, apiClient)
-		placeOkexBuyOrder("EOS-USDT", 0.2, price02, apiClient)
-		placeOkexBuyOrder("EOS-USDT", 0.2, price03, apiClient)
-		placeOkexBuyOrder("EOS-USDT", 0.2, price04, apiClient)
+		placeOkexBuyOrder("EOS-USDT", 0.3, price01, apiClient)
+		placeOkexBuyOrder("EOS-USDT", 0.3, price02, apiClient)
+		placeOkexBuyOrder("EOS-USDT", 0.3, price03, apiClient)
+		placeOkexBuyOrder("EOS-USDT", 0.3, price04, apiClient)
 	}
 
 	buyingOKBJob := func() {
@@ -107,12 +107,20 @@ func StartOKEXService() {
 
 	isTest := false
 	if !isTest {
-		scheduler.Every(45).Seconds().Run(placeSellOrderJob)
-		scheduler.Every(20).Seconds().Run(syncOrderListJob)
-		scheduler.Every(18000).Seconds().Run(buyingJob)
-		scheduler.Every(18000).Seconds().Run(buyingOKBJob)
-		scheduler.Every(18000).Seconds().Run(buyingBCHJob)
-		scheduler.Every(18000).Seconds().Run(buyingBSVJob)
+		scheduler.Every(30).Seconds().Run(syncOrderListJob)
+		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
+		scheduler.Every().Day().At("23:30").Run(buyingJob)
+		scheduler.Every().Day().At("23:30").Run(buyingOKBJob)
+		scheduler.Every().Day().At("23:30").Run(buyingBCHJob)
+		scheduler.Every().Day().At("23:30").Run(buyingBSVJob)
+		scheduler.Every().Day().At("05:55").Run(buyingJob)
+		scheduler.Every().Day().At("05:55").Run(buyingOKBJob)
+		scheduler.Every().Day().At("05:55").Run(buyingBCHJob)
+		scheduler.Every().Day().At("05:55").Run(buyingBSVJob)
+		scheduler.Every().Day().At("11:45").Run(buyingJob)
+		scheduler.Every().Day().At("11:45").Run(buyingOKBJob)
+		scheduler.Every().Day().At("11:45").Run(buyingBCHJob)
+		scheduler.Every().Day().At("11:45").Run(buyingBSVJob)
 	}
 	runtime.Goexit()
 }
