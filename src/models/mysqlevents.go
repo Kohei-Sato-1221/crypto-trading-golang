@@ -73,6 +73,7 @@ func UpdateOkexSellOrders(orderID string, sellPrice float64) {
 func GetSoldBuyOrderList(pair string) []OkexFilledBuyOrder {
 	log.Printf("GetSoldBuyOrderList: %v ", pair)
 	cmd1, _ := MysqlDbConn.Prepare(`SELECT orderid, price, size FROM buy_orders WHERE state = 2 and sellOrderState = 0 and pair = ?`)
+	log.Printf("cmd1 %v", cmd1)
 	rows, err := cmd1.Query(pair)
 	if err != nil {
 		return nil
