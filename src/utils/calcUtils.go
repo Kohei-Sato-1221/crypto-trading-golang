@@ -15,12 +15,16 @@ func CalculateBuyPrice(ltp, low float64, strategy int) float64 {
 	if strategy == 0 { // BTC_JPY
 		return Round(ltp*0.3 + low*0.7)
 	} else if strategy == 1 { // BTC_JPY
-		return Round(ltp*0.5 + low*0.5)
+		return Round(ltp * 0.995)
+	} else if strategy == 2 { // BTC_JPY
+		return Round(ltp * 0.997)
 	} else if strategy == -1 { // for test
 		return Round(ltp * 0.8)
 	} else if strategy == 10 { // ETH_JPY
 		return Round(ltp * 0.995)
 	} else if strategy == 11 { // ETH_JPY
+		return Round(ltp * 0.98)
+	} else if strategy == 12 { // ETH_JPY
 		return Round(ltp * 0.97)
 	} else {
 		return Round(ltp*0.3 + low*0.7)
