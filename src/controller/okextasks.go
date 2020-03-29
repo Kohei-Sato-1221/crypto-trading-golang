@@ -18,54 +18,109 @@ func StartOKEXService() {
 	log.Println("【StartOKEXService】")
 	apiClient := okex.New(config.Config.OKApiKey, config.Config.OKApiSecret, config.Config.OKPassPhrase)
 
-	buyingJob := func() {
+	buyingJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
-		price01 := roundDecimal(sTf(ticker.Ltp)*0.4 + sTf(ticker.Low)*0.6)
-		price02 := roundDecimal(sTf(ticker.Ltp)*0.1 + sTf(ticker.Low)*0.9)
-		price03 := roundDecimal(sTf(ticker.Ltp) * 0.975)
-		price04 := roundDecimal(sTf(ticker.Ltp) * 0.985)
-		log.Printf("#### EOS-USDT price01:%v price02:%v price03:%v", price01, price02, price03)
-		placeOkexBuyOrder("EOS-USDT", 2, price01, apiClient)
-		placeOkexBuyOrder("EOS-USDT", 2, price02, apiClient)
-		placeOkexBuyOrder("EOS-USDT", 2, price03, apiClient)
-		placeOkexBuyOrder("EOS-USDT", 2, price04, apiClient)
+		price := roundDecimal(sTf(ticker.Ltp)*0.4 + sTf(ticker.Low)*0.6)
+		log.Printf("#### EOS-USDT price:%v ", price)
+		placeOkexBuyOrder("EOS-USDT", 2, price, apiClient)
 	}
 
-	buyingOKBJob := func() {
+	buyingJob02 := func() {
+		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
+		price := roundDecimal(sTf(ticker.Ltp)*0.1 + sTf(ticker.Low)*0.9)
+		log.Printf("#### EOS-USDT price:%v ", price)
+		placeOkexBuyOrder("EOS-USDT", 2, price, apiClient)
+	}
+
+	buyingJob03 := func() {
+		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.975)
+		log.Printf("#### EOS-USDT price:%v ", price)
+		placeOkexBuyOrder("EOS-USDT", 2, price, apiClient)
+	}
+
+	buyingJob04 := func() {
+		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
+		log.Printf("#### EOS-USDT price:%v ", price)
+		placeOkexBuyOrder("EOS-USDT", 2, price, apiClient)
+	}
+
+	buyingOKBJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("OKB-USDT")
-		price01 := roundDecimal(sTf(ticker.Ltp)*0.3 + sTf(ticker.Low)*0.7)
-		price02 := roundDecimal(sTf(ticker.Ltp) * 0.975)
-		price03 := roundDecimal(sTf(ticker.Ltp) * 0.985)
-		log.Printf("#### OKB-USDT price01:%v price02:%v price03:%v", price01, price02)
-		placeOkexBuyOrder("OKB-USDT", 2, price01, apiClient)
-		placeOkexBuyOrder("OKB-USDT", 2, price02, apiClient)
-		placeOkexBuyOrder("OKB-USDT", 2, price03, apiClient)
+		price := roundDecimal(sTf(ticker.Ltp)*0.3 + sTf(ticker.Low)*0.7)
+		log.Printf("#### OKB-USDT price:%v", price)
+		placeOkexBuyOrder("OKB-USDT", 2, price, apiClient)
 	}
 
-	buyingBCHJob := func() {
+	buyingOKBJob02 := func() {
+		ticker, _ := apiClient.GetOkexTicker("OKB-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.975)
+		log.Printf("#### OKB-USDT price:%v", price)
+		placeOkexBuyOrder("OKB-USDT", 2, price, apiClient)
+	}
+
+	buyingOKBJob03 := func() {
+		ticker, _ := apiClient.GetOkexTicker("OKB-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
+		log.Printf("#### OKB-USDT price:%v", price)
+		placeOkexBuyOrder("OKB-USDT", 2, price, apiClient)
+	}
+
+	buyingBCHJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
-		price01 := roundDecimal(sTf(ticker.Ltp)*0.4 + sTf(ticker.Low)*0.6)
-		price02 := roundDecimal(sTf(ticker.Ltp)*0.1 + sTf(ticker.Low)*0.9)
-		price03 := roundDecimal(sTf(ticker.Ltp) * 0.975)
-		price04 := roundDecimal(sTf(ticker.Ltp) * 0.985)
-		log.Printf("#### BCH-USDT price01:%v price02:%v price03:%v", price01, price02)
-		placeOkexBuyOrder("BCH-USDT", 0.02, price01, apiClient)
-		placeOkexBuyOrder("BCH-USDT", 0.02, price02, apiClient)
-		placeOkexBuyOrder("BCH-USDT", 0.02, price03, apiClient)
-		placeOkexBuyOrder("BCH-USDT", 0.02, price04, apiClient)
+		price := roundDecimal(sTf(ticker.Ltp)*0.4 + sTf(ticker.Low)*0.6)
+		log.Printf("#### BCH-USDT price:%v ", price)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient)
 	}
 
-	buyingBSVJob := func() {
+	buyingBCHJob02 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
+		price := roundDecimal(sTf(ticker.Ltp)*0.1 + sTf(ticker.Low)*0.9)
+		log.Printf("#### BCH-USDT price:%v ", price)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient)
+	}
+
+	buyingBCHJob03 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.975)
+		log.Printf("#### BCH-USDT price:%v ", price)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient)
+	}
+
+	buyingBCHJob04 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
+		log.Printf("#### BCH-USDT price:%v ", price)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient)
+	}
+
+	buyingBSVJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
-		price01 := roundDecimal(sTf(ticker.Ltp)*0.4 + sTf(ticker.Low)*0.6)
-		price02 := roundDecimal(sTf(ticker.Ltp)*0.1 + sTf(ticker.Low)*0.9)
-		price03 := roundDecimal(sTf(ticker.Ltp) * 0.975)
-		price04 := roundDecimal(sTf(ticker.Ltp) * 0.985)
-		log.Printf("#### BSV-USDT price01:%v price02:%v price03:%v", price01, price02)
-		placeOkexBuyOrder("BSV-USDT", 0.03, price01, apiClient)
-		placeOkexBuyOrder("BSV-USDT", 0.03, price02, apiClient)
-		placeOkexBuyOrder("BSV-USDT", 0.03, price03, apiClient)
-		placeOkexBuyOrder("BSV-USDT", 0.03, price04, apiClient)
+		price := roundDecimal(sTf(ticker.Ltp)*0.4 + sTf(ticker.Low)*0.6)
+		log.Printf("#### BSV-USDT price:%v ", price)
+		placeOkexBuyOrder("BSV-USDT", 0.03, price, apiClient)
+	}
+
+	buyingBSVJob02 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
+		price := roundDecimal(sTf(ticker.Ltp)*0.1 + sTf(ticker.Low)*0.9)
+		log.Printf("#### BSV-USDT price:%v ", price)
+		placeOkexBuyOrder("BSV-USDT", 0.03, price, apiClient)
+	}
+
+	buyingBSVJob03 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.975)
+		log.Printf("#### BSV-USDT price:%v ", price)
+		placeOkexBuyOrder("BSV-USDT", 0.03, price, apiClient)
+	}
+
+	buyingBSVJob04 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
+		log.Printf("#### BSV-USDT price:%v ", price)
+		placeOkexBuyOrder("BSV-USDT", 0.03, price, apiClient)
 	}
 
 	placeSellOrderJob := func() {
@@ -119,18 +174,26 @@ func StartOKEXService() {
 	if !isTest {
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
-		scheduler.Every().Day().At("05:55").Run(buyingJob)
-		scheduler.Every().Day().At("05:55").Run(buyingOKBJob)
-		scheduler.Every().Day().At("05:55").Run(buyingBCHJob)
-		scheduler.Every().Day().At("05:55").Run(buyingBSVJob)
-		scheduler.Every().Day().At("11:45").Run(buyingJob)
-		scheduler.Every().Day().At("11:45").Run(buyingOKBJob)
-		scheduler.Every().Day().At("11:45").Run(buyingBCHJob)
-		scheduler.Every().Day().At("11:45").Run(buyingBSVJob)
-		scheduler.Every().Day().At("19:30").Run(buyingJob)
-		scheduler.Every().Day().At("19:30").Run(buyingOKBJob)
-		scheduler.Every().Day().At("19:30").Run(buyingBCHJob)
-		scheduler.Every().Day().At("19:30").Run(buyingBSVJob)
+
+		scheduler.Every().Day().At("03:55").Run(buyingJob01)
+		scheduler.Every().Day().At("09:55").Run(buyingJob02)
+		scheduler.Every().Day().At("15:55").Run(buyingJob03)
+		scheduler.Every().Day().At("21:55").Run(buyingJob04)
+
+		scheduler.Every().Day().At("02:55").Run(buyingOKBJob01)
+		scheduler.Every().Day().At("10:55").Run(buyingOKBJob02)
+		scheduler.Every().Day().At("18:55").Run(buyingOKBJob03)
+
+		scheduler.Every().Day().At("05:55").Run(buyingBCHJob01)
+		scheduler.Every().Day().At("11:55").Run(buyingBCHJob02)
+		scheduler.Every().Day().At("17:55").Run(buyingBCHJob03)
+		scheduler.Every().Day().At("23:55").Run(buyingBCHJob04)
+
+		scheduler.Every().Day().At("08:55").Run(buyingBSVJob01)
+		scheduler.Every().Day().At("14:55").Run(buyingBSVJob02)
+		scheduler.Every().Day().At("20:55").Run(buyingBSVJob03)
+		scheduler.Every().Day().At("04:55").Run(buyingBSVJob04)
+
 	}
 	runtime.Goexit()
 }
