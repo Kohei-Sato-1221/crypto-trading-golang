@@ -181,29 +181,29 @@ func StartBfService() {
 		scheduler.Every(40).Seconds().Run(syncBTCBuyOrderJob)
 		scheduler.Every(40).Seconds().Run(syncETHBuyOrderJob)
 
-		scheduler.Every().Day().At("05:55").Run(buyingJob)
+		scheduler.Every().Day().At("03:55").Run(buyingJob)
 		scheduler.Every().Day().At("05:55").Run(buyingJob02)
-		scheduler.Every().Day().At("05:55").Run(buyingJob03)
+		scheduler.Every().Day().At("07:55").Run(buyingJob03)
 
-		scheduler.Every().Day().At("13:55").Run(buyingJob)
-		scheduler.Every().Day().At("13:55").Run(buyingJob02)
-		scheduler.Every().Day().At("13:55").Run(buyingJob03)
+		scheduler.Every().Day().At("09:55").Run(buyingJob)
+		scheduler.Every().Day().At("11:55").Run(buyingJob02)
+		scheduler.Every().Day().At("14:55").Run(buyingJob03)
 
-		scheduler.Every().Day().At("21:55").Run(buyingJob)
+		scheduler.Every().Day().At("16:55").Run(buyingJob)
 		scheduler.Every().Day().At("21:55").Run(buyingJob02)
-		scheduler.Every().Day().At("21:55").Run(buyingJob03)
+		scheduler.Every().Day().At("01:55").Run(buyingJob03)
 
-		scheduler.Every().Day().At("05:55").Run(buyingETHJob)
+		scheduler.Every().Day().At("03:55").Run(buyingETHJob)
 		scheduler.Every().Day().At("05:55").Run(buyingETHJob02)
-		scheduler.Every().Day().At("05:55").Run(buyingETHJob03)
+		scheduler.Every().Day().At("07:55").Run(buyingETHJob03)
 
-		scheduler.Every().Day().At("13:55").Run(buyingETHJob)
-		scheduler.Every().Day().At("13:55").Run(buyingETHJob02)
-		scheduler.Every().Day().At("13:55").Run(buyingETHJob03)
+		scheduler.Every().Day().At("09:55").Run(buyingETHJob)
+		scheduler.Every().Day().At("11:55").Run(buyingETHJob02)
+		scheduler.Every().Day().At("14:55").Run(buyingETHJob03)
 
-		scheduler.Every().Day().At("21:55").Run(buyingETHJob)
+		scheduler.Every().Day().At("16:55").Run(buyingETHJob)
 		scheduler.Every().Day().At("21:55").Run(buyingETHJob02)
-		scheduler.Every().Day().At("21:55").Run(buyingETHJob03)
+		scheduler.Every().Day().At("01:55").Run(buyingETHJob03)
 
 		scheduler.Every().Day().At("23:55").Run(cancelBuyOrderJob)
 		scheduler.Every(45).Seconds().Run(ethFilledCheckJob)
