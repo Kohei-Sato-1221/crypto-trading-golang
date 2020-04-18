@@ -1,24 +1,24 @@
 package main
 
 import (
-//	"log"
 	"config"
-	"utils"
+	"controller"
 	"fmt"
 	"models"
-	"controller"
+	"utils"
 )
 
-func main(){
-	useExchange := config.Config.Exchange
+func main() {
+	// useExchange := config.Config.Exchange
+	useExchange := "okex"
 	utils.LogSetting(config.Config.LogFile)
-	
-	if useExchange == "bitflyer" {
-		fmt.Println(models.DbConnection)	
-		controller.StartBfService()
-	}
+
+	// if useExchange == "bitflyer" {
+	// 	fmt.Println(models.DbConnection)
+	// 	controller.StartBfService()
+	// }
 	if useExchange == "okex" {
-		fmt.Println(models.DbConnection)
+		fmt.Println(models.MysqlDbConn)
 		controller.StartOKEXService()
 	}
 }
