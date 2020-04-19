@@ -14,8 +14,6 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 const baseURL = "https://api.bitflyer.com/v1/"
@@ -209,51 +207,6 @@ type SubscribeParams struct {
 	Channel string `json:"channel"`
 }
 
-func (apiClient *APIClient) GetRealTimeTicker(symbol string, ch chan<- Ticker) {
-	u := url.URL{Scheme: "wss", Host: "ws.lightstream.bitflyer.com", Path: "/json-rpc"}
-	log.Printf("connecting to %s", u.String())
-
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Println("dial:", err)
-	}
-	defer c.Close()
-
-	channel := fmt.Sprintf("lightning_ticker_%s", symbol)
-	if err := c.WriteJSON(&JsonRPC2{Version: "2.0", Method: "subscribe", Params: &SubscribeParams{channel}}); err != nil {
-		log.Println("subscribe:", err)
-		return
-	}
-
-OUTER:
-	for {
-		message := new(JsonRPC2)
-		if err := c.ReadJSON(message); err != nil {
-			log.Println("read:", err)
-			return
-		}
-
-		if message.Method == "channelMessage" {
-			switch v := message.Params.(type) {
-			case map[string]interface{}:
-				for key, binary := range v {
-					if key == "message" {
-						marshaTic, err := json.Marshal(binary)
-						if err != nil {
-							continue OUTER
-						}
-						var ticker Ticker
-						if err := json.Unmarshal(marshaTic, &ticker); err != nil {
-							continue OUTER
-						}
-						ch <- ticker
-					}
-				}
-			}
-		}
-	}
-}
-
 type Order struct {
 	ID                     int     `json:"id"`
 	ChildOrderAcceptanceID string  `json:"child_order_acceptance_id"`
@@ -285,11 +238,13 @@ type PlaceOrderResponse struct {
 
 func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error) {
 	data, err := json.Marshal(order)
+	fmt.Println(string(data))
 	if err != nil {
 		return nil, err
 	}
 	url := "me/sendchildorder"
 	resp, err := apiClient.doGETPOST("POST", url, map[string]string{}, data)
+	fmt.Println(string(resp))
 	if err != nil {
 		fmt.Printf("res:%s\n", resp)
 		return nil, err

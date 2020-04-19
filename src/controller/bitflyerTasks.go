@@ -16,14 +16,12 @@ import (
 
 func StartBfService() {
 	log.Println("【StartBfService】start")
-	var tickerChannl = make(chan bitflyer.Ticker)
 	apiClient := bitflyer.New(
 		config.Config.ApiKey,
 		config.Config.ApiSecret,
 		config.Config.BFMaxSell,
 		config.Config.BFMaxBuy,
 	)
-	go apiClient.GetRealTimeTicker(config.Config.ProductCode, tickerChannl)
 
 	buyingJob := func() {
 		placeBuyOrder(0, "BTC_JPY", 0.002, apiClient)
@@ -87,11 +85,12 @@ func StartBfService() {
 
 			log.Printf("sell order:%v\n", sellOrder)
 			res, err := apiClient.PlaceOrder(sellOrder)
+			log.Printf("sell res:%v\n", res)
 			if err != nil {
 				log.Println("SellOrder failed.... Failure in [apiClient.PlaceOrder()]")
 				break
 			}
-			if res == nil {
+			if res.OrderId == "" {
 				log.Println("SellOrder failed.... no response")
 				break
 			}
@@ -238,12 +237,12 @@ func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 			log.Printf("【order】%v", event)
 		}
 	}
-	// Completedされた注文に関しては120分以内に約定した注文のみ同期
+	// Completedされた注文に関しては2日以内に約定した注文のみ同期
 	for _, order := range *completed_orders {
 		utc, _ := time.LoadLocation("UTC")
 		utc_current_date := time.Now().In(utc)
 		compareOrderDate, _ := time.ParseInLocation("2006-01-02 15:04:05", strings.Replace(order.ChildOrderDate, "T", " ", 1), time.UTC)
-		compareOrderDate = compareOrderDate.Add(240 * time.Minute)
+		compareOrderDate = compareOrderDate.Add(2880 * time.Minute)
 		if order.Side == "BUY" && compareOrderDate.After(utc_current_date) {
 			event := models.OrderEvent{
 				OrderId:     order.ChildOrderAcceptanceID,
@@ -268,7 +267,7 @@ func filledCheckJob(productCode string, apiClient *bitflyer.APIClient) {
 	ids, err1 := models.FilledCheck(productCode)
 	completed_orders, err2 := apiClient.GetActiveBuyOrders(productCode, "COMPLETED")
 	if err1 != nil || err2 != nil {
-		log.Println("error in filledCheckJob.....")
+		log.Println("error in filledCheckJob..... e1:%v  e2:%v", err1, err2)
 		goto ENDOFFILLEDCHECK
 	}
 
@@ -322,7 +321,6 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 
 	// for test
 	// shouldSkip = false
-	//
 	if !shouldSkip {
 		ticker, _ := apiClient.GetTicker(productCode)
 

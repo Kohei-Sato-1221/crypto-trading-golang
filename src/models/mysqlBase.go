@@ -1,6 +1,7 @@
 package models
 
 import (
+	"config"
 	"database/sql"
 	"log"
 
@@ -10,12 +11,18 @@ import (
 var MysqlDbConn *sql.DB
 
 func init() {
-	var err error
-	MysqlDbConn, err = sql.Open("mysql", "trading:trading1221!@tcp(192.168.0.16:3306)/trading")
+	db, err := sql.Open("mysql", config.Config.MySql)
+	log.Println("config:" + config.Config.MySql)
 	if err != nil {
-		log.Fatalln(err)
-		log.Println(err)
-	} else {
-		log.Println("Successfully got MySQL DB connection!!")
+		panic(err.Error())
 	}
+
+	err2 := db.Ping()
+	if err2 != nil {
+		panic(err2.Error())
+	} else {
+		log.Println("Ping OK!")
+	}
+	log.Println("Successfully got MySQL DB connection!!")
+	MysqlDbConn = db
 }
