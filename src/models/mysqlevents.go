@@ -59,10 +59,28 @@ func SyncOkexBuyOrders(orders *[]OkexOrderEvent) {
 	}
 }
 
-func UpdateOkexSellOrders(orderID string, sellPrice float64) {
-	cmd1, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET sellOrderState = 1, sellPrice = ? WHERE orderid = ?")
+func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
+	cmd1, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET sellOrderState = 2 WHERE sellOrderId = ?")
 	defer cmd1.Close()
-	_, err := cmd1.Exec(sellPrice, orderID)
+	for _, o := range *orders {
+		log.Printf("orderid %v ", o.OrderID)
+		result, err := cmd1.Exec(o.OrderID)
+		if err != nil {
+			log.Println("Failure to do SyncOkexSellOrders.....")
+		} else {
+			lastInsertID, err2 := result.LastInsertId()
+			if err2 != nil && lastInsertID != 0 {
+				log.Printf("sellorderid %v has been updated! result:%v", o.OrderID, result)
+			}
+		}
+	}
+}
+
+//売り注文を発注した際にDBのレコードをアップデートする
+func UpdateOkexSellOrders(orderID, sellOrderId string, sellPrice float64) {
+	cmd1, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET sellOrderState = 1, sellOrderId = ?, sellPrice = ? WHERE orderid = ?")
+	defer cmd1.Close()
+	_, err := cmd1.Exec(sellOrderId, sellPrice, orderID)
 	if err != nil {
 		log.Println("Failure to do updateOkexSellOrders.....")
 	} else {

@@ -132,6 +132,28 @@ func StartOKEXService() {
 		log.Println("【placeSellOrderJob】end of job")
 	}
 
+	syncSellOrderListJob := func() {
+		log.Println("【syncSellOrderListJob】Start of job")
+		shouldSkip := syncSellOrderList("EOS-USDT", apiClient)
+		if !shouldSkip {
+			goto ENDOFSYNCSELLORDER
+		}
+		shouldSkip = syncSellOrderList("OKB-USDT", apiClient)
+		if !shouldSkip {
+			goto ENDOFSYNCSELLORDER
+		}
+		shouldSkip = syncSellOrderList("BCH-USDT", apiClient)
+		if !shouldSkip {
+			goto ENDOFSYNCSELLORDER
+		}
+		shouldSkip = syncSellOrderList("BSV-USDT", apiClient)
+		if !shouldSkip {
+			goto ENDOFSYNCSELLORDER
+		}
+	ENDOFSYNCSELLORDER:
+		log.Println("【syncSellOrderListJob】End of job")
+	}
+
 	syncOrderListJob := func() {
 		log.Println("【syncOrderListJob】Start of job")
 		shouldSkip := syncOrderList("EOS-USDT", "0", apiClient)
@@ -173,6 +195,7 @@ func StartOKEXService() {
 	isTest := false
 	if !isTest {
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
+		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
 
 		scheduler.Every().Day().At("03:55").Run(buyingJob01)
@@ -220,11 +243,37 @@ func syncOrderList(productCode, state string, apiClient *okex.APIClient) bool {
 			}
 			orderEvents = append(orderEvents, event)
 			log.Printf(" ### pair:%v price:%v size:%v state:%v time:%v", order.InstrumentID, order.Price, order.Size, order.State, order.Timestamp)
-		} else {
-
 		}
 	}
 	models.SyncOkexBuyOrders(&orderEvents)
+	return true
+}
+
+func syncSellOrderList(productCode string, apiClient *okex.APIClient) bool {
+	orders, _ := apiClient.GetOrderList(productCode, "2")
+	if orders == nil {
+		log.Println("【syncSellOrderList】】 : No order ids ")
+		return false
+	}
+	var orderEvents []models.OkexOrderEvent
+	utc, _ := time.LoadLocation("UTC")
+	utc_current_date := time.Now().In(utc)
+	for _, order := range *orders {
+		if order.Side == "sell" {
+			event := models.OkexOrderEvent{
+				OrderID:      order.OrderID,
+				Timestamp:    utc_current_date,
+				InstrumentID: order.InstrumentID,
+				Side:         order.Side,
+				Price:        order.Price,
+				Size:         order.Size,
+				State:        order.State,
+			}
+			orderEvents = append(orderEvents, event)
+			log.Printf(" ### pair:%v price:%v size:%v state:%v time:%v", order.InstrumentID, order.Price, order.Size, order.State, order.Timestamp)
+		}
+	}
+	models.SyncOkexSellOrders(&orderEvents)
 	return true
 }
 
@@ -240,12 +289,12 @@ func placeSellOrders(pair string, apiClient *okex.APIClient) bool {
 		size := buyOrder.Size
 
 		log.Printf("placeSellOrder  %v %v %v %v", orderID, pair, size, price)
-		shouldSkip := placeOkexSellOrder(orderID, pair, size, price, apiClient)
+		sellOrderId := placeOkexSellOrder(orderID, pair, size, price, apiClient)
 
-		if !shouldSkip {
+		if sellOrderId == "" {
 			log.Println("placeSellOrder failed.... Failure in [placeSellOrders]")
 		} else {
-			models.UpdateOkexSellOrders(orderID, price)
+			models.UpdateOkexSellOrders(orderID, sellOrderId, price)
 		}
 	}
 	return true
@@ -268,15 +317,15 @@ func roundDecimal(num float64) float64 {
 	return math.Round(num*100) / 100
 }
 
-func placeOkexBuyOrder(productCode string, size, price float64, apiClient *okex.APIClient) bool {
+func placeOkexBuyOrder(productCode string, size, price float64, apiClient *okex.APIClient) string {
 	return placeOkexOrder("buy", "SugarBuyOrder", productCode, size, price, apiClient)
 }
 
-func placeOkexSellOrder(orderID, productCode string, size, price float64, apiClient *okex.APIClient) bool {
+func placeOkexSellOrder(orderID, productCode string, size, price float64, apiClient *okex.APIClient) string {
 	return placeOkexOrder("sell", "SugarSell"+orderID, productCode, size, price, apiClient)
 }
 
-func placeOkexOrder(side, clientOid, productCode string, size, price float64, apiClient *okex.APIClient) bool {
+func placeOkexOrder(side, clientOid, productCode string, size, price float64, apiClient *okex.APIClient) string {
 	log.Println("【placeOkexOrder】start of job")
 	order := &okex.Order{
 		ClientOid:    clientOid,
@@ -292,26 +341,26 @@ func placeOkexOrder(side, clientOid, productCode string, size, price float64, ap
 	res, err := apiClient.PlaceOrder(order)
 	if err != nil {
 		log.Println("Place Order(1) failed.... Failure in [apiClient.PlaceOrder()]")
-		return false
+		return ""
 	}
 	if res == nil {
 		log.Println("Place Order(1) failed.... no response")
-		return false
+		return ""
 	} else if res.ErrorCode == "33017" {
 		log.Printf("Place Order(1) response %v %v", res.ErrorCode, res.ErrorMsg)
 		order.Size = fTs(roundDecimal(size * 0.5))
 		res2, err2 := apiClient.PlaceOrder(order)
 		if res2 == nil || err2 != nil {
 			log.Println("Place Order(2) failed.... no response")
-			return false
+			return ""
 		} else if res.ErrorCode != "0" {
 			log.Printf("Place Order(2) failed.... bad response %v %v", res.ErrorCode, res.ErrorMsg)
-			return false
+			return ""
 		}
 	} else if res.ErrorCode != "0" {
 		log.Println("Place Order(1) failed.... bad response")
-		return false
+		return ""
 	}
 	log.Println("【placeOkexOrder】end of job")
-	return true
+	return res.OrderId
 }

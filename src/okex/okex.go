@@ -59,7 +59,7 @@ func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 func (apiClient *APIClient) GetOrderList(productCode, state string) (*[]Order, error) {
 	requestPath := "/api/spot/v3/orders?instrument_id=" + productCode + "&state=" + state
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
-	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
+	log.Printf("requestPath=%s resp=%s ", requestPath, string(resp))
 	if err != nil {
 		log.Printf("action=GetOrderList err=%s", err.Error())
 		return nil, err
