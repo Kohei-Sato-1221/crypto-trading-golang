@@ -24,27 +24,27 @@ func StartBfService() {
 	)
 
 	buyingJob := func() {
-		placeBuyOrder(0, "BTC_JPY", 0.002, apiClient)
+		placeBuyOrder(0, "BTC_JPY", 0.008, apiClient)
 	}
 
 	buyingJob02 := func() {
-		placeBuyOrder(1, "BTC_JPY", 0.002, apiClient)
+		placeBuyOrder(1, "BTC_JPY", 0.004, apiClient)
 	}
 
 	buyingJob03 := func() {
-		placeBuyOrder(2, "BTC_JPY", 0.002, apiClient)
+		placeBuyOrder(2, "BTC_JPY", 0.004, apiClient)
 	}
 
 	buyingETHJob := func() {
-		placeBuyOrder(10, "ETH_JPY", 0.05, apiClient)
+		placeBuyOrder(10, "ETH_JPY", 0.1, apiClient)
 	}
 
 	buyingETHJob02 := func() {
-		placeBuyOrder(11, "ETH_JPY", 0.05, apiClient)
+		placeBuyOrder(11, "ETH_JPY", 0.1, apiClient)
 	}
 
 	buyingETHJob03 := func() {
-		placeBuyOrder(12, "ETH_JPY", 0.05, apiClient)
+		placeBuyOrder(12, "ETH_JPY", 0.2, apiClient)
 	}
 
 	btcFilledCheckJob := func() {
