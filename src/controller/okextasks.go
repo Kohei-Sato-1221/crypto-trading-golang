@@ -123,12 +123,27 @@ func StartOKEXService() {
 		placeOkexBuyOrder("BSV-USDT", 0.03, price, apiClient)
 	}
 
+	buyingBTCJob01 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
+		price := roundDecimal(sTf(ticker.Ltp)*0.3 + sTf(ticker.Low)*0.7)
+		log.Printf("#### BTC-USDT price:%v ", price)
+		placeOkexBuyOrder("BTC-USDT", 0.001, price, apiClient)
+	}
+
+	buyingBTCJob02 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
+		log.Printf("#### BTC-USDT price:%v ", price)
+		placeOkexBuyOrder("BTC-USDT", 0.001, price, apiClient)
+	}
+
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
 		placeSellOrders("EOS-USDT", apiClient)
 		placeSellOrders("OKB-USDT", apiClient)
 		placeSellOrders("BCH-USDT", apiClient)
 		placeSellOrders("BSV-USDT", apiClient)
+		placeSellOrders("BTC-USDT", apiClient)
 		log.Println("【placeSellOrderJob】end of job")
 	}
 
@@ -147,6 +162,10 @@ func StartOKEXService() {
 			goto ENDOFSYNCSELLORDER
 		}
 		shouldSkip = syncSellOrderList("BSV-USDT", apiClient)
+		if !shouldSkip {
+			goto ENDOFSYNCSELLORDER
+		}
+		shouldSkip = syncSellOrderList("BTC-USDT", apiClient)
 		if !shouldSkip {
 			goto ENDOFSYNCSELLORDER
 		}
@@ -188,6 +207,14 @@ func StartOKEXService() {
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
+		shouldSkip = syncOrderList("BTC-USDT", "0", apiClient)
+		if !shouldSkip {
+			goto ENDOFSELLORDER
+		}
+		shouldSkip = syncOrderList("BTC-USDT", "2", apiClient)
+		if !shouldSkip {
+			goto ENDOFSELLORDER
+		}
 	ENDOFSELLORDER:
 		log.Println("【syncOrderListJob】End of job")
 	}
@@ -216,6 +243,9 @@ func StartOKEXService() {
 		scheduler.Every().Day().At("14:55").Run(buyingBSVJob02)
 		scheduler.Every().Day().At("20:55").Run(buyingBSVJob03)
 		scheduler.Every().Day().At("04:55").Run(buyingBSVJob04)
+
+		scheduler.Every().Day().At("18:40").Run(buyingBTCJob01)
+		scheduler.Every().Day().At("09:30").Run(buyingBTCJob02)
 
 	}
 	runtime.Goexit()
