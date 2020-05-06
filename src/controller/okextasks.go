@@ -137,6 +137,34 @@ func StartOKEXService() {
 		placeOkexBuyOrder("BTC-USDT", 0.001, price, apiClient)
 	}
 
+	buyingBTCJob03 := func() {
+		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.997)
+		log.Printf("#### BTC-USDT price:%v ", price)
+		placeOkexBuyOrder("BTC-USDT", 0.001, price, apiClient)
+	}
+
+	buyingETHJob01 := func() {
+		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.995)
+		log.Printf("#### ETH-USDT price:%v ", price)
+		placeOkexBuyOrder("ETH-USDT", 0.04, price, apiClient)
+	}
+
+	buyingETHJob02 := func() {
+		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.98)
+		log.Printf("#### ETH-USDT price:%v ", price)
+		placeOkexBuyOrder("ETH-USDT", 0.04, price, apiClient)
+	}
+
+	buyingETHJob03 := func() {
+		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
+		price := roundDecimal(sTf(ticker.Ltp) * 0.97)
+		log.Printf("#### ETH-USDT price:%v ", price)
+		placeOkexBuyOrder("ETH-USDT", 0.04, price, apiClient)
+	}
+
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
 		placeSellOrders("EOS-USDT", apiClient)
@@ -144,6 +172,7 @@ func StartOKEXService() {
 		placeSellOrders("BCH-USDT", apiClient)
 		placeSellOrders("BSV-USDT", apiClient)
 		placeSellOrders("BTC-USDT", apiClient)
+		placeSellOrders("ETH-USDT", apiClient)
 		log.Println("【placeSellOrderJob】end of job")
 	}
 
@@ -166,6 +195,10 @@ func StartOKEXService() {
 			goto ENDOFSYNCSELLORDER
 		}
 		shouldSkip = syncSellOrderList("BTC-USDT", apiClient)
+		if !shouldSkip {
+			goto ENDOFSYNCSELLORDER
+		}
+		shouldSkip = syncSellOrderList("ETH-USDT", apiClient)
 		if !shouldSkip {
 			goto ENDOFSYNCSELLORDER
 		}
@@ -215,6 +248,14 @@ func StartOKEXService() {
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
+		shouldSkip = syncOrderList("ETH-USDT", "0", apiClient)
+		if !shouldSkip {
+			goto ENDOFSELLORDER
+		}
+		shouldSkip = syncOrderList("ETH-USDT", "2", apiClient)
+		if !shouldSkip {
+			goto ENDOFSELLORDER
+		}
 	ENDOFSELLORDER:
 		log.Println("【syncOrderListJob】End of job")
 	}
@@ -246,6 +287,11 @@ func StartOKEXService() {
 
 		scheduler.Every().Day().At("18:40").Run(buyingBTCJob01)
 		scheduler.Every().Day().At("09:30").Run(buyingBTCJob02)
+		scheduler.Every().Day().At("13:40").Run(buyingBTCJob03)
+
+		scheduler.Every().Day().At("12:40").Run(buyingETHJob01)
+		scheduler.Every().Day().At("20:40").Run(buyingETHJob02)
+		scheduler.Every().Day().At("04:40").Run(buyingETHJob03)
 
 	}
 	runtime.Goexit()
