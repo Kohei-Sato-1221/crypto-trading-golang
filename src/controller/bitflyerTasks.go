@@ -24,27 +24,27 @@ func StartBfService() {
 	)
 
 	buyingJob := func() {
-		placeBuyOrder(0, "BTC_JPY", 0.008, apiClient)
+		placeBuyOrder(0, "BTC_JPY", 0.009, apiClient)
 	}
 
 	buyingJob02 := func() {
-		placeBuyOrder(1, "BTC_JPY", 0.004, apiClient)
+		placeBuyOrder(1, "BTC_JPY", 0.006, apiClient)
 	}
 
 	buyingJob03 := func() {
-		placeBuyOrder(2, "BTC_JPY", 0.004, apiClient)
+		placeBuyOrder(2, "BTC_JPY", 0.006, apiClient)
 	}
 
 	buyingETHJob := func() {
-		placeBuyOrder(10, "ETH_JPY", 0.1, apiClient)
+		placeBuyOrder(10, "ETH_JPY", 0.2, apiClient)
 	}
 
 	buyingETHJob02 := func() {
-		placeBuyOrder(11, "ETH_JPY", 0.1, apiClient)
+		placeBuyOrder(11, "ETH_JPY", 0.2, apiClient)
 	}
 
 	buyingETHJob03 := func() {
-		placeBuyOrder(12, "ETH_JPY", 0.2, apiClient)
+		placeBuyOrder(12, "ETH_JPY", 0.3, apiClient)
 	}
 
 	btcFilledCheckJob := func() {
@@ -180,29 +180,33 @@ func StartBfService() {
 		scheduler.Every(40).Seconds().Run(syncBTCBuyOrderJob)
 		scheduler.Every(40).Seconds().Run(syncETHBuyOrderJob)
 
-		scheduler.Every().Day().At("03:55").Run(buyingJob)
-		scheduler.Every().Day().At("05:55").Run(buyingJob02)
-		scheduler.Every().Day().At("07:55").Run(buyingJob03)
-
-		scheduler.Every().Day().At("09:55").Run(buyingJob)
-		scheduler.Every().Day().At("11:55").Run(buyingJob02)
+		scheduler.Every().Day().At("00:55").Run(buyingJob)
+		scheduler.Every().Day().At("02:55").Run(buyingJob02)
+		scheduler.Every().Day().At("04:55").Run(buyingJob03)
+		scheduler.Every().Day().At("06:55").Run(buyingJob)
+		scheduler.Every().Day().At("08:55").Run(buyingJob02)
+		scheduler.Every().Day().At("10:55").Run(buyingJob)
+		scheduler.Every().Day().At("12:55").Run(buyingJob02)
 		scheduler.Every().Day().At("14:55").Run(buyingJob03)
-
 		scheduler.Every().Day().At("16:55").Run(buyingJob)
-		scheduler.Every().Day().At("21:55").Run(buyingJob02)
-		scheduler.Every().Day().At("01:55").Run(buyingJob03)
+		scheduler.Every().Day().At("18:55").Run(buyingJob02)
+		scheduler.Every().Day().At("20:55").Run(buyingJob)
+		scheduler.Every().Day().At("22:55").Run(buyingJob02)
+		scheduler.Every().Day().At("00:05").Run(buyingJob03)
 
-		scheduler.Every().Day().At("03:55").Run(buyingETHJob)
-		scheduler.Every().Day().At("05:55").Run(buyingETHJob02)
-		scheduler.Every().Day().At("07:55").Run(buyingETHJob03)
-
-		scheduler.Every().Day().At("09:55").Run(buyingETHJob)
-		scheduler.Every().Day().At("11:55").Run(buyingETHJob02)
-		scheduler.Every().Day().At("14:55").Run(buyingETHJob03)
-
-		scheduler.Every().Day().At("16:55").Run(buyingETHJob)
-		scheduler.Every().Day().At("21:55").Run(buyingETHJob02)
-		scheduler.Every().Day().At("01:55").Run(buyingETHJob03)
+		scheduler.Every().Day().At("00:53").Run(buyingETHJob)
+		scheduler.Every().Day().At("02:53").Run(buyingETHJob02)
+		scheduler.Every().Day().At("04:53").Run(buyingETHJob03)
+		scheduler.Every().Day().At("06:53").Run(buyingETHJob)
+		scheduler.Every().Day().At("08:53").Run(buyingETHJob02)
+		scheduler.Every().Day().At("10:53").Run(buyingETHJob)
+		scheduler.Every().Day().At("12:53").Run(buyingETHJob02)
+		scheduler.Every().Day().At("14:53").Run(buyingETHJob03)
+		scheduler.Every().Day().At("16:53").Run(buyingETHJob)
+		scheduler.Every().Day().At("18:53").Run(buyingETHJob02)
+		scheduler.Every().Day().At("20:53").Run(buyingETHJob)
+		scheduler.Every().Day().At("22:53").Run(buyingETHJob02)
+		scheduler.Every().Day().At("00:03").Run(buyingETHJob03)
 
 		scheduler.Every().Day().At("23:55").Run(cancelBuyOrderJob)
 		scheduler.Every(45).Seconds().Run(ethFilledCheckJob)

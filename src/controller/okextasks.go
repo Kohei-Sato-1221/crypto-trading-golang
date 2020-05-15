@@ -127,42 +127,42 @@ func StartOKEXService() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp)*0.3 + sTf(ticker.Low)*0.7)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.003, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.004, price, apiClient)
 	}
 
 	buyingBTCJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.002, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.004, price, apiClient)
 	}
 
 	buyingBTCJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.997)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.002, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.004, price, apiClient)
 	}
 
 	buyingETHJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.995)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.08, price, apiClient)
+		placeOkexBuyOrder("ETH-USDT", 0.1, price, apiClient)
 	}
 
 	buyingETHJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.98)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.08, price, apiClient)
+		placeOkexBuyOrder("ETH-USDT", 0.1, price, apiClient)
 	}
 
 	buyingETHJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.97)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.08, price, apiClient)
+		placeOkexBuyOrder("ETH-USDT", 0.1, price, apiClient)
 	}
 
 	placeSellOrderJob := func() {
@@ -285,16 +285,19 @@ func StartOKEXService() {
 		scheduler.Every().Day().At("20:55").Run(buyingBSVJob03)
 		scheduler.Every().Day().At("04:55").Run(buyingBSVJob04)
 
-		scheduler.Every().Day().At("18:40").Run(buyingBTCJob01)
-		scheduler.Every().Day().At("09:30").Run(buyingBTCJob02)
-		scheduler.Every().Day().At("13:40").Run(buyingBTCJob03)
-		scheduler.Every().Day().At("22:40").Run(buyingBTCJob01)
-		scheduler.Every().Day().At("03:40").Run(buyingBTCJob02)
+		scheduler.Every().Day().At("00:30").Run(buyingBTCJob01)
+		scheduler.Every().Day().At("04:30").Run(buyingBTCJob02)
+		scheduler.Every().Day().At("08:30").Run(buyingBTCJob03)
+		scheduler.Every().Day().At("12:30").Run(buyingBTCJob01)
+		scheduler.Every().Day().At("16:30").Run(buyingBTCJob02)
+		scheduler.Every().Day().At("20:30").Run(buyingBTCJob03)
 
-		scheduler.Every().Day().At("12:40").Run(buyingETHJob01)
-		scheduler.Every().Day().At("20:40").Run(buyingETHJob02)
-		scheduler.Every().Day().At("03:20").Run(buyingETHJob03)
+		scheduler.Every().Day().At("00:40").Run(buyingETHJob01)
+		scheduler.Every().Day().At("04:40").Run(buyingETHJob02)
 		scheduler.Every().Day().At("08:40").Run(buyingETHJob03)
+		scheduler.Every().Day().At("12:40").Run(buyingETHJob01)
+		scheduler.Every().Day().At("16:40").Run(buyingETHJob02)
+		scheduler.Every().Day().At("20:40").Run(buyingETHJob03)
 
 	}
 	runtime.Goexit()
