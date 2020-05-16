@@ -1,7 +1,7 @@
 # BitcoinTrading_Golang
 Automated Crypto currency trading web application implemented by GoLang
 
-This application place buy orders at the specifig times in a day, check if they're filled.
+This application place buy orders at the specifig times in a day, checks if they're filled.
 If they're, it places sell orders at a liite higher price of buy orders.(currencty +1.5% is hard coded)
 
 ## Supported Currencies & Exchange
@@ -78,7 +78,7 @@ CREATE TABLE `buy_orders` (
 ) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1 COMMENT='okex_orders(buy&sell)';
 ```
 
-※ You cannot trade both bitflyer and OKEX with the same mysql server because these two trading logics need talbe name "buy orders". (In the near future, I'll fix source code in order that both two logics can be used with a signle mysql server)
+※ You cannot trade with both bitflyer and OKEX with a same mysql server because these two trading logics need talbe name "buy orders". (In the near future, I'll fix source code in order that both two logics can be used with a signle mysql server)
 
 3. Prepare private_config.ini file and locate it to the same directory as go executable file. 
    To do this, you can refer to [sample]private_config.ini in the github repository.(remove [sample] from file name. And input parameters in thie file.)
