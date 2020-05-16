@@ -4,13 +4,13 @@ Automated Crypto currency trading web application implemented by GoLang
 This application place buy orders at the specifig times in a day, check if they're filled.
 If they're, it places sell orders at a liite higher price of buy orders.(currencty +1.5% is hard coded)
 
-## Supported Currencies & Exchange】
+## Supported Currencies & Exchange
 1. bitflyer(BTC, ETH)
 2. OKEX(BTC,ETH,BCH,EOS,BSV,OKB)
 
 ※ Spot Trading only. Margin or FX trading are not supported.
 
-
+  
 ## How to Build
 1. simple build
 ```go build src/main/main.go```
@@ -18,7 +18,7 @@ If they're, it places sell orders at a liite higher price of buy orders.(currenc
 2. build for Amazon Linux
 ```GOOS=linux GOARCH=amd64 go build src/main/main.go```
 
-
+  
 ## How to use it
 1. In order to select exchange, modify src/main/main.go
    Currenty, you can choose bitflyer(jp) or OKEX for trading.
