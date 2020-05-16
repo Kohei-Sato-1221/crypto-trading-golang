@@ -9,9 +9,9 @@ import (
 )
 
 func main() {
-	// useExchange := config.Config.Exchange
 	useExchange := "bitflyer"
 	// useExchange := "okex"
+	
 	utils.LogSetting(config.Config.LogFile)
 	fmt.Println(models.MysqlDbConn)
 
