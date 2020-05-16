@@ -1,36 +1,92 @@
 # BitcoinTrading_Golang
-Automated Bitcoin trading web application implemented by Go Lang(Under development)
+Automated Crypto currency trading web application implemented by GoLang
 
-【Build for Amazon Linux】  
-GOOS=linux GOARCH=amd64 go build src/main/main.go
+This application place buy orders at the specifig times in a day, check if they're filled.
+If they're, it places sell orders at a liite higher price of buy orders.(currencty +1.5% is hard coded)
 
-【Send binary file to EC2】  
-scp -i ~/.ssh/xxxxxxx.pem ./main ec2-user@xx.xx.xx.xx:/home/ec2-user/application/
-scp -i ~/.ssh/xxxxxxx.pem ./config.ini ec2-user@xx.xx.xx.xx:/home/ec2-user/application/
-scp -i ~/.ssh/xxxxxxx.pem ./private_config.ini ec2-user@xx.xx.xx.xx:/home/ec2-user/application/
+## Supported Currencies & Exchange】
+1. bitflyer(BTC, ETH)
+2. OKEX(BTC,ETH,BCH,EOS,BSV,OKB)
 
-
-# jobs   
-1.buyOrderJob:  
-・指定の周期で買い注文を発注するジョブ  
-・買い注文が発注したら以下のデータをinsertする(filledはデフォルトの0)  
-　[Table:buyorder]orderid, pair, volume, price, orderdate, exchange, filled  
-
-2.filledCheckJob:  
-・指定の周期で買い・売り注文の約定具合をチェックするジョブ  
-・買い注文が約定していた場合、buy_orders, sell_ordersテーブルのfilledを2にする  
-
-3.sellOrderJob:  
-・指定の周期で売り注文を発注するジョブ  
-・buy_oerdersのレコードでfilledが1の場合売り注文を出す。  
-・売り注文が発注できたら以下のデータをinsertする。  
-　[Table:sellorder]buyorderid, orderid, pair, volume, price, orderdate, exchange, filled 
-・また、buy_ordersのfilledを2にupdateする 
+※ Spot Trading only. Margin or FX trading are not supported.
 
 
-## TODO 
-・手動で入れた買い注文をDBに登録するジョブ  
-・買い注文を取り消す機能  
-・複数の注文パターン（売値・買値のロジックを複数に）  
-・注文量・注文金額・最大並行注文数・ジョブの実行間隔をパラメーター化  
-・利益計算の方法（bitflyerの機能の損益見れるから、優先度は低い   
+## How to Build
+1. simple build
+```go build src/main/main.go```
+
+2. build for Amazon Linux
+```GOOS=linux GOARCH=amd64 go build src/main/main.go```
+
+
+## How to use it
+1. In order to select exchange, modify src/main/main.go
+   Currenty, you can choose bitflyer(jp) or OKEX for trading.
+
+2. Prepare MySQL Server. And execute following create sentences.
+```
+//for bitflyer
+CREATE TABLE `buy_orders` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `orderId` varchar(50) DEFAULT NULL,
+  `product_code` varchar(50) DEFAULT NULL,
+  `side` varchar(20) DEFAULT NULL,
+  `price` float DEFAULT NULL,
+  `size` float DEFAULT NULL,
+  `exchange` varchar(50) DEFAULT NULL,
+  `filled` tinyint(4) DEFAULT '0' COMMENT '0:unfilled / 1:filled',
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `orderId` (`orderId`)
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1 COMMENT='bitflyer_buyorders';
+
+CREATE TABLE `sell_orders` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `parentid` varchar(50) DEFAULT NULL,
+  `orderId` varchar(50) DEFAULT NULL,
+  `product_code` varchar(50) DEFAULT NULL,
+  `side` varchar(20) DEFAULT NULL,
+  `price` float DEFAULT NULL,
+  `size` float DEFAULT NULL,
+  `exchange` varchar(50) DEFAULT NULL,
+  `filled` tinyint(4) DEFAULT '0' COMMENT '0:unfilled / 1:filled',
+  `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `orderId` (`orderId`)
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1 COMMENT='bitflyer_sellorders';
+
+
+// for OKEX
+CREATE TABLE `buy_orders` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `orderId` varchar(50) DEFAULT NULL,
+  `pair` varchar(50) DEFAULT NULL,
+  `side` varchar(25) DEFAULT NULL,
+  `price` float DEFAULT NULL,
+  `size` float DEFAULT NULL,
+  `exchange` varchar(50) DEFAULT NULL,
+  `state` tinyint(4) DEFAULT '0' COMMENT '0:unfilled / 1:filled',
+  `sellOrderId` varchar(50) DEFAULT NULL,
+  `sellOrderState` tinyint(4) DEFAULT '0',
+  `sellPrice` float DEFAULT NULL,
+  `timestamp` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updatetime` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `oderid` (`orderId`)
+) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1 COMMENT='okex_orders(buy&sell)';
+```
+
+※ You cannot trade both bitflyer and OKEX with the same mysql server because these two trading logics need talbe name "buy orders". (In the near future, I'll fix source code in order that both two logics can be used with a signle mysql server)
+
+3. Prepare private_config.ini file and locate it to the same directory as go executable file. 
+   To do this, you can refer to [sample]private_config.ini in the github repository.(remove [sample] from file name. And input parameters in thie file.)
+   
+4. Change paramters in config.ini in accordance with your setting.
+
+5. Build this project. Pleaes refer to above [How to build section]
+
+6. execute main file.
+
+
