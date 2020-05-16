@@ -3,8 +3,9 @@
 *.log
 .project
 bitcoindata.sql
-private_config.ini
+/private_config.ini
 /src/private_config.ini
 main
 trading.log
 .vscode
+.DS_Store
