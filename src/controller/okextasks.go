@@ -127,21 +127,21 @@ func StartOKEXService() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp)*0.3 + sTf(ticker.Low)*0.7)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.004, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.006, price, apiClient)
 	}
 
 	buyingBTCJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.004, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.006, price, apiClient)
 	}
 
 	buyingBTCJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.997)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.004, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.005, price, apiClient)
 	}
 
 	buyingETHJob01 := func() {
@@ -162,7 +162,7 @@ func StartOKEXService() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.97)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.1, price, apiClient)
+		placeOkexBuyOrder("ETH-USDT", 0.2, price, apiClient)
 	}
 
 	placeSellOrderJob := func() {
