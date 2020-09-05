@@ -26,7 +26,7 @@ type OkexFilledBuyOrder struct {
 }
 
 // OKEXからデータを取得して、DBと同期するメソッド
-func SyncOkexBuyOrders(orders *[]OkexOrderEvent) {
+func SyncOkexBuyOrders(exchange string, orders *[]OkexOrderEvent) {
 	cmd1, _ := MysqlDbConn.Prepare("SELECT state FROM buy_orders WHERE orderid = ?")
 	cmd2, _ := MysqlDbConn.Prepare("INSERT INTO buy_orders (orderid, pair, side, price, size, exchange, state) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	cmd3, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET state = ? WHERE orderid = ?")
@@ -41,7 +41,7 @@ func SyncOkexBuyOrders(orders *[]OkexOrderEvent) {
 			rows.Scan(&state)
 		}
 		if state == -99 {
-			_, err := cmd2.Exec(o.OrderID, o.InstrumentID, o.Side, o.Price, o.Size, "okex", o.State)
+			_, err := cmd2.Exec(o.OrderID, o.InstrumentID, o.Side, o.Price, o.Size, exchange, o.State)
 			if err != nil {
 				log.Println("Failure to do SyncBuyOrders.....")
 			} else {

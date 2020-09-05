@@ -9,9 +9,9 @@ import (
 )
 
 func main() {
-	//useExchange := "bitflyer"
+	//useExchange = "bitflyer"
 	useExchange := "okex"
-	
+
 	utils.LogSetting(config.Config.LogFile)
 	fmt.Println(models.MysqlDbConn)
 
@@ -19,6 +19,6 @@ func main() {
 	//	controller.StartBfService()
 	//}
 	if useExchange == "okex" {
-	 	controller.StartOKEXService()
+		controller.StartOKEXService(useExchange)
 	}
 }
