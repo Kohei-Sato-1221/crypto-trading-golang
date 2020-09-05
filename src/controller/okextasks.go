@@ -167,12 +167,12 @@ func StartOKEXService() {
 
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
-		placeSellOrders("EOS-USDT", apiClient)
-		placeSellOrders("OKB-USDT", apiClient)
-		placeSellOrders("BCH-USDT", apiClient)
-		placeSellOrders("BSV-USDT", apiClient)
-		placeSellOrders("BTC-USDT", apiClient)
-		placeSellOrders("ETH-USDT", apiClient)
+		placeSellOrders("EOS-USDT", "EOS", apiClient)
+		placeSellOrders("OKB-USDT", "OKB", apiClient)
+		placeSellOrders("BCH-USDT", "BCH", apiClient)
+		placeSellOrders("BSV-USDT", "BSV", apiClient)
+		placeSellOrders("BTC-USDT", "BTC", apiClient)
+		placeSellOrders("ETH-USDT", "ETH", apiClient)
 		log.Println("【placeSellOrderJob】end of job")
 	}
 
@@ -261,7 +261,7 @@ func StartOKEXService() {
 	}
 
 	isTest := false
-	smallRunnning := true
+	smallRunnning := false
 	if !isTest {
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
@@ -362,8 +362,9 @@ func syncSellOrderList(productCode string, apiClient *okex.APIClient) bool {
 	return true
 }
 
-func placeSellOrders(pair string, apiClient *okex.APIClient) bool {
+func placeSellOrders(pair, currency string, apiClient *okex.APIClient) bool {
 	filledBuyOrders := models.GetSoldBuyOrderList(pair)
+	available := getAvailableBalance(currency, apiClient)
 	if filledBuyOrders == nil {
 		log.Println("【placeSellOrderJob】 : No order ids ")
 		return false
@@ -373,7 +374,12 @@ func placeSellOrders(pair string, apiClient *okex.APIClient) bool {
 		price := buyOrder.Price * 1.015
 		size := buyOrder.Size
 
-		log.Printf("placeSellOrder  %v %v %v %v", orderID, pair, size, price)
+		log.Printf("placeSellOrder size:%v available:%v ", size, available)
+		if size > available {
+			size = available
+			log.Printf("* available is smaller than size!")
+		}
+		log.Printf("placeSellOrder orderID:%v pair:%v placeSize:%v price:%v", orderID, pair, size, price)
 		sellOrderId := placeOkexSellOrder(orderID, pair, size, price, apiClient)
 
 		if sellOrderId == "" {
@@ -383,6 +389,15 @@ func placeSellOrders(pair string, apiClient *okex.APIClient) bool {
 		}
 	}
 	return true
+}
+
+func getAvailableBalance(currency string, apiClient *okex.APIClient) float64 {
+	balance, _ := apiClient.GetBlance(currency)
+	if balance == nil {
+		return 0.00
+	} else {
+		return sTf(balance.Available)
+	}
 }
 
 func sTf(str string) float64 {

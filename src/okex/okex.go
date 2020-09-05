@@ -43,16 +43,34 @@ func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetOkexTicker err=%s", err.Error())
 		return nil, err
 	}
 	var ticker Ticker
 	err = json.Unmarshal(resp, &ticker)
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetOkexTicker err=%s", err.Error())
 		return nil, err
 	}
 	return &ticker, nil
+}
+
+// GetBalance
+func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
+	requestPath := "/api/spot/v3/accounts/" + currency
+	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
+	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
+	if err != nil {
+		log.Printf("action=GetBalance err=%s", err.Error())
+		return nil, err
+	}
+	var balance Balance
+	err = json.Unmarshal(resp, &balance)
+	if err != nil {
+		log.Printf("action=GetBalance err=%s", err.Error())
+		return nil, err
+	}
+	return &balance, nil
 }
 
 // GetOrderList
@@ -92,6 +110,14 @@ type Ticker struct {
 	Ltp     string `json:"last"`
 	High    string `json:"high_24h"`
 	Low     string `json:"low_24h"`
+}
+
+type Balance struct {
+	Balance   string `json:"balance"`
+	Hold      string `json:"hold"`
+	Available string `json:"available"`
+	Currency  string `json:"currency"`
+	ID        string `json:"id"`
 }
 
 type PlaceOrderResponse struct {
