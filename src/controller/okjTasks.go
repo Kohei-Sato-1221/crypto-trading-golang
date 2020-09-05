@@ -16,8 +16,9 @@ func StartOKJService(exchange string) {
 
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
-		placeSellOrders("BTC-JPY", "BTC", apiClient)
-		placeSellOrders("ETH-JPY", "ETH", apiClient)
+		profitRate := 1.018
+		placeSellOrders("BTC-JPY", "BTC", profitRate, apiClient)
+		placeSellOrders("ETH-JPY", "ETH", profitRate, apiClient)
 		log.Println("【placeSellOrderJob】end of job")
 	}
 
