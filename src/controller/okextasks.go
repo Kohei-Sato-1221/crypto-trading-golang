@@ -167,12 +167,13 @@ func StartOKEXService(exchange string) {
 
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
-		placeSellOrders("EOS-USDT", "EOS", apiClient)
-		placeSellOrders("OKB-USDT", "OKB", apiClient)
-		placeSellOrders("BCH-USDT", "BCH", apiClient)
-		placeSellOrders("BSV-USDT", "BSV", apiClient)
-		placeSellOrders("BTC-USDT", "BTC", apiClient)
-		placeSellOrders("ETH-USDT", "ETH", apiClient)
+		profitRate := 1.015
+		placeSellOrders("EOS-USDT", "EOS", profitRate, apiClient)
+		placeSellOrders("OKB-USDT", "OKB", profitRate, apiClient)
+		placeSellOrders("BCH-USDT", "BCH", profitRate, apiClient)
+		placeSellOrders("BSV-USDT", "BSV", profitRate, apiClient)
+		placeSellOrders("BTC-USDT", "BTC", profitRate, apiClient)
+		placeSellOrders("ETH-USDT", "ETH", profitRate, apiClient)
 		log.Println("【placeSellOrderJob】end of job")
 	}
 
@@ -362,7 +363,7 @@ func syncSellOrderList(productCode string, apiClient *okex.APIClient) bool {
 	return true
 }
 
-func placeSellOrders(pair, currency string, apiClient *okex.APIClient) bool {
+func placeSellOrders(pair, currency string, profitRate float64, apiClient *okex.APIClient) bool {
 	filledBuyOrders := models.GetSoldBuyOrderList(pair)
 	available := getAvailableBalance(currency, apiClient)
 	if filledBuyOrders == nil {
@@ -371,7 +372,8 @@ func placeSellOrders(pair, currency string, apiClient *okex.APIClient) bool {
 	}
 	for _, buyOrder := range filledBuyOrders {
 		orderID := buyOrder.OrderID
-		price := buyOrder.Price * 1.015
+		// price := buyOrder.Price * 1.015
+		price := buyOrder.Price * profitRate
 		size := buyOrder.Size
 
 		log.Printf("placeSellOrder size:%v available:%v ", size, available)
