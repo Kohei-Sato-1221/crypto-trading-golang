@@ -14,7 +14,7 @@ import (
 	//"runtime"
 )
 
-func StartOKEXService() {
+func StartOKEXService(exchange string) {
 	log.Println("【StartOKEXService】")
 	apiClient := okex.New(config.Config.OKApiKey, config.Config.OKApiSecret, config.Config.OKPassPhrase)
 
@@ -208,51 +208,51 @@ func StartOKEXService() {
 
 	syncOrderListJob := func() {
 		log.Println("【syncOrderListJob】Start of job")
-		shouldSkip := syncOrderList("EOS-USDT", "0", apiClient)
+		shouldSkip := syncOrderList("EOS-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("EOS-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("EOS-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("OKB-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("OKB-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("OKB-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("OKB-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BCH-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("BCH-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BCH-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("BCH-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BSV-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("BSV-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BSV-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("BSV-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BTC-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("BTC-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BTC-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("BTC-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("ETH-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("ETH-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("ETH-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("ETH-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
@@ -306,7 +306,7 @@ func StartOKEXService() {
 	runtime.Goexit()
 }
 
-func syncOrderList(productCode, state string, apiClient *okex.APIClient) bool {
+func syncOrderList(productCode, state, exchange string, apiClient *okex.APIClient) bool {
 	orders, _ := apiClient.GetOrderList(productCode, state)
 	if orders == nil {
 		log.Println("【syncOrderListJob】】 : No order ids ")
@@ -330,7 +330,7 @@ func syncOrderList(productCode, state string, apiClient *okex.APIClient) bool {
 			log.Printf(" ### pair:%v price:%v size:%v state:%v time:%v", order.InstrumentID, order.Price, order.Size, order.State, order.Timestamp)
 		}
 	}
-	models.SyncOkexBuyOrders(&orderEvents)
+	models.SyncOkexBuyOrders(exchange, &orderEvents)
 	return true
 }
 
