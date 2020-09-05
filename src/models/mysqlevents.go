@@ -25,11 +25,13 @@ type OkexFilledBuyOrder struct {
 	Size    float64 `json:"size"`
 }
 
+var TableName string
+
 // OKEXからデータを取得して、DBと同期するメソッド
-func SyncOkexBuyOrders(orders *[]OkexOrderEvent) {
-	cmd1, _ := MysqlDbConn.Prepare("SELECT state FROM buy_orders WHERE orderid = ?")
-	cmd2, _ := MysqlDbConn.Prepare("INSERT INTO buy_orders (orderid, pair, side, price, size, exchange, state) VALUES (?, ?, ?, ?, ?, ?, ?)")
-	cmd3, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET state = ? WHERE orderid = ?")
+func SyncOkexBuyOrders(exchange string, orders *[]OkexOrderEvent) {
+	cmd1, _ := MysqlDbConn.Prepare("SELECT state FROM " + TableName + " WHERE orderid = ?")
+	cmd2, _ := MysqlDbConn.Prepare("INSERT INTO " + TableName + " (orderid, pair, side, price, size, exchange, state) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	cmd3, _ := MysqlDbConn.Prepare("UPDATE " + TableName + " SET state = ? WHERE orderid = ?")
 	defer cmd1.Close()
 	defer cmd2.Close()
 	defer cmd3.Close()
@@ -41,7 +43,7 @@ func SyncOkexBuyOrders(orders *[]OkexOrderEvent) {
 			rows.Scan(&state)
 		}
 		if state == -99 {
-			_, err := cmd2.Exec(o.OrderID, o.InstrumentID, o.Side, o.Price, o.Size, "okex", o.State)
+			_, err := cmd2.Exec(o.OrderID, o.InstrumentID, o.Side, o.Price, o.Size, exchange, o.State)
 			if err != nil {
 				log.Println("Failure to do SyncBuyOrders.....")
 			} else {
@@ -60,7 +62,7 @@ func SyncOkexBuyOrders(orders *[]OkexOrderEvent) {
 }
 
 func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
-	cmd1, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET sellOrderState = 2 WHERE sellOrderId = ?")
+	cmd1, _ := MysqlDbConn.Prepare("UPDATE " + TableName + " SET sellOrderState = 2 WHERE sellOrderId = ?")
 	defer cmd1.Close()
 	for _, o := range *orders {
 		log.Printf("orderid %v ", o.OrderID)
@@ -78,7 +80,7 @@ func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
 
 //売り注文を発注した際にDBのレコードをアップデートする
 func UpdateOkexSellOrders(orderID, sellOrderId string, sellPrice float64) {
-	cmd1, _ := MysqlDbConn.Prepare("UPDATE buy_orders SET sellOrderState = 1, sellOrderId = ?, sellPrice = ? WHERE orderid = ?")
+	cmd1, _ := MysqlDbConn.Prepare("UPDATE " + TableName + " SET sellOrderState = 1, sellOrderId = ?, sellPrice = ? WHERE orderid = ?")
 	defer cmd1.Close()
 	_, err := cmd1.Exec(sellOrderId, sellPrice, orderID)
 	if err != nil {
@@ -90,7 +92,7 @@ func UpdateOkexSellOrders(orderID, sellOrderId string, sellPrice float64) {
 
 func GetSoldBuyOrderList(pair string) []OkexFilledBuyOrder {
 	log.Printf("GetSoldBuyOrderList: %v ", pair)
-	cmd1, _ := MysqlDbConn.Prepare(`SELECT orderid, price, size FROM buy_orders WHERE state = 2 and sellOrderState = 0 and pair = ?`)
+	cmd1, _ := MysqlDbConn.Prepare(`SELECT orderid, price, size FROM ` + TableName + ` WHERE state = 2 and sellOrderState = 0 and pair = ?`)
 	log.Printf("cmd1 %v", cmd1)
 	rows, err := cmd1.Query(pair)
 	if err != nil {

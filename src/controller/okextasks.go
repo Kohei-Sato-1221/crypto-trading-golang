@@ -14,7 +14,7 @@ import (
 	//"runtime"
 )
 
-func StartOKEXService() {
+func StartOKEXService(exchange string) {
 	log.Println("【StartOKEXService】")
 	apiClient := okex.New(config.Config.OKApiKey, config.Config.OKApiSecret, config.Config.OKPassPhrase)
 
@@ -167,12 +167,13 @@ func StartOKEXService() {
 
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
-		placeSellOrders("EOS-USDT", "EOS", apiClient)
-		placeSellOrders("OKB-USDT", "OKB", apiClient)
-		placeSellOrders("BCH-USDT", "BCH", apiClient)
-		placeSellOrders("BSV-USDT", "BSV", apiClient)
-		placeSellOrders("BTC-USDT", "BTC", apiClient)
-		placeSellOrders("ETH-USDT", "ETH", apiClient)
+		profitRate := 1.015
+		placeSellOrders("EOS-USDT", "EOS", profitRate, apiClient)
+		placeSellOrders("OKB-USDT", "OKB", profitRate, apiClient)
+		placeSellOrders("BCH-USDT", "BCH", profitRate, apiClient)
+		placeSellOrders("BSV-USDT", "BSV", profitRate, apiClient)
+		placeSellOrders("BTC-USDT", "BTC", profitRate, apiClient)
+		placeSellOrders("ETH-USDT", "ETH", profitRate, apiClient)
 		log.Println("【placeSellOrderJob】end of job")
 	}
 
@@ -208,51 +209,51 @@ func StartOKEXService() {
 
 	syncOrderListJob := func() {
 		log.Println("【syncOrderListJob】Start of job")
-		shouldSkip := syncOrderList("EOS-USDT", "0", apiClient)
+		shouldSkip := syncOrderList("EOS-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("EOS-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("EOS-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("OKB-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("OKB-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("OKB-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("OKB-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BCH-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("BCH-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BCH-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("BCH-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BSV-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("BSV-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BSV-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("BSV-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BTC-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("BTC-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("BTC-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("BTC-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("ETH-USDT", "0", apiClient)
+		shouldSkip = syncOrderList("ETH-USDT", "0", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
-		shouldSkip = syncOrderList("ETH-USDT", "2", apiClient)
+		shouldSkip = syncOrderList("ETH-USDT", "2", exchange, apiClient)
 		if !shouldSkip {
 			goto ENDOFSELLORDER
 		}
@@ -261,29 +262,32 @@ func StartOKEXService() {
 	}
 
 	isTest := false
+	smallRunnning := false
 	if !isTest {
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
 
-		scheduler.Every().Day().At("03:55").Run(buyingJob01)
-		scheduler.Every().Day().At("09:55").Run(buyingJob02)
-		scheduler.Every().Day().At("15:55").Run(buyingJob03)
-		scheduler.Every().Day().At("21:55").Run(buyingJob04)
+		if !smallRunnning {
+			scheduler.Every().Day().At("03:55").Run(buyingJob01)
+			scheduler.Every().Day().At("09:55").Run(buyingJob02)
+			scheduler.Every().Day().At("15:55").Run(buyingJob03)
+			scheduler.Every().Day().At("21:55").Run(buyingJob04)
 
-		scheduler.Every().Day().At("02:55").Run(buyingOKBJob01)
-		scheduler.Every().Day().At("10:55").Run(buyingOKBJob02)
-		scheduler.Every().Day().At("18:55").Run(buyingOKBJob03)
+			scheduler.Every().Day().At("02:55").Run(buyingOKBJob01)
+			scheduler.Every().Day().At("10:55").Run(buyingOKBJob02)
+			scheduler.Every().Day().At("18:55").Run(buyingOKBJob03)
 
-		scheduler.Every().Day().At("05:55").Run(buyingBCHJob01)
-		scheduler.Every().Day().At("11:55").Run(buyingBCHJob02)
-		scheduler.Every().Day().At("17:55").Run(buyingBCHJob03)
-		scheduler.Every().Day().At("23:55").Run(buyingBCHJob04)
+			scheduler.Every().Day().At("05:55").Run(buyingBCHJob01)
+			scheduler.Every().Day().At("11:55").Run(buyingBCHJob02)
+			scheduler.Every().Day().At("17:55").Run(buyingBCHJob03)
+			scheduler.Every().Day().At("23:55").Run(buyingBCHJob04)
 
-		scheduler.Every().Day().At("08:55").Run(buyingBSVJob01)
-		scheduler.Every().Day().At("14:55").Run(buyingBSVJob02)
-		scheduler.Every().Day().At("20:55").Run(buyingBSVJob03)
-		scheduler.Every().Day().At("04:55").Run(buyingBSVJob04)
+			scheduler.Every().Day().At("08:55").Run(buyingBSVJob01)
+			scheduler.Every().Day().At("14:55").Run(buyingBSVJob02)
+			scheduler.Every().Day().At("20:55").Run(buyingBSVJob03)
+			scheduler.Every().Day().At("04:55").Run(buyingBSVJob04)
+		}
 
 		scheduler.Every().Day().At("00:30").Run(buyingBTCJob01)
 		scheduler.Every().Day().At("04:30").Run(buyingBTCJob02)
@@ -303,7 +307,7 @@ func StartOKEXService() {
 	runtime.Goexit()
 }
 
-func syncOrderList(productCode, state string, apiClient *okex.APIClient) bool {
+func syncOrderList(productCode, state, exchange string, apiClient *okex.APIClient) bool {
 	orders, _ := apiClient.GetOrderList(productCode, state)
 	if orders == nil {
 		log.Println("【syncOrderListJob】】 : No order ids ")
@@ -327,7 +331,7 @@ func syncOrderList(productCode, state string, apiClient *okex.APIClient) bool {
 			log.Printf(" ### pair:%v price:%v size:%v state:%v time:%v", order.InstrumentID, order.Price, order.Size, order.State, order.Timestamp)
 		}
 	}
-	models.SyncOkexBuyOrders(&orderEvents)
+	models.SyncOkexBuyOrders(exchange, &orderEvents)
 	return true
 }
 
@@ -359,7 +363,7 @@ func syncSellOrderList(productCode string, apiClient *okex.APIClient) bool {
 	return true
 }
 
-func placeSellOrders(pair, currency string, apiClient *okex.APIClient) bool {
+func placeSellOrders(pair, currency string, profitRate float64, apiClient *okex.APIClient) bool {
 	filledBuyOrders := models.GetSoldBuyOrderList(pair)
 	available := getAvailableBalance(currency, apiClient)
 	if filledBuyOrders == nil {
@@ -368,7 +372,8 @@ func placeSellOrders(pair, currency string, apiClient *okex.APIClient) bool {
 	}
 	for _, buyOrder := range filledBuyOrders {
 		orderID := buyOrder.OrderID
-		price := buyOrder.Price * 1.015
+		// price := buyOrder.Price * 1.015
+		price := buyOrder.Price * profitRate
 		size := buyOrder.Size
 
 		log.Printf("placeSellOrder size:%v available:%v ", size, available)

@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const okexBaseURL = "https://www.okex.com"
+var BaseURL string
 
 // Place an Order
 func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error) {
@@ -163,7 +163,7 @@ func (apiClient APIClient) header(method, requestPath string, body []byte) map[s
 }
 
 func (apiClient *APIClient) doHttpRequest(method, requestPath string, query map[string]string, data []byte) (body []byte, err error) {
-	endpoint := okexBaseURL + requestPath
+	endpoint := BaseURL + requestPath
 	log.Printf("action=doGETPOST endpoint=%s", endpoint)
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(data))
 	if err != nil {
