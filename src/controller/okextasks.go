@@ -261,29 +261,32 @@ func StartOKEXService() {
 	}
 
 	isTest := false
+	smallRunnning := false
 	if !isTest {
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
 
-		scheduler.Every().Day().At("03:55").Run(buyingJob01)
-		scheduler.Every().Day().At("09:55").Run(buyingJob02)
-		scheduler.Every().Day().At("15:55").Run(buyingJob03)
-		scheduler.Every().Day().At("21:55").Run(buyingJob04)
+		if !smallRunnning {
+			scheduler.Every().Day().At("03:55").Run(buyingJob01)
+			scheduler.Every().Day().At("09:55").Run(buyingJob02)
+			scheduler.Every().Day().At("15:55").Run(buyingJob03)
+			scheduler.Every().Day().At("21:55").Run(buyingJob04)
 
-		scheduler.Every().Day().At("02:55").Run(buyingOKBJob01)
-		scheduler.Every().Day().At("10:55").Run(buyingOKBJob02)
-		scheduler.Every().Day().At("18:55").Run(buyingOKBJob03)
+			scheduler.Every().Day().At("02:55").Run(buyingOKBJob01)
+			scheduler.Every().Day().At("10:55").Run(buyingOKBJob02)
+			scheduler.Every().Day().At("18:55").Run(buyingOKBJob03)
 
-		scheduler.Every().Day().At("05:55").Run(buyingBCHJob01)
-		scheduler.Every().Day().At("11:55").Run(buyingBCHJob02)
-		scheduler.Every().Day().At("17:55").Run(buyingBCHJob03)
-		scheduler.Every().Day().At("23:55").Run(buyingBCHJob04)
+			scheduler.Every().Day().At("05:55").Run(buyingBCHJob01)
+			scheduler.Every().Day().At("11:55").Run(buyingBCHJob02)
+			scheduler.Every().Day().At("17:55").Run(buyingBCHJob03)
+			scheduler.Every().Day().At("23:55").Run(buyingBCHJob04)
 
-		scheduler.Every().Day().At("08:55").Run(buyingBSVJob01)
-		scheduler.Every().Day().At("14:55").Run(buyingBSVJob02)
-		scheduler.Every().Day().At("20:55").Run(buyingBSVJob03)
-		scheduler.Every().Day().At("04:55").Run(buyingBSVJob04)
+			scheduler.Every().Day().At("08:55").Run(buyingBSVJob01)
+			scheduler.Every().Day().At("14:55").Run(buyingBSVJob02)
+			scheduler.Every().Day().At("20:55").Run(buyingBSVJob03)
+			scheduler.Every().Day().At("04:55").Run(buyingBSVJob04)
+		}
 
 		scheduler.Every().Day().At("00:30").Run(buyingBTCJob01)
 		scheduler.Every().Day().At("04:30").Run(buyingBTCJob02)
