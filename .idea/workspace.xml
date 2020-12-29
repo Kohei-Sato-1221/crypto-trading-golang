@@ -2,29 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="e0bcf725-bfea-44cd-ba13-18bc77e09430" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/crypto-trading-golang.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config.ini" beforeDir="false" afterPath="$PROJECT_DIR$/config.ini" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/bitbank/bitbank.go" beforeDir="false" afterPath="$PROJECT_DIR$/bitbank/bitbank.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/bitflyer/bitflyer.go" beforeDir="false" afterPath="$PROJECT_DIR$/bitflyer/bitflyer.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/config/config.go" beforeDir="false" afterPath="$PROJECT_DIR$/config/config.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controller/bitflyerTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/bitflyerTasks.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controller/okextasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okextasks.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/controller/okjTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okjTasks.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/github.com/carlescere/scheduler" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/github.com/go-sql-driver/mysql" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/github.com/gorilla/websocket" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/github.com/mattn/go-sqlite3" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/gopkg.in/ini.v1" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/main.go" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/models/events.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/events.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/models/mysqlBase.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/mysqlBase.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/models/mysqlevents.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/mysqlevents.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/okex/okex.go" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/calcUtils.go" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/logging.go" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
