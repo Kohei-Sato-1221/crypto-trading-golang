@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="e0bcf725-bfea-44cd-ba13-18bc77e09430" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/crypto-trading-golang.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.ini" beforeDir="false" afterPath="$PROJECT_DIR$/config.ini" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/bitbank/bitbank.go" beforeDir="false" afterPath="$PROJECT_DIR$/bitbank/bitbank.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/bitflyer/bitflyer.go" beforeDir="false" afterPath="$PROJECT_DIR$/bitflyer/bitflyer.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/config/config.go" beforeDir="false" afterPath="$PROJECT_DIR$/config/config.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/controller/bitflyerTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/bitflyerTasks.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/controller/okextasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okextasks.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/controller/okjTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okjTasks.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/github.com/carlescere/scheduler" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/github.com/go-sql-driver/mysql" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/github.com/gorilla/websocket" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/github.com/mattn/go-sqlite3" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/gopkg.in/ini.v1" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/models/events.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/events.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/models/mysqlBase.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/mysqlBase.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/models/mysqlevents.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/mysqlevents.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/okex/okex.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils/calcUtils.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils/logging.go" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="GOROOT" url="file:///usr/local/opt/go/libexec" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectId" id="1mJU5CZtFcaJMRIKlHpjDjCYAo3" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="go.import.settings.migrated" value="true" />
+    <property name="go.sdk.automatically.set" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="settings.editor.selected.configurable" value="preferences.lookFeel" />
+  </component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+      <recent name="$PROJECT_DIR$/app" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Go Build.go build crypto-trading-golang">
+    <configuration name="crypto-trading" type="GoAppEngineRunConfiguration" factoryName="Go App Engine">
+      <module name="crypto-trading-golang" />
+      <working_directory value="$PROJECT_DIR$" />
+      <method v="2" />
+    </configuration>
+    <configuration name="go build crypto-trading-golang" type="GoApplicationRunConfiguration" factoryName="Go Application" nameIsGenerated="true">
+      <module name="crypto-trading-golang" />
+      <working_directory value="$PROJECT_DIR$" />
+      <go_parameters value="-i" />
+      <kind value="FILE" />
+      <filePath value="$PROJECT_DIR$/main.go" />
+      <directory value="$PROJECT_DIR$" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Go App Engine.crypto-trading" />
+      <item itemvalue="Go Build.go build crypto-trading-golang" />
+    </list>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="oldMeFiltersMigrated" value="true" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/models/mysqlevents.go</url>
+          <line>93</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/main.go</url>
+          <line>16</line>
+          <option name="timeStamp" value="2" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+</project>

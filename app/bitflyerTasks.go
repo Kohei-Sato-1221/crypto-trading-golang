@@ -1,16 +1,16 @@
-package controller
+package app
 
 import (
-	"bitbank"
-	"bitflyer"
-	"config"
 	"log"
-	"models"
 	"runtime"
 	"strings"
 	"time"
-	"utils"
 
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitbank"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitflyer"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/models"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/utils"
 	"github.com/carlescere/scheduler"
 )
 
