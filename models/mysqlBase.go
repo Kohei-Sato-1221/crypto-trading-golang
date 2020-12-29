@@ -1,10 +1,10 @@
 package models
 
 import (
-	"config"
 	"database/sql"
 	"log"
 
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
 	_ "github.com/go-sql-driver/mysql"
 )
 

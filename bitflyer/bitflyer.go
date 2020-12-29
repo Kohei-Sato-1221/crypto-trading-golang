@@ -2,7 +2,6 @@ package bitflyer
 
 import (
 	"bytes"
-	"config"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +13,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
 )
 
 const baseURL = "https://api.bitflyer.com/v1/"

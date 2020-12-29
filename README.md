@@ -13,10 +13,10 @@ If they're, it places sell orders at a liite higher price of buy orders.(currenc
   
 ## How to Build
 1. simple build
-```go build src/main/main.go```
+```go build main.go```
 
 2. build for Amazon Linux
-```GOOS=linux GOARCH=amd64 go build src/main/main.go```
+```GOOS=linux GOARCH=amd64 go build main.go```
 
   
 ## How to use it

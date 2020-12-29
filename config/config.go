@@ -58,6 +58,8 @@ func init() {
 	}
 
 	Config = ConfigList{
+		Exchange:     cfg.Section("app").Key("exchange").String(),
+
 		ApiKey:       pcfg.Section("bitflyer").Key("api_key").String(),
 		ApiSecret:    pcfg.Section("bitflyer").Key("api_secret").String(),
 		OKApiKey:     pcfg.Section("okex").Key("api_key").String(),
@@ -74,7 +76,6 @@ func init() {
 
 		LogFile:     cfg.Section("tradeSetting").Key("logfile_path").String(),
 		ProductCode: cfg.Section("tradeSetting").Key("product_code").String(),
-		Exchange:    cfg.Section("exchange").Key("exchange").String(),
 
 		Durations:      durations,
 		TradeDuration:  durations[cfg.Section("tradeSetting").Key("trade_duration").String()],

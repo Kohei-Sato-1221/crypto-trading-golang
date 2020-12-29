@@ -1,17 +1,16 @@
-package controller
+package app
 
 import (
-	"config"
 	"log"
 	"math"
-	"models"
-	"okex"
 	"runtime"
 	"strconv"
 	"time"
 
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/models"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/okex"
 	"github.com/carlescere/scheduler"
-	//"runtime"
 )
 
 func StartOKEXService(exchange string) {
