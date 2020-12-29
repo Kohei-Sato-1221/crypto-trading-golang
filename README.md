@@ -1,4 +1,4 @@
-# BitcoinTrading_Golang
+# Crypto Trading Golang
 Automated Crypto currency trading web application implemented by GoLang
 
 This application place buy orders at the specifig times in a day, checks if they're filled.
