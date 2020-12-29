@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/slack"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitbank"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitflyer"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
@@ -16,12 +17,21 @@ import (
 
 func StartBfService() {
 	log.Println("【StartBfService】start")
-	apiClient := bitflyer.New(
+	apiClient := bitflyer.NewBitflyer(
 		config.Config.ApiKey,
 		config.Config.ApiSecret,
 		config.Config.BFMaxSell,
 		config.Config.BFMaxBuy,
 	)
+
+	slackClient := slack.NewSlack(
+		config.Config.SlackToken,
+		"C01HQKSTK5G",
+	)
+
+	postSlackJob := func() {
+		sendSlackMessage(slackClient)
+	}
 
 	buyingJob := func() {
 		placeBuyOrder(0, "BTC_JPY", 0.009, apiClient)
@@ -174,8 +184,8 @@ func StartBfService() {
 		log.Println("【cancelBuyOrderJob】End of job")
 	}
 
-	isTest := false
-	if !isTest {
+	scheduler.Every(45).Seconds().Run(postSlackJob)
+	if !config.Config.IsTest {
 		scheduler.Every(45).Seconds().Run(sellOrderJob)
 		scheduler.Every(40).Seconds().Run(syncBTCBuyOrderJob)
 		scheduler.Every(40).Seconds().Run(syncETHBuyOrderJob)
@@ -373,4 +383,16 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		}
 	}
 	log.Println("【buyingJob】end of job")
+}
+
+func sendSlackMessage(client *slack.APIClient) error{
+	log.Println("【sendSlackMessage】start of job")
+	text := "hogehoge"
+	//todo 送信するメッセージを取得する
+	err := client.PostMessage(text)
+	if err == nil {
+		return err
+	}
+	log.Println("【sendSlackMessage】end of job")
+	return nil
 }

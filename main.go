@@ -1,19 +1,17 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/app"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/models"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/okex"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/utils"
 )
 
 func main() {
+	config.NewConfig()
+	models.NewMysqlBase()
 	utils.LogSetting(config.Config.LogFile)
-	fmt.Println(models.MysqlDbConn)
-
 	useExchange := config.Config.Exchange
 
 	if useExchange == "bitflyer" {

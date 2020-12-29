@@ -33,13 +33,17 @@ type ConfigList struct {
 	SQLDriver      string
 	Port           int
 	ParallelOrders int
+
+	SlackToken string
+
+	IsTest bool
 }
 
 var BaseURL string
 
 var Config ConfigList
 
-func init() {
+func NewConfig() {
 	cfg, err := ini.Load("config.ini")
 	if err != nil {
 		log.Printf("Failed to read file: %v", err)
@@ -55,6 +59,11 @@ func init() {
 		"1s": time.Second,
 		"1m": time.Minute,
 		"1h": time.Hour,
+	}
+
+	isTest, err := cfg.Section("app").Key("is_test").Bool()
+	if err != nil {
+		isTest = false
 	}
 
 	Config = ConfigList{
@@ -83,6 +92,10 @@ func init() {
 		SQLDriver:      cfg.Section("db").Key("driver").String(),
 		Port:           cfg.Section("web").Key("port").MustInt(),
 		ParallelOrders: cfg.Section("tradeSetting").Key("parallel_orders").MustInt(),
+
+		SlackToken: pcfg.Section("slack").Key("token").String(),
+
+		IsTest: isTest,
 	}
 
 	BaseURL = pcfg.Section("bitflyer").Key("base_url").String()
