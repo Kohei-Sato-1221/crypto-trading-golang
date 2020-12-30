@@ -16,6 +16,12 @@ func NewMysqlBase() {
 	if err != nil {
 		panic(err.Error())
 	}
+	err = db.Ping()
+	if err != nil {
+		panic(err.Error())
+	} else {
+		log.Println("Ping OK!")
+	}
 	log.Println("Successfully got MySQL DB connection!!")
 	MysqlDbConn = db
 }

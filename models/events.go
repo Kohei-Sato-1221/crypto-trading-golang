@@ -249,3 +249,66 @@ func SyncBuyOrders(events *[]OrderEvent) {
 		rowsExist.Close()
 	}
 }
+
+//過去3日分の利益を取得する関数
+func GetResults() (string, error) {
+	rows, err := MysqlDbConn.Query(`
+		select 
+		 'Total' date,
+		 round(sum(average.profit) * 0.9989, 2) profit,
+		 count(average.profit) count,
+		 round(avg(average.profit) * 0.9989, 2) ppt
+		from
+		(select 
+			DATE_FORMAT(a.updatetime, '%Y-%m-%d') date,
+			sum((a.price * a.size) - (b.price * b.size)) profit
+		from 
+			sell_orders a,
+			buy_orders b
+		where 
+			a.parentid = b.orderid and a.filled = 1
+			and DATE_FORMAT(a.updatetime, '%Y-%m-%d') <> '2020-01-01'
+		group by date) average
+		
+		union
+		
+		select 
+		 result.date date,
+		 round(sum(result.profit) * 0.9989, 2) profit,
+		 count(result.profit) count,
+		 round(sum(result.profit) / count(result.profit) * 0.9989, 2) ppt
+		from
+		(select 
+			DATE_FORMAT(a.updatetime, '%Y-%m-%d') date,
+			(a.price * a.size) - (b.price * b.size) profit
+		from 
+			sell_orders a,
+			buy_orders b
+		where a.parentid = b.orderid and a.filled = 1
+		order by date desc)
+		result
+		group by date
+		order by date desc
+		limit 4
+		`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var sb strings.Builder
+	sb.WriteString("【bitflyer 自動売買 収益】\n")
+	sb.WriteString("date / profit / count / ppt\n")
+	for rows.Next() {
+		var date string
+		var profit string
+		var count string
+		var ppt string
+
+		if err := rows.Scan(&date, &profit, &count, &ppt); err != nil {
+			log.Println("Failure to get records.....")
+			return "", err
+		}
+		sb.WriteString(date + " / " + profit + " / " + count + " / " + ppt + "\n")
+	}
+	return sb.String(), nil
+}

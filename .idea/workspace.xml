@@ -2,14 +2,13 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="e0bcf725-bfea-44cd-ba13-18bc77e09430" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/slack/slack.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/bitflyerTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/bitflyerTasks.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bitflyer/bitflyer.go" beforeDir="false" afterPath="$PROJECT_DIR$/bitflyer/bitflyer.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/okextasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okextasks.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.ini" beforeDir="false" afterPath="$PROJECT_DIR$/config.ini" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/config.go" beforeDir="false" afterPath="$PROJECT_DIR$/config/config.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/events.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/events.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/models/mysqlBase.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/mysqlBase.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/mysqlevents.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/mysqlevents.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -30,13 +29,16 @@
   </component>
   <component name="PropertiesComponent">
     <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
+    <property name="ASKED_SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="ask.go.tool.to.install.GoGolangCILintTaskConsumer" value="true" />
     <property name="go.import.settings.migrated" value="true" />
     <property name="go.sdk.automatically.set" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="preferences.lookFeel" />
+    <property name="restartRequiresConfirmation" value="false" />
+    <property name="settings.editor.selected.configurable" value="watcher.settings" />
   </component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
@@ -112,7 +114,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/models/mysqlevents.go</url>
-          <line>93</line>
+          <line>94</line>
           <option name="timeStamp" value="1" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
@@ -124,6 +126,31 @@
           <url>file://$PROJECT_DIR$/slack/slack.go</url>
           <line>43</line>
           <option name="timeStamp" value="14" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/models/events.go</url>
+          <line>254</line>
+          <option name="timeStamp" value="16" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/models/events.go</url>
+          <line>293</line>
+          <option name="timeStamp" value="17" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/app/bitflyerTasks.go</url>
+          <line>389</line>
+          <option name="timeStamp" value="19" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/models/mysqlBase.go</url>
+          <line>13</line>
+          <option name="timeStamp" value="22" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/app/okextasks.go</url>
+          <line>479</line>
+          <option name="timeStamp" value="23" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
