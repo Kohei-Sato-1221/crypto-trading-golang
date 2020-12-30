@@ -3,6 +3,7 @@ package models
 import (
 	"log"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -116,4 +117,54 @@ func GetSoldBuyOrderList(pair string) []OkexFilledBuyOrder {
 		filledBuyOrders = append(filledBuyOrders, buyOrder)
 	}
 	return filledBuyOrders
+}
+
+//過去3日分の利益を取得する関数
+func GetOKexResults() (string, error) {
+	rows, err := MysqlDbConn.Query(`
+		select
+			'total' date,
+			round(sum(average.profit) * 0.9988, 4) profit,
+			count(average.profit) count,
+			round(avg(average.profit) * 0.9988, 4)  ppt
+		from
+			(select
+				DATE_FORMAT(updatetime, '%Y-%m-%d') date,
+				sum((sellPrice - price) * size * 106) profit
+			from buy_orders
+			where sellOrderState = 2
+			group by DATE_FORMAT(updatetime, '%Y%m%d')
+		) average
+		union
+		select
+			DATE_FORMAT(updatetime, '%Y-%m-%d') date,
+			round(sum((sellPrice - price) * size * 106) * 0.9988, 4) profit,
+			count(sellPrice) count,
+			round(sum((sellPrice - price) * size * 106) / count(sellPrice) * 0.9988, 4) ppt
+		from buy_orders
+		where sellOrderState = 2
+		group by DATE_FORMAT(updatetime, '%Y%m%d')
+		order by date desc
+		limit 4
+		`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var sb strings.Builder
+	sb.WriteString("【okex 自動売買 収益】\n")
+	sb.WriteString("date / profit / count / ppt\n")
+	for rows.Next() {
+		var date string
+		var profit string
+		var count string
+		var ppt string
+
+		if err := rows.Scan(&date, &profit, &count, &ppt); err != nil {
+			log.Println("Failure to get records.....")
+			return "", err
+		}
+		sb.WriteString(date + " / " + profit + " / " + count + " / " + ppt + "\n")
+	}
+	return sb.String(), nil
 }

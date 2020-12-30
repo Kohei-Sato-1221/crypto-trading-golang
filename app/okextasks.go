@@ -10,12 +10,22 @@ import (
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/models"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/okex"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/slack"
 	"github.com/carlescere/scheduler"
 )
 
 func StartOKEXService(exchange string) {
 	log.Println("【StartOKEXService】")
 	apiClient := okex.New(config.Config.OKApiKey, config.Config.OKApiSecret, config.Config.OKPassPhrase)
+
+	slackClient := slack.NewSlack(
+		config.Config.SlackToken,
+		"C01HQKSTK5G",
+	)
+
+	postSlackJob := func() {
+		sendOKexSlackMessage(slackClient, apiClient)
+	}
 
 	buyingJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
@@ -260,9 +270,9 @@ func StartOKEXService(exchange string) {
 		log.Println("【syncOrderListJob】End of job")
 	}
 
-	isTest := false
 	smallRunnning := false
-	if !isTest {
+	if !config.Config.IsTest {
+		scheduler.Every().Day().At("06:30").Run(postSlackJob)
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
@@ -464,4 +474,18 @@ func placeOkexOrder(side, clientOid, productCode string, size, price float64, ap
 	}
 	log.Println("【placeOkexOrder】end of job")
 	return res.OrderId
+}
+
+func sendOKexSlackMessage(client *slack.APIClient, apiClient *okex.APIClient) error {
+	log.Println("【sendOKexSlackMessage】start of job")
+	text, err := models.GetOKexResults()
+	if err != nil {
+		return err
+	}
+	err = client.PostMessage(text)
+	if err != nil {
+		return err
+	}
+	log.Println("【sendOKexSlackMessage】end of job")
+	return nil
 }

@@ -27,7 +27,7 @@ type APIClient struct {
 	httpClient      *http.Client
 }
 
-func New(key, secret string, max_buy_orders, max_sell_orders int) *APIClient {
+func NewBitflyer(key, secret string, max_buy_orders, max_sell_orders int) *APIClient {
 	apiClient := &APIClient{key, secret, max_buy_orders, max_sell_orders, &http.Client{}}
 	return apiClient
 }
