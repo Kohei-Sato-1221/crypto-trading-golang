@@ -30,9 +30,9 @@ var TableName string
 
 // OKEXからデータを取得して、DBと同期するメソッド
 func SyncOkexBuyOrders(exchange string, orders *[]OkexOrderEvent) {
-	cmd1, _ := MysqlDbConn.Prepare("SELECT state FROM " + TableName + " WHERE orderid = ?")
-	cmd2, _ := MysqlDbConn.Prepare("INSERT INTO " + TableName + " (orderid, pair, side, price, size, exchange, state) VALUES (?, ?, ?, ?, ?, ?, ?)")
-	cmd3, _ := MysqlDbConn.Prepare("UPDATE " + TableName + " SET state = ? WHERE orderid = ?")
+	cmd1, _ := AppDB.Prepare("SELECT state FROM " + TableName + " WHERE orderid = ?")
+	cmd2, _ := AppDB.Prepare("INSERT INTO " + TableName + " (orderid, pair, side, price, size, exchange, state) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	cmd3, _ := AppDB.Prepare("UPDATE " + TableName + " SET state = ? WHERE orderid = ?")
 	defer cmd1.Close()
 	defer cmd2.Close()
 	defer cmd3.Close()
@@ -63,7 +63,7 @@ func SyncOkexBuyOrders(exchange string, orders *[]OkexOrderEvent) {
 }
 
 func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
-	cmd1, _ := MysqlDbConn.Prepare("UPDATE " + TableName + " SET sellOrderState = 2 WHERE sellOrderId = ?")
+	cmd1, _ := AppDB.Prepare("UPDATE " + TableName + " SET sellOrderState = 2 WHERE sellOrderId = ?")
 	defer cmd1.Close()
 	for _, o := range *orders {
 		log.Printf("orderid %v ", o.OrderID)
@@ -81,7 +81,7 @@ func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
 
 //売り注文を発注した際にDBのレコードをアップデートする
 func UpdateOkexSellOrders(orderID, sellOrderId string, sellPrice float64) {
-	cmd1, _ := MysqlDbConn.Prepare("UPDATE " + TableName + " SET sellOrderState = 1, sellOrderId = ?, sellPrice = ? WHERE orderid = ?")
+	cmd1, _ := AppDB.Prepare("UPDATE " + TableName + " SET sellOrderState = 1, sellOrderId = ?, sellPrice = ? WHERE orderid = ?")
 	defer cmd1.Close()
 	_, err := cmd1.Exec(sellOrderId, sellPrice, orderID)
 	if err != nil {
@@ -93,7 +93,7 @@ func UpdateOkexSellOrders(orderID, sellOrderId string, sellPrice float64) {
 
 func GetSoldBuyOrderList(pair string) []OkexFilledBuyOrder {
 	log.Printf("GetSoldBuyOrderList: %v ", pair)
-	cmd1, _ := MysqlDbConn.Prepare(`SELECT orderid, price, size FROM ` + TableName + ` WHERE state = 2 and sellOrderState = 0 and pair = ?`)
+	cmd1, _ := AppDB.Prepare(`SELECT orderid, price, size FROM ` + TableName + ` WHERE state = 2 and sellOrderState = 0 and pair = ?`)
 	log.Printf("cmd1 %v", cmd1)
 	rows, err := cmd1.Query(pair)
 	if err != nil {
@@ -121,7 +121,7 @@ func GetSoldBuyOrderList(pair string) []OkexFilledBuyOrder {
 
 //過去3日分の利益を取得する関数
 func GetOKexResults() (string, error) {
-	rows, err := MysqlDbConn.Query(`
+	rows, err := AppDB.Query(`
 		select
 			'total' date,
 			round(sum(average.profit) * 0.9988, 4) profit,
