@@ -15,6 +15,9 @@ import (
 	"github.com/carlescere/scheduler"
 )
 
+var layout = "2006-01-02 15:04:05"
+var cancelCriteriaDaysAgo = -3
+
 func StartBfService() {
 	log.Println("【StartBfService】start")
 	apiClient := bitflyer.NewBitflyer(
@@ -75,11 +78,11 @@ func StartBfService() {
 		}
 
 		for i, idprice := range idprices {
-			orderId := idprice.OrderId
+			order_id := idprice.OrderID
 			buyprice := idprice.Price
 			product_code := idprice.ProductCode
 			size := idprice.Size
-			log.Printf("No%d Id:%v", i, orderId)
+			log.Printf("No%d Id:%v", i, order_id)
 			sellPrice := utils.Round((buyprice * 1.015))
 			log.Printf("buyprice:%10.2f  myPrice:%10.2f", buyprice, sellPrice)
 
@@ -105,17 +108,17 @@ func StartBfService() {
 				break
 			}
 
-			err = models.UpdateFilledOrderWithBuyOrder(orderId)
+			err = models.UpdateFilledOrderWithBuyOrder(order_id)
 			if err != nil {
 				log.Println("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
 				break
 			}
-			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderId)
+			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", order_id)
 
 			utc, _ := time.LoadLocation("UTC")
 			utc_current_date := time.Now().In(utc)
 			event := models.OrderEvent{
-				OrderId:     res.OrderId,
+				OrderID:     res.OrderId,
 				Time:        utc_current_date,
 				ProductCode: product_code,
 				Side:        "Sell",
@@ -123,7 +126,7 @@ func StartBfService() {
 				Size:        size,
 				Exchange:    "bitflyer",
 			}
-			err = event.SellOrder(orderId)
+			err = event.SellOrder(order_id)
 			if err != nil {
 				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
 			} else {
@@ -155,29 +158,31 @@ func StartBfService() {
 
 	cancelBuyOrderJob := func() {
 		log.Println("【cancelBuyOrderJob】Start of job")
-		noNeedToCancal := "NoNeedToCancel"
-		orderid := models.DetermineCancelledOrder(apiClient.Max_buy_orders, noNeedToCancal)
-		log.Printf(" id : %v", orderid)
-		var err error
+		buyOrders, err := models.GetCancelledBuyOrders()
 
-		order := &bitflyer.Order{
-			ProductCode:            "BTC_JPY",
-			ChildOrderAcceptanceID: orderid,
-		}
-
-		if orderid == noNeedToCancal {
+		if err != nil {
+			log.Printf("## failed to cancel order....")
 			goto ENDOFCENCELORDER
 		}
 
-		err = apiClient.CancelOrder(order)
-		if err == nil {
-			log.Printf("## Successfully canceled order!! orderid:%v", orderid)
-			err = models.UpdateCancelledOrder(orderid)
+		for i, order := range buyOrders {
+			log.Printf("## %v %v", i, order.OrderID)
+			timestamp, err := time.Parse(layout, order.Timestamp)
 			if err != nil {
-				log.Println("Failure to update records.....")
+				log.Printf("## failed to cancel order....")
+				goto ENDOFCENCELORDER
 			}
-		} else {
-			log.Printf("## Failed to cancel order.... orderid:%v", orderid)
+			cancelCriteria := time.Now().AddDate(0, 0, cancelCriteriaDaysAgo)
+
+			if cancelCriteria.After(timestamp) {
+				cancelOrderParam := &bitflyer.Order{
+					ProductCode:            order.ProductCode,
+					ChildOrderAcceptanceID: order.OrderID,
+				}
+				apiClient.CancelOrder(cancelOrderParam)
+				models.UpdateCancelledBuyOrder(order.OrderID)
+				log.Printf("### %v is cancelled!!", order.OrderID)
+			}
 		}
 
 	ENDOFCENCELORDER:
@@ -218,10 +223,11 @@ func StartBfService() {
 		scheduler.Every().Day().At("22:53").Run(buyingETHJob02)
 		scheduler.Every().Day().At("00:03").Run(buyingETHJob03)
 
-		scheduler.Every().Day().At("23:55").Run(cancelBuyOrderJob)
 		scheduler.Every(45).Seconds().Run(ethFilledCheckJob)
 		scheduler.Every(45).Seconds().Run(btcFilledCheckJob)
 		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
+
+		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
 	}
 	runtime.Goexit()
 }
@@ -238,7 +244,7 @@ func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 	for _, order := range *active_orders {
 		if order.Side == "BUY" {
 			event := models.OrderEvent{
-				OrderId:     order.ChildOrderAcceptanceID,
+				OrderID:     order.ChildOrderAcceptanceID,
 				Time:        utc_current_date,
 				ProductCode: order.ProductCode,
 				Side:        order.Side,
@@ -259,7 +265,7 @@ func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 		compareOrderDate = compareOrderDate.Add(2880 * time.Minute)
 		if order.Side == "BUY" && compareOrderDate.After(utc_current_date) {
 			event := models.OrderEvent{
-				OrderId:     order.ChildOrderAcceptanceID,
+				OrderID:     order.ChildOrderAcceptanceID,
 				Time:        utc_current_date,
 				ProductCode: order.ProductCode,
 				Side:        order.Side,
@@ -333,8 +339,6 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 	bitbankClient := bitbank.GetBBTicker()
 	log.Printf("bitbankClient  %f", bitbankClient)
 
-	// for test
-	// shouldSkip = false
 	if !shouldSkip {
 		ticker, _ := apiClient.GetTicker(productCode)
 
@@ -367,7 +371,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		utc, _ := time.LoadLocation("UTC")
 		utc_current_date := time.Now().In(utc)
 		event := models.OrderEvent{
-			OrderId:     res.OrderId,
+			OrderID:     res.OrderId,
 			Time:        utc_current_date,
 			ProductCode: productCode,
 			Side:        "BUY",

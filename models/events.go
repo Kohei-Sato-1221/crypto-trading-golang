@@ -9,7 +9,7 @@ import (
 )
 
 type OrderEvent struct {
-	OrderId     string    `json:"orderid"`
+	OrderID     string    `json:"order_id"`
 	Time        time.Time `json:"time"`
 	ProductCode string    `json:"product_code"`
 	Side        string    `json:"side"`
@@ -19,10 +19,25 @@ type OrderEvent struct {
 	Filled      int       `json:"filled"`
 }
 
+//TODO structを整理すること
+//TODO timestampはstring以外の型にすること
+type BuyOrder struct {
+	ID          uint    `gorm:"primary_key"`
+	OrderID     string  `json:"order_id"`
+	ProductCode string  `json:"product_code"`
+	Side        string  `json:"side"`
+	Price       float64 `json:"price"`
+	Size        float64 `json:"size"`
+	Exchange    string  `json:"exchange"`
+	Filled      int     `json:"filled"`
+	Timestamp   string  `json:"timestamp"`
+	Updatetime  string  `json:"updatetime"`
+}
+
 func (e *OrderEvent) BuyOrder() error {
-	cmd1, _ := MysqlDbConn.Prepare("INSERT INTO buy_orders (orderid, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?)")
-	log.Printf("BuyOrder() orderid:%s price:%10.2f size:%s side:%s", e.OrderId, e.Price, e.Side, e.Size)
-	_, err := cmd1.Exec(e.OrderId, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
+	cmd1, _ := AppDB.Prepare("INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?)")
+	log.Printf("BuyOrder() order_id:%s price:%10.2f size:%s side:%s", e.OrderID, e.Price, e.Side, e.Size)
+	_, err := cmd1.Exec(e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			log.Println(err)
@@ -34,8 +49,8 @@ func (e *OrderEvent) BuyOrder() error {
 }
 
 func (e *OrderEvent) SellOrder(pid string) error {
-	cmd1, _ := MysqlDbConn.Prepare("INSERT INTO sell_orders (parentid, orderid, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
-	_, err := cmd1.Exec(pid, e.OrderId, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
+	cmd1, _ := AppDB.Prepare("INSERT INTO sell_orders (parentid, order_id, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	_, err := cmd1.Exec(pid, e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			log.Println(err)
@@ -47,8 +62,7 @@ func (e *OrderEvent) SellOrder(pid string) error {
 }
 
 func FilledCheck(productCode string) ([]string, error) {
-	// cmd, _ := MysqlDbConn.Prepare(`SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '' and product_code = ?`)
-	cmd, _ := MysqlDbConn.Prepare(`SELECT orderid FROM buy_orders WHERE filled = 0 and orderid != '' and product_code = ? union SELECT orderid FROM sell_orders WHERE filled = 0 and orderid != '' and product_code = ?`)
+	cmd, _ := AppDB.Prepare(`SELECT order_id FROM buy_orders WHERE filled = 0 and order_id != '' and product_code = ? union SELECT order_id FROM sell_orders WHERE filled = 0 and order_id != '' and product_code = ?`)
 	rows, err := cmd.Query(productCode, productCode)
 	if err != nil {
 		log.Printf("Failure to exec query..... %v", err)
@@ -72,8 +86,8 @@ func FilledCheck(productCode string) ([]string, error) {
 }
 
 func DeleteStrangeBuyOrderRecords() int {
-	cmd := `DELETE FROM buy_orders WHERE orderid = ''`
-	MysqlDbConn.Query(cmd)
+	cmd := `DELETE FROM buy_orders WHERE order_id = ''`
+	AppDB.Query(cmd)
 	cnt := 0
 	//	for rows.Next(){
 	//		rows.Scan(&cnt)
@@ -81,29 +95,12 @@ func DeleteStrangeBuyOrderRecords() int {
 	return cnt
 }
 
-func DetermineCancelledOrder(max_buy_orders int, noNeedToCancal string) string {
-	cmd1, _ := MysqlDbConn.Prepare(`SELECT CASE WHEN MAX(t1.c1) < ? THEN ? ELSE MAX(t2.c2) END FROM (SELECT COUNT(orderid) c1 FROM buy_orders WHERE filled = 0 and orderid != '') t1, (SELECT orderid c2 FROM buy_orders WHERE filled = 0 and orderid != '' ORDER BY price ASC LIMIT 1) t2)`)
-	var buy_orders_limit int = max_buy_orders
-	if max_buy_orders > 8 {
-		buy_orders_limit = 8
+func GetCancelledBuyOrders() ([]BuyOrder, error) {
+	buyOrders := []BuyOrder{}
+	if err := gormDB.Limit(100).Where("filled = ?", 0).Find(&buyOrders).Error; err != nil {
+		return nil, errors.New("failed to do GetCancelledBuyOrders")
 	}
-	rows, err := cmd1.Query(buy_orders_limit, noNeedToCancal)
-	if err != nil {
-		return noNeedToCancal
-	}
-	defer rows.Close()
-
-	var orderid string
-	for rows.Next() {
-		if err := rows.Scan(&orderid); err != nil {
-			log.Println("Failure to get record.....")
-			return noNeedToCancal
-		}
-	}
-	if orderid == "" {
-		return noNeedToCancal
-	}
-	return orderid
+	return buyOrders, nil
 }
 
 /*
@@ -114,7 +111,7 @@ func DetermineCancelledOrder(max_buy_orders int, noNeedToCancal string) string {
    を両方満たす場合にtrueを返却。
 */
 func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) bool {
-	rows, err := MysqlDbConn.Query(`SELECT COUNT(orderid) FROM buy_orders WHERE filled = 0 and orderid != '' union all SELECT COUNT(orderid) FROM sell_orders WHERE filled = 0 and orderid != ''`)
+	rows, err := AppDB.Query(`SELECT COUNT(order_id) FROM buy_orders WHERE filled = 0 and order_id != '' union all SELECT COUNT(order_id) FROM sell_orders WHERE filled = 0 and order_id != ''`)
 	if err != nil {
 		return true
 	}
@@ -145,7 +142,7 @@ func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) bool {
 }
 
 type Idprice struct {
-	OrderId     string  `json:"orderid"`
+	OrderID     string  `json:"order_id"`
 	Price       float64 `json:"price"`
 	ProductCode string  `json:"product_code"`
 	Size        float64 `json:"size"`
@@ -153,7 +150,7 @@ type Idprice struct {
 }
 
 func FilledCheckWithSellOrder() []Idprice {
-	rows, err := MysqlDbConn.Query(`SELECT orderid, price, product_code, size, exchange FROM buy_orders WHERE filled = 1 and orderid != ''`)
+	rows, err := AppDB.Query(`SELECT order_id, price, product_code, size, exchange FROM buy_orders WHERE filled = 1 and order_id != ''`)
 	if err != nil {
 		return nil
 	}
@@ -162,57 +159,57 @@ func FilledCheckWithSellOrder() []Idprice {
 	var cnt int = 0
 	var idprices []Idprice
 	for rows.Next() {
-		var orderId string
+		var order_id string
 		var price float64
 		var product_code string
 		var size float64
 		var exchange string
 
-		if err := rows.Scan(&orderId, &price, &product_code, &size, &exchange); err != nil {
+		if err := rows.Scan(&order_id, &price, &product_code, &size, &exchange); err != nil {
 			log.Println("Failure to get records.....")
 			return nil
 		}
 		cnt++
-		idprice := Idprice{OrderId: orderId, Price: price, ProductCode: product_code, Size: size, Exchange: exchange}
+		idprice := Idprice{OrderID: order_id, Price: price, ProductCode: product_code, Size: size, Exchange: exchange}
 		idprices = append(idprices, idprice)
 	}
 	return idprices
 }
 
-func UpdateFilledOrder(orderId string) error {
-	cmd1, _ := MysqlDbConn.Prepare(`update buy_orders set filled = 1 where orderid = ?`)
-	_, err := cmd1.Exec(orderId)
+func UpdateFilledOrder(order_id string) error {
+	cmd1, _ := AppDB.Prepare(`update buy_orders set filled = 1 where order_id = ?`)
+	_, err := cmd1.Exec(order_id)
 	if err != nil {
 		return err
 	}
-	cmd2, _ := MysqlDbConn.Prepare(`update sell_orders set filled = 1 where orderid = ?`)
-	_, err = cmd2.Exec(orderId)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func UpdateCancelledOrder(orderId string) error {
-	cmd1, _ := MysqlDbConn.Prepare(`update buy_orders set filled = -1 where orderid = ?`)
-	_, err := cmd1.Exec(orderId)
-	if err != nil {
-		return err
-	}
-	cmd2, _ := MysqlDbConn.Prepare(`update sell_orders set filled = -1 where orderid = ?`)
-	_, err = cmd2.Exec(orderId)
+	cmd2, _ := AppDB.Prepare(`update sell_orders set filled = 1 where order_id = ?`)
+	_, err = cmd2.Exec(order_id)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func UpdateFilledOrderWithBuyOrder(orderId string) error {
+func UpdateCancelledBuyOrder(order_id string) error {
+	cmd1, _ := AppDB.Prepare(`update buy_orders set filled = -1 where order_id = ?`)
+	_, err := cmd1.Exec(order_id)
+	if err != nil {
+		return err
+	}
+	//cmd2, _ := AppDB.Prepare(`update sell_orders set filled = -1 where order_id = ?`)
+	//_, err = cmd2.Exec(order_id)
+	//if err != nil {
+	//	return err
+	//}
+	return nil
+}
+
+func UpdateFilledOrderWithBuyOrder(order_id string) error {
 	log.Printf("##")
-	log.Printf("##UpdateFilledOrderWithBuyOrder: %v", orderId)
+	log.Printf("##UpdateFilledOrderWithBuyOrder: %v", order_id)
 	log.Printf("##")
-	cmd1, _ := MysqlDbConn.Prepare(`update buy_orders set filled = 2 where orderid = ?`)
-	_, err := cmd1.Exec(orderId)
+	cmd1, _ := AppDB.Prepare(`update buy_orders set filled = 2 where order_id = ?`)
+	_, err := cmd1.Exec(order_id)
 	if err != nil {
 		return err
 	}
@@ -221,17 +218,17 @@ func UpdateFilledOrderWithBuyOrder(orderId string) error {
 
 func SyncBuyOrders(events *[]OrderEvent) {
 	for _, e := range *events {
-		cmd1, _ := MysqlDbConn.Prepare(`SELECT COUNT(*) FROM buy_orders WHERE orderid = ?`)
+		cmd1, _ := AppDB.Prepare(`SELECT COUNT(*) FROM buy_orders WHERE order_id = ?`)
 		defer cmd1.Close()
-		rowsExist, _ := cmd1.Query(e.OrderId)
+		rowsExist, _ := cmd1.Query(e.OrderID)
 		cnt := 0
 		for rowsExist.Next() {
 			rowsExist.Scan(&cnt)
 		}
 		defer rowsExist.Close()
 		if cnt == 0 {
-			state := "INSERT INTO buy_orders (orderid, product_code, side, price, size, exchange, filled) VALUES (" +
-				"'" + e.OrderId + "'," +
+			state := "INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange, filled) VALUES (" +
+				"'" + e.OrderID + "'," +
 				"'" + e.ProductCode + "'," +
 				"'" + e.Side + "'," +
 				"'" + strconv.FormatFloat(e.Price, 'f', 4, 64) + "'," +
@@ -239,11 +236,11 @@ func SyncBuyOrders(events *[]OrderEvent) {
 				"'" + e.Exchange + "'," +
 				"'" + strconv.Itoa(e.Filled) + "')"
 			log.Printf("state: %v", state)
-			_, err := MysqlDbConn.Exec(state)
+			_, err := AppDB.Exec(state)
 			if err != nil {
 				log.Println("Failure to do SyncBuyOrders..... %v", err)
 			} else {
-				log.Printf("orderid %v has been newly inserted!", e.OrderId)
+				log.Printf("order_id %v has been newly inserted!", e.OrderID)
 			}
 		}
 		rowsExist.Close()
@@ -252,7 +249,7 @@ func SyncBuyOrders(events *[]OrderEvent) {
 
 //過去3日分の利益を取得する関数
 func GetResults() (string, error) {
-	rows, err := MysqlDbConn.Query(`
+	rows, err := AppDB.Query(`
 		select 
 		 'Total' date,
 		 round(sum(average.profit) * 0.9989, 2) profit,
@@ -266,7 +263,7 @@ func GetResults() (string, error) {
 			sell_orders a,
 			buy_orders b
 		where 
-			a.parentid = b.orderid and a.filled = 1
+			a.parentid = b.order_id and a.filled = 1
 			and DATE_FORMAT(a.updatetime, '%Y-%m-%d') <> '2020-01-01'
 		group by date) average
 		
@@ -284,7 +281,7 @@ func GetResults() (string, error) {
 		from 
 			sell_orders a,
 			buy_orders b
-		where a.parentid = b.orderid and a.filled = 1
+		where a.parentid = b.order_id and a.filled = 1
 		order by date desc)
 		result
 		group by date

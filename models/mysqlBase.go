@@ -4,24 +4,32 @@ import (
 	"database/sql"
 	"log"
 
+	"gorm.io/driver/mysql"
+
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
-	_ "github.com/go-sql-driver/mysql"
+	_ "gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
-var MysqlDbConn *sql.DB
+var AppDB *sql.DB
+var gormDB *gorm.DB
 
 func NewMysqlBase() {
-	db, err := sql.Open("mysql", config.Config.MySql)
-	log.Println("config:" + config.Config.MySql)
+	db, err := gorm.Open(mysql.Open(config.Config.MySql), &gorm.Config{})
 	if err != nil {
 		panic(err.Error())
 	}
-	err = db.Ping()
+	sqlDB, err := db.DB()
+	if err != nil {
+		panic(err.Error())
+	}
+	err = sqlDB.Ping()
 	if err != nil {
 		panic(err.Error())
 	} else {
 		log.Println("Ping OK!")
 	}
 	log.Println("Successfully got MySQL DB connection!!")
-	MysqlDbConn = db
+	AppDB = sqlDB
+	gormDB = db
 }
