@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
-	"github.com/Kohei-Sato-1221/crypto-trading-golang/models"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/okex"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/slack"
 	"github.com/carlescere/scheduler"
@@ -16,7 +15,11 @@ import (
 
 func StartOKEXService(exchange string) {
 	log.Println("【StartOKEXService】")
-	apiClient := okex.New(config.Config.OKApiKey, config.Config.OKApiSecret, config.Config.OKPassPhrase)
+	apiClient := okex.New(
+		config.Config.OKApiKey,
+		config.Config.OKApiSecret,
+		config.Config.OKPassPhrase,
+	)
 
 	slackClient := slack.NewSlack(
 		config.Config.SlackToken,
@@ -136,42 +139,42 @@ func StartOKEXService(exchange string) {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp)*0.3 + sTf(ticker.Low)*0.7)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.006, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.007, price, apiClient)
 	}
 
 	buyingBTCJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.985)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.006, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.007, price, apiClient)
 	}
 
 	buyingBTCJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.997)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.005, price, apiClient)
+		placeOkexBuyOrder("BTC-USDT", 0.006, price, apiClient)
 	}
 
 	buyingETHJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.995)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.1, price, apiClient)
+		placeOkexBuyOrder("ETH-USDT", 0.2, price, apiClient)
 	}
 
 	buyingETHJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.98)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.1, price, apiClient)
+		placeOkexBuyOrder("ETH-USDT", 0.2, price, apiClient)
 	}
 
 	buyingETHJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := roundDecimal(sTf(ticker.Ltp) * 0.97)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.2, price, apiClient)
+		placeOkexBuyOrder("ETH-USDT", 0.3, price, apiClient)
 	}
 
 	placeSellOrderJob := func() {
@@ -270,6 +273,35 @@ func StartOKEXService(exchange string) {
 		log.Println("【syncOrderListJob】End of job")
 	}
 
+	cancelBuyOrderJob := func() {
+		log.Println("【cancelBuyOrderJob】Start of job")
+		buyOrders, err := okex.GetCancelledOrders()
+		cancelCriteria := time.Now().AddDate(0, 0, cancelCriteriaDaysAgo)
+
+		if err != nil {
+			log.Printf("## failed to cancel order....")
+			goto ENDOFCENCELORDER
+		}
+
+		log.Printf("## cancelCriteria:%v", cancelCriteria)
+		for i, order := range buyOrders {
+			timestamp, err := time.Parse(layout, order.Timestamp)
+			if err != nil {
+				log.Printf("## failed to cancel order....")
+				goto ENDOFCENCELORDER
+			}
+			log.Printf("## %v %v timestamp:%v %v %v", i, order.OrderID, order.Timestamp, order.Pair, order.Price)
+
+			if cancelCriteria.After(timestamp) {
+				apiClient.CancelOrder(&order)
+				okex.UpdateCancelledOrder(order.OrderID)
+				log.Printf("### %v is cancelled!!", order.OrderID)
+			}
+		}
+	ENDOFCENCELORDER:
+		log.Println("【cancelBuyOrderJob】End of job")
+	}
+
 	smallRunnning := false
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At("06:30").Run(postSlackJob)
@@ -312,6 +344,7 @@ func StartOKEXService(exchange string) {
 		scheduler.Every().Day().At("16:40").Run(buyingETHJob02)
 		scheduler.Every().Day().At("20:40").Run(buyingETHJob03)
 
+		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
 	}
 	runtime.Goexit()
 }
@@ -322,12 +355,12 @@ func syncOrderList(productCode, state, exchange string, apiClient *okex.APIClien
 		log.Println("【syncOrderListJob】】 : No order ids ")
 		return false
 	}
-	var orderEvents []models.OkexOrderEvent
+	var orderEvents []okex.OkexOrderEvent
 	utc, _ := time.LoadLocation("UTC")
 	utc_current_date := time.Now().In(utc)
 	for _, order := range *orders {
 		if order.Side == "buy" {
-			event := models.OkexOrderEvent{
+			event := okex.OkexOrderEvent{
 				OrderID:      order.OrderID,
 				Timestamp:    utc_current_date,
 				InstrumentID: order.InstrumentID,
@@ -340,7 +373,7 @@ func syncOrderList(productCode, state, exchange string, apiClient *okex.APIClien
 			log.Printf(" ### pair:%v price:%v size:%v state:%v time:%v", order.InstrumentID, order.Price, order.Size, order.State, order.Timestamp)
 		}
 	}
-	models.SyncOkexBuyOrders(exchange, &orderEvents)
+	okex.SyncOkexBuyOrders(exchange, &orderEvents)
 	return true
 }
 
@@ -350,12 +383,12 @@ func syncSellOrderList(productCode string, apiClient *okex.APIClient) bool {
 		log.Println("【syncSellOrderList】】 : No order ids ")
 		return false
 	}
-	var orderEvents []models.OkexOrderEvent
+	var orderEvents []okex.OkexOrderEvent
 	utc, _ := time.LoadLocation("UTC")
 	utc_current_date := time.Now().In(utc)
 	for _, order := range *orders {
 		if order.Side == "sell" {
-			event := models.OkexOrderEvent{
+			event := okex.OkexOrderEvent{
 				OrderID:      order.OrderID,
 				Timestamp:    utc_current_date,
 				InstrumentID: order.InstrumentID,
@@ -368,12 +401,12 @@ func syncSellOrderList(productCode string, apiClient *okex.APIClient) bool {
 			log.Printf(" ### pair:%v price:%v size:%v state:%v time:%v", order.InstrumentID, order.Price, order.Size, order.State, order.Timestamp)
 		}
 	}
-	models.SyncOkexSellOrders(&orderEvents)
+	okex.SyncOkexSellOrders(&orderEvents)
 	return true
 }
 
 func placeSellOrders(pair, currency string, profitRate float64, apiClient *okex.APIClient) bool {
-	filledBuyOrders := models.GetSoldBuyOrderList(pair)
+	filledBuyOrders := okex.GetSoldBuyOrderList(pair)
 	available := getAvailableBalance(currency, apiClient)
 	if filledBuyOrders == nil {
 		log.Println("【placeSellOrderJob】 : No order ids ")
@@ -396,7 +429,7 @@ func placeSellOrders(pair, currency string, profitRate float64, apiClient *okex.
 		if sellOrderId == "" {
 			log.Println("placeSellOrder failed.... Failure in [placeSellOrders]")
 		} else {
-			models.UpdateOkexSellOrders(orderID, sellOrderId, price)
+			okex.UpdateOkexSellOrders(orderID, sellOrderId, price)
 		}
 	}
 	return true
@@ -478,7 +511,7 @@ func placeOkexOrder(side, clientOid, productCode string, size, price float64, ap
 
 func sendOKexSlackMessage(client *slack.APIClient, apiClient *okex.APIClient) error {
 	log.Println("【sendOKexSlackMessage】start of job")
-	text, err := models.GetOKexResults()
+	text, err := okex.GetOKexResults()
 	if err != nil {
 		return err
 	}

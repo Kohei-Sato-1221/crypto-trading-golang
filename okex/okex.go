@@ -17,7 +17,7 @@ import (
 var BaseURL string
 
 // Place an Order
-func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error) {
+func (apiClient *APIClient) PlaceOrder(order *Order) (*OrderResponse, error) {
 	data, err := json.Marshal(order)
 	if err != nil {
 		return nil, err
@@ -28,10 +28,34 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 		fmt.Printf("res:%s\n", resp)
 		return nil, err
 	}
-	var response PlaceOrderResponse
+	var response OrderResponse
 	err = json.Unmarshal(resp, &response)
 	if err != nil {
 		fmt.Printf("error in PlaceOrder:%s  resp:%s\n", err, resp)
+		return nil, err
+	}
+	return &response, nil
+}
+
+// Cancel an Order
+func (apiClient *APIClient) CancelOrder(order *BuyOrder) (*OrderResponse, error) {
+	cancelOrderParam := &Order{
+		InstrumentID: order.Pair,
+	}
+	data, err := json.Marshal(cancelOrderParam)
+	if err != nil {
+		return nil, err
+	}
+	requestPath := "/api/spot/v3/cancel_orders/" + order.OrderID
+	resp, err := apiClient.doHttpRequest("POST", requestPath, map[string]string{}, data)
+	if err != nil {
+		fmt.Printf("res:%s\n", resp)
+		return nil, err
+	}
+	var response OrderResponse
+	err = json.Unmarshal(resp, &response)
+	if err != nil {
+		fmt.Printf("error in CancelOrder err:%s\n", response.ErrorMsg)
 		return nil, err
 	}
 	return &response, nil
@@ -120,7 +144,7 @@ type Balance struct {
 	ID        string `json:"id"`
 }
 
-type PlaceOrderResponse struct {
+type OrderResponse struct {
 	OrderId   string `json:"order_id"`
 	ClientOid string `json:"client_oid"`
 	Result    bool   `json:"result"`

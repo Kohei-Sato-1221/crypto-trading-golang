@@ -97,7 +97,7 @@ func DeleteStrangeBuyOrderRecords() int {
 
 func GetCancelledBuyOrders() ([]BuyOrder, error) {
 	buyOrders := []BuyOrder{}
-	if err := gormDB.Limit(100).Where("filled = ?", 0).Find(&buyOrders).Error; err != nil {
+	if err := GormDB.Limit(100).Where("filled = ?", 0).Find(&buyOrders).Error; err != nil {
 		return nil, errors.New("failed to do GetCancelledBuyOrders")
 	}
 	return buyOrders, nil
@@ -191,16 +191,11 @@ func UpdateFilledOrder(order_id string) error {
 }
 
 func UpdateCancelledBuyOrder(order_id string) error {
-	cmd1, _ := AppDB.Prepare(`update buy_orders set filled = -1 where order_id = ?`)
-	_, err := cmd1.Exec(order_id)
+	cmd, _ := AppDB.Prepare(`update buy_orders set filled = -1 where order_id = ?`)
+	_, err := cmd.Exec(order_id)
 	if err != nil {
 		return err
 	}
-	//cmd2, _ := AppDB.Prepare(`update sell_orders set filled = -1 where order_id = ?`)
-	//_, err = cmd2.Exec(order_id)
-	//if err != nil {
-	//	return err
-	//}
 	return nil
 }
 
