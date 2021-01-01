@@ -15,16 +15,16 @@ func main() {
 	useExchange := config.Config.Exchange
 
 	if useExchange == "bitflyer" {
-		models.TableName = "buy_orders"
+		okex.TableName = "buy_orders"
 		app.StartBfService()
 	}
 	if useExchange == "okex" {
-		models.TableName = "buy_orders"
-	 okex.BaseURL = "https://www.okex.com"
+		okex.TableName = "buy_orders"
+		okex.BaseURL = "https://www.okex.com"
 		app.StartOKEXService(useExchange)
 	}
 	if useExchange == "okj" {
-		models.TableName = "okj_buy_orders"
+		okex.TableName = "okj_buy_orders"
 		okex.BaseURL = "https://www.okcoin.jp"
 		app.StartOKJService(useExchange)
 	}

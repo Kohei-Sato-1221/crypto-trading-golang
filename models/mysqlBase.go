@@ -12,7 +12,7 @@ import (
 )
 
 var AppDB *sql.DB
-var gormDB *gorm.DB
+var GormDB *gorm.DB
 
 func NewMysqlBase() {
 	db, err := gorm.Open(mysql.Open(config.Config.MySql), &gorm.Config{})
@@ -31,5 +31,5 @@ func NewMysqlBase() {
 	}
 	log.Println("Successfully got MySQL DB connection!!")
 	AppDB = sqlDB
-	gormDB = db
+	GormDB = db
 }
