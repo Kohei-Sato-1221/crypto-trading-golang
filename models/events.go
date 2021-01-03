@@ -89,9 +89,6 @@ func DeleteStrangeBuyOrderRecords() int {
 	cmd := `DELETE FROM buy_orders WHERE order_id = ''`
 	AppDB.Query(cmd)
 	cnt := 0
-	//	for rows.Next(){
-	//		rows.Scan(&cnt)
-	//	}
 	return cnt
 }
 

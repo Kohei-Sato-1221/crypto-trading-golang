@@ -35,8 +35,8 @@ type ReturnTicker struct {
 	Timestamp int
 }
 
-func GetBBTicker() *ReturnTicker {
-	resp, _ := http.Get(baseUrl + "btc_jpy/ticker")
+func GetBBTicker(pair string) *ReturnTicker {
+	resp, _ := http.Get(baseUrl + pair + "/ticker")
 	defer resp.Body.Close()
 
 	byteArray, _ := ioutil.ReadAll(resp.Body)

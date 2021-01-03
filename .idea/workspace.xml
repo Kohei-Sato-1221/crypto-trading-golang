@@ -2,20 +2,28 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="e0bcf725-bfea-44cd-ba13-18bc77e09430" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/app/util.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/bitflyerTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/bitflyerTasks.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/okextasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okextasks.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/okjTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okjTasks.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bitbank/bitbank.go" beforeDir="false" afterPath="$PROJECT_DIR$/bitbank/bitbank.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.ini" beforeDir="false" afterPath="$PROJECT_DIR$/config.ini" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/config.go" beforeDir="false" afterPath="$PROJECT_DIR$/config/config.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/models/events.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/events.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/mysqlBase.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/mysqlBase.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/mysqlevents.go" beforeDir="false" afterPath="$PROJECT_DIR$/okex/events.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/okex/okex.go" beforeDir="false" afterPath="$PROJECT_DIR$/okex/okex.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/mysqlevents.go" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Go File" />
+      </list>
+    </option>
   </component>
   <component name="GOROOT" url="file:///usr/local/opt/go/libexec" />
   <component name="Git.Settings">
@@ -32,6 +40,7 @@
   <component name="PropertiesComponent">
     <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
     <property name="ASKED_SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
+    <property name="DefaultGoTemplateProperty" value="Go File" />
     <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
     <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
@@ -117,28 +126,23 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/models/events.go</url>
-          <line>246</line>
+          <line>243</line>
           <option name="timeStamp" value="16" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/models/events.go</url>
-          <line>285</line>
-          <option name="timeStamp" value="17" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/app/bitflyerTasks.go</url>
-          <line>393</line>
+          <line>390</line>
           <option name="timeStamp" value="19" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/app/okextasks.go</url>
-          <line>512</line>
-          <option name="timeStamp" value="23" />
+          <url>file://$PROJECT_DIR$/app/okjTasks.go</url>
+          <line>19</line>
+          <option name="timeStamp" value="54" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/okex/okex.go</url>
-          <line>101</line>
-          <option name="timeStamp" value="53" />
+          <url>file://$PROJECT_DIR$/app/okjTasks.go</url>
+          <line>28</line>
+          <option name="timeStamp" value="55" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>

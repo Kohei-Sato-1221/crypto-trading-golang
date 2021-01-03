@@ -3,6 +3,9 @@ package app
 import (
 	"log"
 	"runtime"
+	"time"
+
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitbank"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/okex"
@@ -11,7 +14,25 @@ import (
 
 func StartOKJService(exchange string) {
 	log.Println("【StartOKEXService】")
-	apiClient := okex.New(config.Config.OKApiKey, config.Config.OKApiSecret, config.Config.OKPassPhrase)
+	apiClient := okex.New(config.Config.OKJApiKey, config.Config.OKJApiSecret, config.Config.OKJPassPhrase)
+
+	buyingJob01 := func() {
+		bbClient := bitbank.GetBBTicker("btc_jpy")
+		prices := getBuyPrices(bbClient.Low, bbClient.High, 10)
+		for _, price := range prices {
+			log.Printf("#### BTC-JPY price:%v ", price)
+			placeOkexBuyOrder("BTC-JPY", 0.002, price, apiClient)
+		}
+	}
+
+	buyingJob02 := func() {
+		bbClient := bitbank.GetBBTicker("eth_jpy")
+		prices := getBuyPrices(bbClient.Low, bbClient.High, 10)
+		for _, price := range prices {
+			log.Printf("#### ETH-JPY price:%v ", price)
+			placeOkexBuyOrder("ETH-JPY", 0.04, price, apiClient)
+		}
+	}
 
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
@@ -57,11 +78,59 @@ func StartOKJService(exchange string) {
 		log.Println("【syncOrderListJob】End of job")
 	}
 
-	isTest := false
-	if !isTest {
+	cancelBuyOrderJob := func() {
+		log.Println("【cancelBuyOrderJob】Start of job")
+		buyOrders, err := okex.GetCancelledOrders()
+		cancelCriteria := time.Now().AddDate(0, 0, okjCancelCriteria)
+
+		if err != nil {
+			log.Printf("## failed to cancel order....")
+			goto ENDOFCENCELORDER
+		}
+
+		log.Printf("## cancelCriteria:%v", cancelCriteria)
+		for i, order := range buyOrders {
+			timestamp, err := time.Parse(layout, order.Timestamp)
+			if err != nil {
+				log.Printf("## failed to cancel order....")
+				goto ENDOFCENCELORDER
+			}
+			log.Printf("## %v %v timestamp:%v %v %v", i, order.OrderID, order.Timestamp, order.Pair, order.Price)
+
+			if cancelCriteria.After(timestamp) {
+				apiClient.CancelOrder(&order)
+				okex.UpdateCancelledOrder(order.OrderID)
+				log.Printf("### %v is cancelled!!", order.OrderID)
+			}
+		}
+	ENDOFCENCELORDER:
+		log.Println("【cancelBuyOrderJob】End of job")
+	}
+
+	if !config.Config.IsTest {
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
+
+		scheduler.Every().Day().At("11:25").Run(cancelBuyOrderJob)
+
+		scheduler.Every().Day().At("11:18").Run(buyingJob01)
+		scheduler.Every().Day().At("11:20").Run(buyingJob02)
+
 	}
 	runtime.Goexit()
+}
+
+func getBuyPrices(low, high float64, numOfPrices int) []float64 {
+	roundedLow := RoundDecimal(low * 1.005)
+	roundedHigh := RoundDecimal(high * 0.995)
+
+	diff := (roundedHigh - roundedLow) / float64(numOfPrices)
+	prices := make([]float64, 0, numOfPrices+1)
+
+	for i := 0; i < numOfPrices+1; i++ {
+		prices = append(prices, RoundDecimal(roundedLow+(diff*float64(i))))
+	}
+
+	return prices
 }
