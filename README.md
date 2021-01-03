@@ -28,7 +28,7 @@ If they're, it places sell orders at a liite higher price of buy orders.(currenc
 //for bitflyer
 CREATE TABLE `buy_orders` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `orderId` varchar(50) DEFAULT NULL,
+  `order_id` varchar(50) DEFAULT NULL,
   `product_code` varchar(50) DEFAULT NULL,
   `side` varchar(20) DEFAULT NULL,
   `price` float DEFAULT NULL,
@@ -38,13 +38,13 @@ CREATE TABLE `buy_orders` (
   `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `orderId` (`orderId`)
-) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1 COMMENT='bitflyer_buyorders';
+  UNIQUE KEY `orderId` (`order_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=7305 DEFAULT CHARSET=latin1 COMMENT='bitflyer_buyorders';
 
 CREATE TABLE `sell_orders` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
   `parentid` varchar(50) DEFAULT NULL,
-  `orderId` varchar(50) DEFAULT NULL,
+  `order_id` varchar(50) DEFAULT NULL,
   `product_code` varchar(50) DEFAULT NULL,
   `side` varchar(20) DEFAULT NULL,
   `price` float DEFAULT NULL,
@@ -54,28 +54,28 @@ CREATE TABLE `sell_orders` (
   `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `orderId` (`orderId`)
-) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1 COMMENT='bitflyer_sellorders';
+  UNIQUE KEY `orderId` (`order_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4261 DEFAULT CHARSET=latin1 COMMENT='bitflyer_sellorders';
 
 
 // for OKEX
 CREATE TABLE `buy_orders` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `orderId` varchar(50) DEFAULT NULL,
+  `order_id` varchar(50) DEFAULT NULL,
   `pair` varchar(50) DEFAULT NULL,
   `side` varchar(25) DEFAULT NULL,
   `price` float DEFAULT NULL,
   `size` float DEFAULT NULL,
   `exchange` varchar(50) DEFAULT NULL,
   `state` tinyint(4) DEFAULT '0' COMMENT '0:unfilled / 1:filled',
-  `sellOrderId` varchar(50) DEFAULT NULL,
-  `sellOrderState` tinyint(4) DEFAULT '0',
-  `sellPrice` float DEFAULT NULL,
+  `sell_order_id` varchar(50) DEFAULT NULL,
+  `sell_order_state` tinyint(4) DEFAULT '0',
+  `sell_price` float DEFAULT NULL,
   `timestamp` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updatetime` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `oderid` (`orderId`)
-) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1 COMMENT='okex_orders(buy&sell)';
+  UNIQUE KEY `oderid` (`order_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=6569 DEFAULT CHARSET=latin1 COMMENT='okex_orders(buy&sell)';
 ```
 
 ※ You cannot trade with both bitflyer and OKEX with a same mysql server because these two trading logics need talbe name "buy orders". (In the near future, I'll fix source code in order that both two logics can be used with a signle mysql server)
