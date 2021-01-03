@@ -80,7 +80,7 @@ func StartOKJService(exchange string) {
 
 	cancelBuyOrderJob := func() {
 		log.Println("【cancelBuyOrderJob】Start of job")
-		buyOrders, err := okex.GetCancelledOrders()
+		buyOrders, err := okex.GetOKJCancelledOrders()
 		cancelCriteria := time.Now().AddDate(0, 0, okjCancelCriteria)
 
 		if err != nil {
@@ -90,18 +90,15 @@ func StartOKJService(exchange string) {
 
 		log.Printf("## cancelCriteria:%v", cancelCriteria)
 		for i, order := range buyOrders {
-			timestamp, err := time.Parse(layout, order.Timestamp)
 			if err != nil {
 				log.Printf("## failed to cancel order....")
 				goto ENDOFCENCELORDER
 			}
 			log.Printf("## %v %v timestamp:%v %v %v", i, order.OrderID, order.Timestamp, order.Pair, order.Price)
 
-			if cancelCriteria.After(timestamp) {
-				apiClient.CancelOrder(&order)
-				okex.UpdateCancelledOrder(order.OrderID)
-				log.Printf("### %v is cancelled!!", order.OrderID)
-			}
+			apiClient.CancelOrder(order.ConverToBuyOrder())
+			okex.UpdateCancelledOrder(order.OrderID)
+			log.Printf("### %v is cancelled!!", order.OrderID)
 		}
 	ENDOFCENCELORDER:
 		log.Println("【cancelBuyOrderJob】End of job")
@@ -112,10 +109,9 @@ func StartOKJService(exchange string) {
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
 
-		scheduler.Every().Day().At("11:25").Run(cancelBuyOrderJob)
-
-		scheduler.Every().Day().At("11:18").Run(buyingJob01)
-		scheduler.Every().Day().At("11:20").Run(buyingJob02)
+		scheduler.Every().Day().At("11:18").Run(cancelBuyOrderJob)
+		scheduler.Every().Day().At("11:20").Run(buyingJob01)
+		scheduler.Every().Day().At("11:22").Run(buyingJob02)
 
 	}
 	runtime.Goexit()

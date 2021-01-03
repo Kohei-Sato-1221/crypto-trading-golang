@@ -47,6 +47,40 @@ type BuyOrder struct {
 	Updatetime     string  `json:"updatetime"`
 }
 
+func (o *OkjBuyOrder) ConverToBuyOrder() *BuyOrder {
+	return &BuyOrder{
+		o.ID,
+		o.OrderID,
+		o.Pair,
+		o.Price,
+		o.Size,
+		o.Exchange,
+		o.State,
+		o.SellOrderID,
+		o.SellOrderState,
+		o.SellPrice,
+		o.Side,
+		o.Timestamp,
+		o.Updatetime,
+	}
+}
+
+type OkjBuyOrder struct {
+	ID             uint    `gorm:"primary_key"`
+	OrderID        string  `json:"order_id"`
+	Pair           string  `json:"pair"`
+	Price          float64 `json:"price"`
+	Size           float64 `json:"size"`
+	Exchange       string  `json:"exchange"`
+	State          int     `json:"state"`
+	SellOrderID    string  `json:"sell_order_id"`
+	SellOrderState string  `json:"sell_order_state"`
+	SellPrice      float64 `json:"sell_price"`
+	Side           string  `json:"side"`
+	Timestamp      string  `json:"timestamp"`
+	Updatetime     string  `json:"updatetime"`
+}
+
 var TableName string
 
 // OKEXからデータを取得して、DBと同期するメソッド
@@ -198,8 +232,16 @@ func GetCancelledOrders() ([]BuyOrder, error) {
 	return buyOrders, nil
 }
 
+func GetOKJCancelledOrders() ([]OkjBuyOrder, error) {
+	okjBuyOrders := []OkjBuyOrder{}
+	if err := models.GormDB.Limit(100).Where("state = ?", 0).Find(&okjBuyOrders).Error; err != nil {
+		return nil, errors.New("failed to do GetCancelledBuyOrders")
+	}
+	return okjBuyOrders, nil
+}
+
 func UpdateCancelledOrder(order_id string) error {
-	cmd, _ := models.AppDB.Prepare(`update buy_orders set state = -1, sell_order_state = -1 where order_id = ?`)
+	cmd, _ := models.AppDB.Prepare(`update ` + TableName + ` set state = -1, sell_order_state = -1 where order_id = ?`)
 	_, err := cmd.Exec(order_id)
 	if err != nil {
 		return err
