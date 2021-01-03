@@ -27,6 +27,10 @@ type ConfigList struct {
 	OKApiSecret  string
 	OKPassPhrase string
 
+	OKJApiKey     string
+	OKJApiSecret  string
+	OKJPassPhrase string
+
 	TradeDuration  time.Duration
 	Durations      map[string]time.Duration
 	DbName         string
@@ -67,13 +71,18 @@ func NewConfig() {
 	}
 
 	Config = ConfigList{
-		Exchange:     cfg.Section("app").Key("exchange").String(),
+		Exchange: cfg.Section("app").Key("exchange").String(),
 
-		ApiKey:       pcfg.Section("bitflyer").Key("api_key").String(),
-		ApiSecret:    pcfg.Section("bitflyer").Key("api_secret").String(),
+		ApiKey:    pcfg.Section("bitflyer").Key("api_key").String(),
+		ApiSecret: pcfg.Section("bitflyer").Key("api_secret").String(),
+
 		OKApiKey:     pcfg.Section("okex").Key("api_key").String(),
 		OKApiSecret:  pcfg.Section("okex").Key("api_secret").String(),
 		OKPassPhrase: pcfg.Section("okex").Key("pass_phrase").String(),
+
+		OKJApiKey:     pcfg.Section("okj").Key("api_key").String(),
+		OKJApiSecret:  pcfg.Section("okj").Key("api_secret").String(),
+		OKJPassPhrase: pcfg.Section("okj").Key("pass_phrase").String(),
 
 		MySql: pcfg.Section("database").Key("mysql").String(),
 

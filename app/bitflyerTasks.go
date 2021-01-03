@@ -15,9 +15,6 @@ import (
 	"github.com/carlescere/scheduler"
 )
 
-var layout = "2006-01-02 15:04:05"
-var cancelCriteriaDaysAgo = -3
-
 func StartBfService() {
 	log.Println("【StartBfService】start")
 	apiClient := bitflyer.NewBitflyer(
@@ -172,7 +169,7 @@ func StartBfService() {
 				log.Printf("## failed to cancel order....")
 				goto ENDOFCENCELORDER
 			}
-			cancelCriteria := time.Now().AddDate(0, 0, cancelCriteriaDaysAgo)
+			cancelCriteria := time.Now().AddDate(0, 0, bfCancelCriteria)
 
 			if cancelCriteria.After(timestamp) {
 				cancelOrderParam := &bitflyer.Order{
@@ -336,7 +333,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 	var res *bitflyer.PlaceOrderResponse
 	var err error
 
-	bitbankClient := bitbank.GetBBTicker()
+	bitbankClient := bitbank.GetBBTicker("btc_jpy")
 	log.Printf("bitbankClient  %f", bitbankClient)
 
 	if !shouldSkip {
