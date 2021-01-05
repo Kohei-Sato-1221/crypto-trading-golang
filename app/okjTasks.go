@@ -18,7 +18,7 @@ func StartOKJService(exchange string) {
 
 	buyingJob01 := func() {
 		bbClient := bitbank.GetBBTicker("btc_jpy")
-		prices := getBuyPrices(bbClient.Low, bbClient.High, 10)
+		prices := getBuyPrices(bbClient.Low, bbClient.Last, 6)
 		for _, price := range prices {
 			log.Printf("#### BTC-JPY price:%v ", price)
 			placeOkexBuyOrder("BTC-JPY", 0.002, price, apiClient)
@@ -27,7 +27,7 @@ func StartOKJService(exchange string) {
 
 	buyingJob02 := func() {
 		bbClient := bitbank.GetBBTicker("eth_jpy")
-		prices := getBuyPrices(bbClient.Low, bbClient.High, 10)
+		prices := getBuyPrices(bbClient.Low, bbClient.Last, 6)
 		for _, price := range prices {
 			log.Printf("#### ETH-JPY price:%v ", price)
 			placeOkexBuyOrder("ETH-JPY", 0.04, price, apiClient)
@@ -117,11 +117,11 @@ func StartOKJService(exchange string) {
 	runtime.Goexit()
 }
 
-func getBuyPrices(low, high float64, numOfPrices int) []float64 {
+func getBuyPrices(low, last float64, numOfPrices int) []float64 {
 	roundedLow := RoundDecimal(low * 1.005)
-	roundedHigh := RoundDecimal(high * 0.995)
+	roundedLast := RoundDecimal(last * 0.995)
 
-	diff := (roundedHigh - roundedLow) / float64(numOfPrices)
+	diff := (roundedLast - roundedLow) / float64(numOfPrices)
 	prices := make([]float64, 0, numOfPrices+1)
 
 	for i := 0; i < numOfPrices+1; i++ {
