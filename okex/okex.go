@@ -156,11 +156,15 @@ type APIClient struct {
 	apikey     string
 	apisecret  string
 	passphrase string
+	exchange   string
 	httpClient *http.Client
 }
 
-func New(key, secret, passphrase string) *APIClient {
-	apiClient := &APIClient{key, secret, passphrase, &http.Client{}}
+func New(key, secret, passphrase, exchange string) *APIClient {
+	if len(exchange) == 0 {
+		exchange = "okex"
+	}
+	apiClient := &APIClient{key, secret, passphrase, exchange, &http.Client{}}
 	return apiClient
 }
 
