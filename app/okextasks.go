@@ -472,7 +472,7 @@ func placeOkexOrder(side, clientOid, productCode string, size, price float64, ap
 	if res == nil {
 		log.Println("Place Order(1) failed.... no response")
 		return ""
-	} else if len(res.ErrorCode) > 0 {
+	} else if res.ErrorCode != "0" {
 		text := getErrorMessageForSlack(
 			res.ErrorCode,
 			res.ErrorMsg,
