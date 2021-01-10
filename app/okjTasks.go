@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/slack"
+
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitbank"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
@@ -13,15 +15,25 @@ import (
 )
 
 func StartOKJService(exchange string) {
-	log.Println("【StartOKEXService】")
-	apiClient := okex.New(config.Config.OKJApiKey, config.Config.OKJApiSecret, config.Config.OKJPassPhrase)
+	log.Println("【StartOKJService】")
+	apiClient := okex.New(
+		config.Config.OKJApiKey,
+		config.Config.OKJApiSecret,
+		config.Config.OKJPassPhrase,
+		config.Config.Exchange,
+	)
+
+	slackClient := slack.NewSlack(
+		config.Config.SlackToken,
+		"C01HQKSTK5G",
+	)
 
 	buyingJob01 := func() {
 		bbClient := bitbank.GetBBTicker("btc_jpy")
 		prices := getBuyPrices(bbClient.Low, bbClient.Last, 6)
 		for _, price := range prices {
 			log.Printf("#### BTC-JPY price:%v ", price)
-			placeOkexBuyOrder("BTC-JPY", 0.002, price, apiClient)
+			placeOkexBuyOrder("BTC-JPY", 0.002, price, apiClient, slackClient)
 		}
 	}
 
@@ -30,15 +42,15 @@ func StartOKJService(exchange string) {
 		prices := getBuyPrices(bbClient.Low, bbClient.Last, 6)
 		for _, price := range prices {
 			log.Printf("#### ETH-JPY price:%v ", price)
-			placeOkexBuyOrder("ETH-JPY", 0.04, price, apiClient)
+			placeOkexBuyOrder("ETH-JPY", 0.04, price, apiClient, slackClient)
 		}
 	}
 
 	placeSellOrderJob := func() {
 		log.Println("【placeSellOrderJob】start of job")
 		profitRate := 1.018
-		placeSellOrders("BTC-JPY", "BTC", profitRate, apiClient)
-		placeSellOrders("ETH-JPY", "ETH", profitRate, apiClient)
+		placeSellOrders("BTC-JPY", "BTC", profitRate, apiClient, slackClient)
+		placeSellOrders("ETH-JPY", "ETH", profitRate, apiClient, slackClient)
 		log.Println("【placeSellOrderJob】end of job")
 	}
 

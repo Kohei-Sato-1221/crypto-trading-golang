@@ -3,6 +3,10 @@
   <component name="ChangeListManager">
     <list default="true" id="e0bcf725-bfea-44cd-ba13-18bc77e09430" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/okextasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okextasks.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/okjTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okjTasks.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.ini" beforeDir="false" afterPath="$PROJECT_DIR$/config.ini" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/okex/okex.go" beforeDir="false" afterPath="$PROJECT_DIR$/okex/okex.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -129,11 +133,6 @@
           <url>file://$PROJECT_DIR$/okex/events.go</url>
           <line>243</line>
           <option name="timeStamp" value="63" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/app/okjTasks.go</url>
-          <line>15</line>
-          <option name="timeStamp" value="68" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
