@@ -425,11 +425,7 @@ func placeSellOrders(pair, currency string, profitRate float64, apiClient *okex.
 		log.Printf("placeSellOrder buyOrderID:%v pair:%v placeSize:%v price:%v", buyOrderID, pair, size, price)
 		sellOrderId, sellSize := placeOkexSellOrder(buyOrderID, pair, size, price, apiClient, slackClient)
 
-		if sellOrderId == "" {
-			log.Println("placeSellOrder failed.... Failure in [placeSellOrders]")
-		} else {
-			okex.UpdateOkexSellOrders(buyOrderID, sellOrderId, price, sellSize)
-		}
+		okex.UpdateOkexSellOrders(buyOrderID, sellOrderId, price, sellSize)
 	}
 	return true
 }
