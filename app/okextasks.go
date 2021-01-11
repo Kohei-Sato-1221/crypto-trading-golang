@@ -292,7 +292,7 @@ func StartOKEXService(exchange string) {
 			log.Printf("## %v %v timestamp:%v %v %v", i, order.OrderID, order.Timestamp, order.Pair, order.Price)
 
 			if cancelCriteria.After(timestamp) {
-				apiClient.CancelOrder(&order)
+				apiClient.CancelOrder(order.OrderID, order.Pair)
 				okex.UpdateCancelledOrder(order.OrderID)
 				log.Printf("### %v is cancelled!!", order.OrderID)
 			}
@@ -412,7 +412,7 @@ func placeSellOrders(pair, currency string, profitRate float64, apiClient *okex.
 		return false
 	}
 	for _, buyOrder := range filledBuyOrders {
-		orderID := buyOrder.OrderID
+		buyOrderID := buyOrder.OrderID
 		// price := buyOrder.Price * 1.015
 		price := buyOrder.Price * profitRate
 		size := buyOrder.Size
@@ -422,13 +422,13 @@ func placeSellOrders(pair, currency string, profitRate float64, apiClient *okex.
 			size = available
 			log.Printf("* available is smaller than size!")
 		}
-		log.Printf("placeSellOrder orderID:%v pair:%v placeSize:%v price:%v", orderID, pair, size, price)
-		sellOrderId := placeOkexSellOrder(orderID, pair, size, price, apiClient, slackClient)
+		log.Printf("placeSellOrder buyOrderID:%v pair:%v placeSize:%v price:%v", buyOrderID, pair, size, price)
+		sellOrderId, sellSize := placeOkexSellOrder(buyOrderID, pair, size, price, apiClient, slackClient)
 
 		if sellOrderId == "" {
 			log.Println("placeSellOrder failed.... Failure in [placeSellOrders]")
 		} else {
-			okex.UpdateOkexSellOrders(orderID, sellOrderId, price)
+			okex.UpdateOkexSellOrders(buyOrderID, sellOrderId, price, sellSize)
 		}
 	}
 	return true
@@ -443,21 +443,22 @@ func GetAvailableBalance(currency string, apiClient *okex.APIClient) float64 {
 	}
 }
 
-func placeOkexBuyOrder(productCode string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) string {
-	return placeOkexOrder("buy", "SugarBuyOrder", productCode, size, price, apiClient, slackClinet)
+func placeOkexBuyOrder(pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, sellSize float64) {
+	return placeOkexOrder("buy", "SugarBuyOrder", pair, size, price, apiClient, slackClinet)
 }
 
-func placeOkexSellOrder(orderID, productCode string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) string {
-	return placeOkexOrder("sell", "SugarSell"+orderID, productCode, size, price, apiClient, slackClinet)
+func placeOkexSellOrder(buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, sellSize float64) {
+	return placeOkexOrder("sell", buyOrderID, pair, size, price, apiClient, slackClinet)
 }
 
-func placeOkexOrder(side, clientOid, productCode string, size, price float64, apiClient *okex.APIClient, slackClient *slack.APIClient) string {
+func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClient *slack.APIClient) (orderId string, sellSize float64) {
 	log.Println("【placeOkexOrder】start of job")
+	sellSize = size
 	order := &okex.Order{
-		ClientOid:    clientOid,
+		ClientOid:    "SellOID-" + buyOrderID,
 		Type:         "limit",
 		Side:         side,
-		InstrumentID: productCode,
+		InstrumentID: pair,
 		OrderType:    "0",
 		Price:        FTs(RoundDecimal(price)),
 		Size:         FTs(size),
@@ -467,33 +468,41 @@ func placeOkexOrder(side, clientOid, productCode string, size, price float64, ap
 	res, err := apiClient.PlaceOrder(order)
 	if err != nil {
 		log.Println("Place Order(1) failed.... Failure in [apiClient.PlaceOrder()]")
-		return ""
+		return "", sellSize
 	}
 	if res == nil {
 		log.Println("Place Order(1) failed.... no response")
-		return ""
+		return "", sellSize
 	} else if res.ErrorCode != "0" {
 		text := getErrorMessageForSlack(
 			res.ErrorCode,
 			res.ErrorMsg,
 			side,
-			productCode,
+			pair,
 			FTs(RoundDecimal(price)),
 			FTs(size))
 
 		if side == "sell" && res.ErrorCode == "33017" {
-			text += "## Application's Terminated!! ##"
-			slackClient.PostMessage(text)
-			runtime.Goexit()
+			sellSize = size * 0.9
+			order.Size = FTs(sellSize)
+			res, err = apiClient.PlaceOrder(order)
+			if res.ErrorCode == "33017" {
+				text += "## Application's Terminated!! ##"
+				slackClient.PostMessage(text)
+				panic("## Application's Terminated!! ##")
+			} else {
+				text += "NewSize:" + order.Size + "\n"
+				slackClient.PostMessage(text)
+			}
 		} else {
 			slackClient.PostMessage(text)
 		}
 	} else if res.ErrorCode != "0" {
 		log.Println("Place Order(1) failed.... bad response")
-		return ""
+		return "", sellSize
 	}
 	log.Println("【placeOkexOrder】end of job")
-	return res.OrderId
+	return res.OrderId, sellSize
 }
 
 func getErrorMessageForSlack(errorCode, errorMsg, side, code, price, size string) string {

@@ -108,7 +108,7 @@ func StartOKJService(exchange string) {
 			}
 			log.Printf("## %v %v timestamp:%v %v %v", i, order.OrderID, order.Timestamp, order.Pair, order.Price)
 
-			apiClient.CancelOrder(order.ConverToBuyOrder())
+			apiClient.CancelOrder(order.OrderID, order.Pair)
 			okex.UpdateCancelledOrder(order.OrderID)
 			log.Printf("### %v is cancelled!!", order.OrderID)
 		}

@@ -135,10 +135,10 @@ func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
 }
 
 //売り注文を発注した際にDBのレコードをアップデートする
-func UpdateOkexSellOrders(order_id, sell_order_id string, sell_price float64) {
-	cmd1, _ := models.AppDB.Prepare("UPDATE " + TableName + " SET sell_order_state = 1, sell_order_id = ?, sell_price = ? WHERE order_id = ?")
+func UpdateOkexSellOrders(order_id, sell_order_id string, sell_price, sell_size float64) {
+	cmd1, _ := models.AppDB.Prepare("UPDATE " + TableName + " SET sell_order_state = 1, sell_order_id = ?, sell_price = ?, sell_size = ? WHERE order_id = ?")
 	defer cmd1.Close()
-	_, err := cmd1.Exec(sell_order_id, sell_price, order_id)
+	_, err := cmd1.Exec(sell_order_id, sell_price, sell_size, order_id)
 	if err != nil {
 		log.Println("Failure to do updateOkexSellOrders.....")
 	} else {

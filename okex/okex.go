@@ -38,15 +38,15 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*OrderResponse, error) {
 }
 
 // Cancel an Order
-func (apiClient *APIClient) CancelOrder(order *BuyOrder) (*OrderResponse, error) {
+func (apiClient *APIClient) CancelOrder(orderID, pair string) (*OrderResponse, error) {
 	cancelOrderParam := &Order{
-		InstrumentID: order.Pair,
+		InstrumentID: pair,
 	}
 	data, err := json.Marshal(cancelOrderParam)
 	if err != nil {
 		return nil, err
 	}
-	requestPath := "/api/spot/v3/cancel_orders/" + order.OrderID
+	requestPath := "/api/spot/v3/cancel_orders/" + orderID
 	resp, err := apiClient.doHttpRequest("POST", requestPath, map[string]string{}, data)
 	if err != nil {
 		fmt.Printf("res:%s\n", resp)
