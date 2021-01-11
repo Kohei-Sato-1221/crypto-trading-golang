@@ -4,11 +4,6 @@
     <list default="true" id="e0bcf725-bfea-44cd-ba13-18bc77e09430" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/okextasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okextasks.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/okjTasks.go" beforeDir="false" afterPath="$PROJECT_DIR$/app/okjTasks.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go.mod" beforeDir="false" afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/go.sum" beforeDir="false" afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/okex/events.go" beforeDir="false" afterPath="$PROJECT_DIR$/okex/events.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/okex/okex.go" beforeDir="false" afterPath="$PROJECT_DIR$/okex/okex.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

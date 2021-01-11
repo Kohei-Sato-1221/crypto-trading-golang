@@ -455,7 +455,7 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 	log.Println("【placeOkexOrder】start of job")
 	sellSize = size
 	order := &okex.Order{
-		ClientOid:    "SellOID-" + buyOrderID,
+		ClientOid:    "SellOid" + buyOrderID,
 		Type:         "limit",
 		Side:         side,
 		InstrumentID: pair,
