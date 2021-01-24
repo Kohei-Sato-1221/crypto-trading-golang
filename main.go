@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/app"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/models"
@@ -12,6 +14,13 @@ func main() {
 	config.NewConfig()
 	models.NewMysqlBase()
 	utils.LogSetting(config.Config.LogFile)
+
+	log.Printf("#######")
+	log.Printf("#######")
+	log.Printf("config:%#v", config.Config)
+	log.Printf("#######")
+	log.Printf("#######")
+
 	useExchange := config.Config.Exchange
 
 	if useExchange == "bitflyer" {
