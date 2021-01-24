@@ -173,7 +173,7 @@ func StartOKEXService(exchange string) {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.97)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", config.Config.OKETHBuyAmount01, price, apiClient, slackClient)
+		placeOkexBuyOrder("ETH-USDT", config.Config.OKETHBuyAmount03, price, apiClient, slackClient)
 	}
 
 	placeSellOrderJob := func() {
@@ -302,6 +302,12 @@ func StartOKEXService(exchange string) {
 	}
 
 	smallRunnning := false
+	scheduler.Every(3000).Seconds().Run(buyingBTCJob01)
+	scheduler.Every(3000).Seconds().Run(buyingBTCJob02)
+	scheduler.Every(3000).Seconds().Run(buyingBTCJob03)
+	scheduler.Every(3000).Seconds().Run(buyingETHJob01)
+	scheduler.Every(3000).Seconds().Run(buyingETHJob02)
+	scheduler.Every(3000).Seconds().Run(buyingETHJob03)
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At("06:30").Run(postSlackJob)
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
