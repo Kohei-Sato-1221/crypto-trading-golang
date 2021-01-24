@@ -340,14 +340,14 @@ func StartOKEXService(exchange string) {
 		scheduler.Every().Day().At("08:30").Run(buyingBTCJob03)
 		scheduler.Every().Day().At("12:30").Run(buyingBTCJob01)
 		scheduler.Every().Day().At("16:30").Run(buyingBTCJob02)
-		scheduler.Every().Day().At("20:30").Run(buyingBTCJob03)
+		scheduler.Every().Day().At("20:59").Run(buyingBTCJob03)
 
 		scheduler.Every().Day().At("00:40").Run(buyingETHJob01)
 		scheduler.Every().Day().At("04:40").Run(buyingETHJob02)
 		scheduler.Every().Day().At("08:40").Run(buyingETHJob03)
 		scheduler.Every().Day().At("12:40").Run(buyingETHJob01)
 		scheduler.Every().Day().At("16:40").Run(buyingETHJob02)
-		scheduler.Every().Day().At("20:40").Run(buyingETHJob03)
+		scheduler.Every().Day().At("20:58").Run(buyingETHJob03)
 
 		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
 	}
