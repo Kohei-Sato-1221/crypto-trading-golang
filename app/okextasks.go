@@ -33,147 +33,147 @@ func StartOKEXService(exchange string) {
 		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.4 + STf(ticker.Low)*0.6)
 		log.Printf("#### EOS-USDT price:%v ", price)
-		placeOkexBuyOrder("EOS-USDT", 4, price, apiClient, slackClient)
+		placeOkexBuyOrder("EOS-USDT", 1, price, apiClient, slackClient)
 	}
 
 	buyingJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.1 + STf(ticker.Low)*0.9)
 		log.Printf("#### EOS-USDT price:%v ", price)
-		placeOkexBuyOrder("EOS-USDT", 2, price, apiClient, slackClient)
+		placeOkexBuyOrder("EOS-USDT", 1, price, apiClient, slackClient)
 	}
 
 	buyingJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.975)
 		log.Printf("#### EOS-USDT price:%v ", price)
-		placeOkexBuyOrder("EOS-USDT", 3, price, apiClient, slackClient)
+		placeOkexBuyOrder("EOS-USDT", 1, price, apiClient, slackClient)
 	}
 
 	buyingJob04 := func() {
 		ticker, _ := apiClient.GetOkexTicker("EOS-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.985)
 		log.Printf("#### EOS-USDT price:%v ", price)
-		placeOkexBuyOrder("EOS-USDT", 2, price, apiClient, slackClient)
+		placeOkexBuyOrder("EOS-USDT", 1, price, apiClient, slackClient)
 	}
 
 	buyingOKBJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("OKB-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.3 + STf(ticker.Low)*0.7)
 		log.Printf("#### OKB-USDT price:%v", price)
-		placeOkexBuyOrder("OKB-USDT", 2, price, apiClient, slackClient)
+		placeOkexBuyOrder("OKB-USDT", 1, price, apiClient, slackClient)
 	}
 
 	buyingOKBJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("OKB-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.975)
 		log.Printf("#### OKB-USDT price:%v", price)
-		placeOkexBuyOrder("OKB-USDT", 4, price, apiClient, slackClient)
+		placeOkexBuyOrder("OKB-USDT", 1, price, apiClient, slackClient)
 	}
 
 	buyingOKBJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("OKB-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.985)
 		log.Printf("#### OKB-USDT price:%v", price)
-		placeOkexBuyOrder("OKB-USDT", 2, price, apiClient, slackClient)
+		placeOkexBuyOrder("OKB-USDT", 1, price, apiClient, slackClient)
 	}
 
 	buyingBCHJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.4 + STf(ticker.Low)*0.6)
 		log.Printf("#### BCH-USDT price:%v ", price)
-		placeOkexBuyOrder("BCH-USDT", 0.04, price, apiClient, slackClient)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBCHJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.1 + STf(ticker.Low)*0.9)
 		log.Printf("#### BCH-USDT price:%v ", price)
-		placeOkexBuyOrder("BCH-USDT", 0.04, price, apiClient, slackClient)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBCHJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.975)
 		log.Printf("#### BCH-USDT price:%v ", price)
-		placeOkexBuyOrder("BCH-USDT", 0.04, price, apiClient, slackClient)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBCHJob04 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BCH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.985)
 		log.Printf("#### BCH-USDT price:%v ", price)
-		placeOkexBuyOrder("BCH-USDT", 0.04, price, apiClient, slackClient)
+		placeOkexBuyOrder("BCH-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBSVJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.4 + STf(ticker.Low)*0.6)
 		log.Printf("#### BSV-USDT price:%v ", price)
-		placeOkexBuyOrder("BSV-USDT", 0.06, price, apiClient, slackClient)
+		placeOkexBuyOrder("BSV-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBSVJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.1 + STf(ticker.Low)*0.9)
 		log.Printf("#### BSV-USDT price:%v ", price)
-		placeOkexBuyOrder("BSV-USDT", 0.06, price, apiClient, slackClient)
+		placeOkexBuyOrder("BSV-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBSVJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.975)
 		log.Printf("#### BSV-USDT price:%v ", price)
-		placeOkexBuyOrder("BSV-USDT", 0.06, price, apiClient, slackClient)
+		placeOkexBuyOrder("BSV-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBSVJob04 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BSV-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.985)
 		log.Printf("#### BSV-USDT price:%v ", price)
-		placeOkexBuyOrder("BSV-USDT", 0.06, price, apiClient, slackClient)
+		placeOkexBuyOrder("BSV-USDT", 0.02, price, apiClient, slackClient)
 	}
 
 	buyingBTCJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := RoundDecimal(STf(ticker.Ltp)*0.3 + STf(ticker.Low)*0.7)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.007, price, apiClient, slackClient)
+		placeOkexBuyOrder("BTC-USDT", config.Config.OKBTCBuyAmount01, price, apiClient, slackClient)
 	}
 
 	buyingBTCJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.985)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.007, price, apiClient, slackClient)
+		placeOkexBuyOrder("BTC-USDT", config.Config.OKBTCBuyAmount02, price, apiClient, slackClient)
 	}
 
 	buyingBTCJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("BTC-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.997)
 		log.Printf("#### BTC-USDT price:%v ", price)
-		placeOkexBuyOrder("BTC-USDT", 0.006, price, apiClient, slackClient)
+		placeOkexBuyOrder("BTC-USDT", config.Config.OKBTCBuyAmount03, price, apiClient, slackClient)
 	}
 
 	buyingETHJob01 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.995)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.2, price, apiClient, slackClient)
+		placeOkexBuyOrder("ETH-USDT", config.Config.OKETHBuyAmount01, price, apiClient, slackClient)
 	}
 
 	buyingETHJob02 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.98)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.2, price, apiClient, slackClient)
+		placeOkexBuyOrder("ETH-USDT", config.Config.OKETHBuyAmount02, price, apiClient, slackClient)
 	}
 
 	buyingETHJob03 := func() {
 		ticker, _ := apiClient.GetOkexTicker("ETH-USDT")
 		price := RoundDecimal(STf(ticker.Ltp) * 0.97)
 		log.Printf("#### ETH-USDT price:%v ", price)
-		placeOkexBuyOrder("ETH-USDT", 0.3, price, apiClient, slackClient)
+		placeOkexBuyOrder("ETH-USDT", config.Config.OKETHBuyAmount01, price, apiClient, slackClient)
 	}
 
 	placeSellOrderJob := func() {
@@ -439,17 +439,17 @@ func GetAvailableBalance(currency string, apiClient *okex.APIClient) float64 {
 	}
 }
 
-func placeOkexBuyOrder(pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, sellSize float64) {
+func placeOkexBuyOrder(pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, fixedSize float64) {
 	return placeOkexOrder("buy", "SugarBuyOrder", pair, size, price, apiClient, slackClinet)
 }
 
-func placeOkexSellOrder(buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, sellSize float64) {
+func placeOkexSellOrder(buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, fixedSize float64) {
 	return placeOkexOrder("sell", buyOrderID, pair, size, price, apiClient, slackClinet)
 }
 
-func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClient *slack.APIClient) (orderId string, sellSize float64) {
+func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClient *slack.APIClient) (orderId string, fixedSize float64) {
 	log.Println("【placeOkexOrder】start of job")
-	sellSize = size
+	fixedSize = size
 	order := &okex.Order{
 		ClientOid:    "SellOid" + buyOrderID,
 		Type:         "limit",
@@ -464,11 +464,11 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 	res, err := apiClient.PlaceOrder(order)
 	if err != nil {
 		log.Println("Place Order(1) failed.... Failure in [apiClient.PlaceOrder()]")
-		return "", sellSize
+		return "", fixedSize
 	}
 	if res == nil {
 		log.Println("Place Order(1) failed.... no response")
-		return "", sellSize
+		return "", fixedSize
 	} else if res.ErrorCode != "0" {
 		text := getErrorMessageForSlack(
 			res.ErrorCode,
@@ -478,27 +478,40 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 			FTs(RoundDecimal(price)),
 			FTs(size))
 
-		if side == "sell" && res.ErrorCode == "33017" {
-			sellSize = size * 0.9
-			order.Size = FTs(sellSize)
-			res, err = apiClient.PlaceOrder(order)
-			if res.ErrorCode == "33017" {
-				text += "## Application's Terminated!! ##"
-				slackClient.PostMessage(text)
-				panic("## Application's Terminated!! ##")
+		if res.ErrorCode == "33017" {
+			if side == "sell" {
+				fixedSize = size * 0.9
+				order.Size = FTs(fixedSize)
+				res, err = apiClient.PlaceOrder(order)
+				if res.ErrorCode == "33017" {
+					text += "## Application's Terminated!! ##"
+					slackClient.PostMessage(text)
+					panic("## Application's Terminated!! ##")
+				} else {
+					text += "NewSize:" + order.Size + "\n"
+					slackClient.PostMessage(text)
+				}
 			} else {
-				text += "NewSize:" + order.Size + "\n"
-				slackClient.PostMessage(text)
+				fixedSize = size * 0.5
+				order.Size = FTs(fixedSize)
+				res, err = apiClient.PlaceOrder(order)
+				if res.ErrorCode == "33017" {
+					text += "NewSize:" + order.Size + ". But new size's also higher than available...\n"
+					slackClient.PostMessage(text)
+				} else {
+					text += "NewSize:" + order.Size + "\n"
+					slackClient.PostMessage(text)
+				}
 			}
 		} else {
 			slackClient.PostMessage(text)
 		}
 	} else if res.ErrorCode != "0" {
 		log.Println("Place Order(1) failed.... bad response")
-		return "", sellSize
+		return "", fixedSize
 	}
 	log.Println("【placeOkexOrder】end of job")
-	return res.OrderId, sellSize
+	return res.OrderId, fixedSize
 }
 
 func getErrorMessageForSlack(errorCode, errorMsg, side, code, price, size string) string {

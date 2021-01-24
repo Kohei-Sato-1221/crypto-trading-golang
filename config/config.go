@@ -16,6 +16,14 @@ type ConfigList struct {
 	OKMaxBuy  int
 	OKMaxSell int
 
+	OKBTCBuyAmount01 float64
+	OKBTCBuyAmount02 float64
+	OKBTCBuyAmount03 float64
+
+	OKETHBuyAmount01 float64
+	OKETHBuyAmount02 float64
+	OKETHBuyAmount03 float64
+
 	ApiKey      string
 	ApiSecret   string
 	LogFile     string
@@ -91,6 +99,14 @@ func NewConfig() {
 
 		OKMaxBuy:  cfg.Section("okex").Key("max_buy_orders").MustInt(),
 		OKMaxSell: cfg.Section("okex").Key("max_sell_orders").MustInt(),
+
+		OKBTCBuyAmount01: cfg.Section("okex").Key("btc_buy_amount_01").MustFloat64(),
+		OKBTCBuyAmount02: cfg.Section("okex").Key("btc_buy_amount_02").MustFloat64(),
+		OKBTCBuyAmount03: cfg.Section("okex").Key("btc_buy_amount_03").MustFloat64(),
+
+		OKETHBuyAmount01: cfg.Section("okex").Key("eth_buy_amount_01").MustFloat64(),
+		OKETHBuyAmount02: cfg.Section("okex").Key("eth_buy_amount_02").MustFloat64(),
+		OKETHBuyAmount03: cfg.Section("okex").Key("eth_buy_amount_03").MustFloat64(),
 
 		LogFile:     cfg.Section("tradeSetting").Key("logfile_path").String(),
 		ProductCode: cfg.Section("tradeSetting").Key("product_code").String(),
