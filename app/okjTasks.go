@@ -26,6 +26,7 @@ func StartOKJService(exchange string) {
 	slackClient := slack.NewSlack(
 		config.Config.SlackToken,
 		"C01HQKSTK5G",
+		"C01M257KX1C",
 	)
 
 	buyingJob01 := func() {

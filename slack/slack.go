@@ -13,11 +13,12 @@ const baseURL = "https://slack.com/api/chat.postMessage"
 type APIClient struct {
 	token      string
 	channel    string
+	errChannel string
 	httpClient *http.Client
 }
 
-func NewSlack(token, channel string) *APIClient {
-	apiClient := &APIClient{token, channel,&http.Client{}}
+func NewSlack(token, channel, errChannel string) *APIClient {
+	apiClient := &APIClient{token, channel, errChannel, &http.Client{}}
 	return apiClient
 }
 
@@ -34,7 +35,7 @@ func (apiClient *APIClient) doGETPOST(method string, query map[string]string, da
 	req.URL.RawQuery = q.Encode()
 
 	header := map[string]string{
-		"Content-Type": "application/json;charset=utf-8",
+		"Content-Type":  "application/json;charset=utf-8",
 		"Authorization": "Bearer " + apiClient.token,
 	}
 	for key, value := range header {
@@ -58,10 +59,15 @@ type postMessageParams struct {
 	Text    string `json:"text"`
 }
 
-
-func (apiClient *APIClient) PostMessage(text string) error {
-	params := postMessageParams {
-		Channel: apiClient.channel,
+func (apiClient *APIClient) PostMessage(text string, isError bool) error {
+	var channelName string
+	if isError {
+		channelName = apiClient.errChannel
+	} else {
+		channelName = apiClient.channel
+	}
+	params := postMessageParams{
+		Channel: channelName,
 		Text:    text,
 	}
 	data, err := json.Marshal(params)
