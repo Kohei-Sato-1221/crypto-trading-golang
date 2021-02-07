@@ -23,6 +23,7 @@ func StartOKEXService(exchange string) {
 	slackClient := slack.NewSlack(
 		config.Config.SlackToken,
 		"C01HQKSTK5G",
+		"C01M257KX1C",
 	)
 
 	postSlackJob := func() {
@@ -302,12 +303,6 @@ func StartOKEXService(exchange string) {
 	}
 
 	smallRunnning := false
-	scheduler.Every(3000).Seconds().Run(buyingBTCJob01)
-	scheduler.Every(3000).Seconds().Run(buyingBTCJob02)
-	scheduler.Every(3000).Seconds().Run(buyingBTCJob03)
-	scheduler.Every(3000).Seconds().Run(buyingETHJob01)
-	scheduler.Every(3000).Seconds().Run(buyingETHJob02)
-	scheduler.Every(3000).Seconds().Run(buyingETHJob03)
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At("06:30").Run(postSlackJob)
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
@@ -491,11 +486,11 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 				res, err = apiClient.PlaceOrder(order)
 				if res.ErrorCode == "33017" {
 					text += "## Application's Terminated!! ##"
-					slackClient.PostMessage(text)
+					slackClient.PostMessage(text, true)
 					panic("## Application's Terminated!! ##")
 				} else {
 					text += "NewSize:" + order.Size + "\n"
-					slackClient.PostMessage(text)
+					slackClient.PostMessage(text, true)
 				}
 			} else {
 				fixedSize = size * 0.5
@@ -503,14 +498,14 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 				res, err = apiClient.PlaceOrder(order)
 				if res.ErrorCode == "33017" {
 					text += "NewSize:" + order.Size + ". But new size's also higher than available...\n"
-					slackClient.PostMessage(text)
+					slackClient.PostMessage(text, true)
 				} else {
 					text += "NewSize:" + order.Size + "\n"
-					slackClient.PostMessage(text)
+					slackClient.PostMessage(text, true)
 				}
 			}
 		} else {
-			slackClient.PostMessage(text)
+			slackClient.PostMessage(text, true)
 		}
 	} else if res.ErrorCode != "0" {
 		log.Println("Place Order(1) failed.... bad response")
@@ -535,7 +530,7 @@ func sendOKexSlackMessage(client *slack.APIClient, apiClient *okex.APIClient) er
 	if err != nil {
 		return err
 	}
-	err = client.PostMessage(text)
+	err = client.PostMessage(text, false)
 	if err != nil {
 		return err
 	}

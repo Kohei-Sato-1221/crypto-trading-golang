@@ -27,6 +27,7 @@ func StartBfService() {
 	slackClient := slack.NewSlack(
 		config.Config.SlackToken,
 		"C01HQKSTK5G",
+		"C01M257KX1C",
 	)
 
 	postSlackJob := func() {
@@ -392,7 +393,7 @@ func sendSlackMessage(client *slack.APIClient, apiClient *bitflyer.APIClient) er
 	if err != nil {
 		return err
 	}
-	err = client.PostMessage(text)
+	err = client.PostMessage(text, false)
 	if err != nil {
 		return err
 	}
