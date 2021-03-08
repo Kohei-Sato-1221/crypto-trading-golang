@@ -13,6 +13,15 @@ type ConfigList struct {
 
 	BFMaxSell int
 	BFMaxBuy  int
+
+	BFBTCBuyAmount01 float64
+	BFBTCBuyAmount02 float64
+	BFBTCBuyAmount03 float64
+
+	BFETHBuyAmount01 float64
+	BFETHBuyAmount02 float64
+	BFETHBuyAmount03 float64
+
 	OKMaxBuy  int
 	OKMaxSell int
 
@@ -96,6 +105,14 @@ func NewConfig() {
 
 		BFMaxBuy:  cfg.Section("bitflyer").Key("max_buy_orders").MustInt(),
 		BFMaxSell: cfg.Section("bitflyer").Key("max_sell_orders").MustInt(),
+
+		BFBTCBuyAmount01: cfg.Section("bitflyer").Key("btc_buy_amount_01").MustFloat64(),
+		BFBTCBuyAmount02: cfg.Section("bitflyer").Key("btc_buy_amount_02").MustFloat64(),
+		BFBTCBuyAmount03: cfg.Section("bitflyer").Key("btc_buy_amount_03").MustFloat64(),
+
+		BFETHBuyAmount01: cfg.Section("bitflyer").Key("eth_buy_amount_01").MustFloat64(),
+		BFETHBuyAmount02: cfg.Section("bitflyer").Key("eth_buy_amount_02").MustFloat64(),
+		BFETHBuyAmount03: cfg.Section("bitflyer").Key("eth_buy_amount_03").MustFloat64(),
 
 		OKMaxBuy:  cfg.Section("okex").Key("max_buy_orders").MustInt(),
 		OKMaxSell: cfg.Section("okex").Key("max_sell_orders").MustInt(),

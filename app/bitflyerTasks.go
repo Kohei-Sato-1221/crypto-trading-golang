@@ -35,27 +35,27 @@ func StartBfService() {
 	}
 
 	buyingJob := func() {
-		placeBuyOrder(0, "BTC_JPY", 0.009, apiClient)
+		placeBuyOrder(0, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient)
 	}
 
 	buyingJob02 := func() {
-		placeBuyOrder(1, "BTC_JPY", 0.006, apiClient)
+		placeBuyOrder(1, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient)
 	}
 
 	buyingJob03 := func() {
-		placeBuyOrder(2, "BTC_JPY", 0.006, apiClient)
+		placeBuyOrder(2, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
 	}
 
 	buyingETHJob := func() {
-		placeBuyOrder(10, "ETH_JPY", 0.2, apiClient)
+		placeBuyOrder(10, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient)
 	}
 
 	buyingETHJob02 := func() {
-		placeBuyOrder(11, "ETH_JPY", 0.2, apiClient)
+		placeBuyOrder(11, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient)
 	}
 
 	buyingETHJob03 := func() {
-		placeBuyOrder(12, "ETH_JPY", 0.3, apiClient)
+		placeBuyOrder(12, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
 	}
 
 	btcFilledCheckJob := func() {
