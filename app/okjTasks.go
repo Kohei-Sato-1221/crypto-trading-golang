@@ -117,8 +117,6 @@ func StartOKJService(exchange string) {
 		log.Println("【cancelBuyOrderJob】End of job")
 	}
 
-	scheduler.Every(300).Seconds().Run(buyingJob01)
-	scheduler.Every(300).Seconds().Run(buyingJob02)
 	if !config.Config.IsTest {
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
