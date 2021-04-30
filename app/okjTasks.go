@@ -122,9 +122,9 @@ func StartOKJService(exchange string) {
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
 
-		scheduler.Every().Day().At("11:18").Run(cancelBuyOrderJob)
-		scheduler.Every().Day().At("11:20").Run(buyingJob01)
-		scheduler.Every().Day().At("11:22").Run(buyingJob02)
+		scheduler.Every().Day().At("09:02").Run(cancelBuyOrderJob)
+		scheduler.Every().Day().At("09:03").Run(buyingJob01)
+		scheduler.Every().Day().At("09:05").Run(buyingJob02)
 
 	}
 	runtime.Goexit()
@@ -135,9 +135,9 @@ func getBuyPrices(low, last float64, numOfPrices int) []float64 {
 	roundedLast := RoundDecimal(last * 0.995)
 
 	diff := (roundedLast - roundedLow) / float64(numOfPrices)
-	prices := make([]float64, 0, numOfPrices+1)
+	prices := make([]float64, 0, numOfPrices)
 
-	for i := 0; i < numOfPrices+1; i++ {
+	for i := 0; i < numOfPrices; i++ {
 		prices = append(prices, RoundDecimal(roundedLow+(diff*float64(i))))
 	}
 
