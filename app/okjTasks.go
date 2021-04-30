@@ -31,7 +31,7 @@ func StartOKJService(exchange string) {
 
 	buyingJob01 := func() {
 		bbClient := bitbank.GetBBTicker("btc_jpy")
-		prices := getBuyPrices(bbClient.Low, bbClient.Last, 6)
+		prices := getBuyPrices(bbClient.Low, bbClient.Last, 4)
 		for _, price := range prices {
 			log.Printf("#### BTC-JPY price:%v ", price)
 			placeOkexBuyOrder("BTC-JPY", 0.001, price, apiClient, slackClient)
@@ -40,10 +40,10 @@ func StartOKJService(exchange string) {
 
 	buyingJob02 := func() {
 		bbClient := bitbank.GetBBTicker("eth_jpy")
-		prices := getBuyPrices(bbClient.Low, bbClient.Last, 6)
+		prices := getBuyPrices(bbClient.Low, bbClient.Last, 4)
 		for _, price := range prices {
 			log.Printf("#### ETH-JPY price:%v ", price)
-			placeOkexBuyOrder("ETH-JPY", 0.02, price, apiClient, slackClient)
+			placeOkexBuyOrder("ETH-JPY", 0.015, price, apiClient, slackClient)
 		}
 	}
 
