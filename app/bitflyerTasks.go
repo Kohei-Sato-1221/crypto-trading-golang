@@ -198,8 +198,6 @@ func StartBfService() {
 		log.Println("【cancelBuyOrderJob】End of job")
 	}
 
-	scheduler.Every(60).Minutes().Run(buyingJob03)
-	scheduler.Every(60).Minutes().Run(buyingETHJob04)
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At("06:30").Run(postSlackJob)
 		scheduler.Every(45).Seconds().Run(sellOrderJob)
