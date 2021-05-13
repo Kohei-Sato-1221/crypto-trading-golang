@@ -35,6 +35,7 @@ CREATE TABLE `buy_orders` (
   `size` float DEFAULT NULL,
   `exchange` varchar(50) DEFAULT NULL,
   `filled` tinyint(4) DEFAULT '0' COMMENT '0:unfilled / 1:filled',
+  `strategy` tinyint(4) DEFAULT '99' COMMENT '99:not recorded ',
   `timestamp` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updatetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

@@ -241,6 +241,7 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*PlaceOrderResponse, error
 	data, err := json.Marshal(order)
 	fmt.Println(string(data))
 	if err != nil {
+		fmt.Printf("err:%s\n", err)
 		return nil, err
 	}
 	url := "me/sendchildorder"

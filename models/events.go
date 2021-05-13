@@ -2,6 +2,8 @@ package models
 
 import (
 	"errors"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/enums"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/utils"
 	"log"
 	"strconv"
 	"strings"
@@ -17,6 +19,7 @@ type OrderEvent struct {
 	Size        float64   `json:"size"`
 	Exchange    string    `json:"exchange"`
 	Filled      int       `json:"filled"`
+	Strategy    int       `json:"strategy"`
 }
 
 //TODO structを整理すること
@@ -35,12 +38,20 @@ type BuyOrder struct {
 }
 
 func (e *OrderEvent) BuyOrder() error {
-	cmd1, _ := AppDB.Prepare("INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?)")
-	log.Printf("BuyOrder() order_id:%s price:%10.2f size:%s side:%s", e.OrderID, e.Price, e.Side, e.Size)
-	_, err := cmd1.Exec(e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
+	cmd1, err := AppDB.Prepare("INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange, strategy) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		log.Printf("[ERROR] BuyOrder01:%s\n", err)
+		return err
+	}
+	log.Printf("BuyOrder() order_id:%s price:%10.2f size:%s side:%s strategy:%s", e.OrderID, e.Price, e.Side, e.Size, e.Strategy)
+	_, err = cmd1.Exec(e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange, e.Strategy)
+	if err != nil {
+		log.Printf("[ERROR] BuyOrder02:%s\n", err)
+		return err
+	}
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			log.Println(err)
+			log.Printf("[ERROR] BuyOrder03:%s\n", err)
 			return nil
 		}
 		return errors.New("Error in BuyOrder()")
@@ -107,10 +118,10 @@ func GetCancelledBuyOrders() ([]BuyOrder, error) {
  　 2. 未約定の売り注文数 < 最大売り注文数
    を両方満たす場合にtrueを返却。
 */
-func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) bool {
+func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) (bool, error) {
 	rows, err := AppDB.Query(`SELECT COUNT(order_id) FROM buy_orders WHERE filled = 0 and order_id != '' union all SELECT COUNT(order_id) FROM sell_orders WHERE filled = 0 and order_id != ''`)
 	if err != nil {
-		return true
+		return true, err
 	}
 	defer rows.Close()
 
@@ -121,7 +132,7 @@ func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) bool {
 	for rows.Next() {
 		if err := rows.Scan(&cnt); err != nil {
 			log.Println("Failure to get records.....")
-			return true
+			return true, err
 		}
 		if rowCnt == 0 {
 			numberOfExistingBuyOrders = cnt
@@ -131,46 +142,67 @@ func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) bool {
 		}
 		rowCnt = rowCnt + 1
 	}
+	log.Printf("ShouldPlaceBuyOrder: numberOfExistingBuyOrders:%v numberOfExistingSellOrders:%v", numberOfExistingBuyOrders, numberOfExistingSellOrders)
 	if numberOfExistingBuyOrders < max_buy_orders &&
 		numberOfExistingSellOrders < max_sell_orders {
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
-type Idprice struct {
+type BuyOrderInfo struct {
 	OrderID     string  `json:"order_id"`
 	Price       float64 `json:"price"`
 	ProductCode string  `json:"product_code"`
 	Size        float64 `json:"size"`
 	Exchange    string  `json:"exchange"`
+	Strategy    float64 `json:"strategy"`
 }
 
-func FilledCheckWithSellOrder() []Idprice {
-	rows, err := AppDB.Query(`SELECT order_id, price, product_code, size, exchange FROM buy_orders WHERE filled = 1 and order_id != ''`)
+func (buyOrderInfo *BuyOrderInfo) CalculateSellOrderPrice() float64 {
+	if buyOrderInfo.Strategy == enums.Stg3BtcLtp90 ||
+		buyOrderInfo.Strategy == enums.Stg14EthLtp90 {
+		return utils.Round(buyOrderInfo.Price * 1.03)
+	} else {
+		return utils.Round(buyOrderInfo.Price * 1.015)
+	}
+}
+
+func CalculateMinuteToExpire(strategy int) int {
+	if strategy == enums.Stg3BtcLtp90 ||
+		strategy == enums.Stg14EthLtp90 {
+		return 1440 //1day
+	} else {
+		return 3600 //2.5days
+	}
+}
+
+func CheckFilledBuyOrders() []BuyOrderInfo {
+	rows, err := AppDB.Query(`SELECT order_id, price, product_code, size, exchange, strategy FROM buy_orders WHERE filled = 1 and order_id != ''`)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 
 	var cnt int = 0
-	var idprices []Idprice
+	var buyOrderInfos []BuyOrderInfo
 	for rows.Next() {
 		var order_id string
 		var price float64
 		var product_code string
 		var size float64
 		var exchange string
+		var strategy int
 
-		if err := rows.Scan(&order_id, &price, &product_code, &size, &exchange); err != nil {
+		if err := rows.Scan(&order_id, &price, &product_code, &size, &exchange, &strategy); err != nil {
 			log.Println("Failure to get records.....")
 			return nil
 		}
 		cnt++
-		idprice := Idprice{OrderID: order_id, Price: price, ProductCode: product_code, Size: size, Exchange: exchange}
-		idprices = append(idprices, idprice)
+		buyOrderInfo := BuyOrderInfo{OrderID: order_id, Price: price, ProductCode: product_code, Size: size, Exchange: exchange}
+		buyOrderInfos = append(buyOrderInfos, buyOrderInfo)
 	}
-	return idprices
+	return buyOrderInfos
 }
 
 func UpdateFilledOrder(order_id string) error {

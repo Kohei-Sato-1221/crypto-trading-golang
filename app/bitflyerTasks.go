@@ -9,6 +9,7 @@ import (
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitbank"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/bitflyer"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/enums"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/models"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/slack"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/utils"
@@ -35,27 +36,39 @@ func StartBfService() {
 	}
 
 	buyingJob := func() {
-		placeBuyOrder(0, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient)
+		placeBuyOrder(enums.Stg0BtcLtp3low7, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient)
 	}
 
 	buyingJob02 := func() {
-		placeBuyOrder(1, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient)
+		placeBuyOrder(enums.Stg1BtcLtp997, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient)
 	}
 
 	buyingJob03 := func() {
-		placeBuyOrder(2, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
+		placeBuyOrder(enums.Stg2BtcLtp98, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
+	}
+
+	buyingJob99 := func() {
+		placeBuyOrder(enums.Stg3BtcLtp90, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
 	}
 
 	buyingETHJob := func() {
-		placeBuyOrder(10, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient)
+		placeBuyOrder(enums.Stg10EthLtp995, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient)
 	}
 
 	buyingETHJob02 := func() {
-		placeBuyOrder(11, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient)
+		placeBuyOrder(enums.Stg11EthLtp98, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient)
 	}
 
 	buyingETHJob03 := func() {
-		placeBuyOrder(12, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
+		placeBuyOrder(enums.Stg12EthLtp97, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
+	}
+
+	buyingETHJob04 := func() {
+		placeBuyOrder(enums.Stg13EthLtp3low7, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
+	}
+
+	buyingETHJob99 := func() {
+		placeBuyOrder(enums.Stg14EthLtp90, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
 	}
 
 	btcFilledCheckJob := func() {
@@ -69,28 +82,26 @@ func StartBfService() {
 	sellOrderJob := func() {
 		log.Println("【sellOrderjob】start of job")
 		// get list of orderis whose filled param equqls "1"
-		idprices := models.FilledCheckWithSellOrder()
-		if idprices == nil {
+		buyOrderInfos := models.CheckFilledBuyOrders()
+		if buyOrderInfos == nil {
 			log.Println("【sellOrderjob】 : No order ids ")
 			goto ENDOFSELLORDER
 		}
 
-		for i, idprice := range idprices {
-			order_id := idprice.OrderID
-			buyprice := idprice.Price
-			product_code := idprice.ProductCode
-			size := idprice.Size
-			log.Printf("No%d Id:%v", i, order_id)
-			sellPrice := utils.Round((buyprice * 1.015))
-			log.Printf("buyprice:%10.2f  myPrice:%10.2f", buyprice, sellPrice)
+		for i, buyOrderInfo := range buyOrderInfos {
+			orderID := buyOrderInfo.OrderID
+			productCode := buyOrderInfo.ProductCode
+			size := buyOrderInfo.Size
+			sellPrice := buyOrderInfo.CalculateSellOrderPrice()
+			log.Printf("No%d Id:%v sellPrice:%10.2f strategy:%v", i, orderID, sellPrice, buyOrderInfo.Strategy)
 
 			sellOrder := &bitflyer.Order{
-				ProductCode:     product_code,
+				ProductCode:     productCode,
 				ChildOrderType:  "LIMIT",
 				Side:            "SELL",
 				Price:           sellPrice,
 				Size:            size,
-				MinuteToExpires: 518400, //360 days
+				MinuteToExpires: 518400, //360days
 				TimeInForce:     "GTC",
 			}
 
@@ -106,25 +117,25 @@ func StartBfService() {
 				break
 			}
 
-			err = models.UpdateFilledOrderWithBuyOrder(order_id)
+			err = models.UpdateFilledOrderWithBuyOrder(orderID)
 			if err != nil {
 				log.Println("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
 				break
 			}
-			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", order_id)
+			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderID)
 
 			utc, _ := time.LoadLocation("UTC")
-			utc_current_date := time.Now().In(utc)
+			utcCurrentDate := time.Now().In(utc)
 			event := models.OrderEvent{
 				OrderID:     res.OrderId,
-				Time:        utc_current_date,
-				ProductCode: product_code,
+				Time:        utcCurrentDate,
+				ProductCode: productCode,
 				Side:        "Sell",
 				Price:       sellPrice,
 				Size:        size,
 				Exchange:    "bitflyer",
 			}
-			err = event.SellOrder(order_id)
+			err = event.SellOrder(orderID)
 			if err != nil {
 				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
 			} else {
@@ -187,39 +198,62 @@ func StartBfService() {
 		log.Println("【cancelBuyOrderJob】End of job")
 	}
 
+	scheduler.Every(60).Minutes().Run(buyingJob03)
+	scheduler.Every(60).Minutes().Run(buyingETHJob04)
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At("06:30").Run(postSlackJob)
 		scheduler.Every(45).Seconds().Run(sellOrderJob)
 		scheduler.Every(40).Seconds().Run(syncBTCBuyOrderJob)
 		scheduler.Every(40).Seconds().Run(syncETHBuyOrderJob)
 
-		scheduler.Every().Day().At("00:55").Run(buyingJob)
-		scheduler.Every().Day().At("02:55").Run(buyingJob02)
-		scheduler.Every().Day().At("04:55").Run(buyingJob03)
-		scheduler.Every().Day().At("06:55").Run(buyingJob)
-		scheduler.Every().Day().At("08:55").Run(buyingJob02)
-		scheduler.Every().Day().At("10:55").Run(buyingJob)
-		scheduler.Every().Day().At("12:55").Run(buyingJob02)
-		scheduler.Every().Day().At("14:55").Run(buyingJob03)
-		scheduler.Every().Day().At("16:55").Run(buyingJob)
-		scheduler.Every().Day().At("18:55").Run(buyingJob02)
-		scheduler.Every().Day().At("20:55").Run(buyingJob)
-		scheduler.Every().Day().At("22:55").Run(buyingJob02)
-		scheduler.Every().Day().At("00:05").Run(buyingJob03)
+		//scheduler.Every().Day().At("00:55").Run(buyingJob)
+		//scheduler.Every().Day().At("02:55").Run(buyingJob02)
+		//scheduler.Every().Day().At("04:55").Run(buyingJob03)
+		//scheduler.Every().Day().At("06:55").Run(buyingJob)
+		//scheduler.Every().Day().At("08:55").Run(buyingJob02)
+		//scheduler.Every().Day().At("10:55").Run(buyingJob)
+		//scheduler.Every().Day().At("12:55").Run(buyingJob02)
+		//scheduler.Every().Day().At("14:55").Run(buyingJob03)
+		//scheduler.Every().Day().At("16:55").Run(buyingJob)
+		//scheduler.Every().Day().At("18:55").Run(buyingJob02)
+		//scheduler.Every().Day().At("20:55").Run(buyingJob)
+		//scheduler.Every().Day().At("22:55").Run(buyingJob02)
+		//scheduler.Every().Day().At("00:05").Run(buyingJob03)
 
-		scheduler.Every().Day().At("00:53").Run(buyingETHJob)
-		scheduler.Every().Day().At("02:53").Run(buyingETHJob02)
-		scheduler.Every().Day().At("04:53").Run(buyingETHJob03)
-		scheduler.Every().Day().At("06:53").Run(buyingETHJob)
-		scheduler.Every().Day().At("08:53").Run(buyingETHJob02)
-		scheduler.Every().Day().At("10:53").Run(buyingETHJob)
-		scheduler.Every().Day().At("12:53").Run(buyingETHJob02)
-		scheduler.Every().Day().At("14:53").Run(buyingETHJob03)
-		scheduler.Every().Day().At("16:53").Run(buyingETHJob)
-		scheduler.Every().Day().At("18:53").Run(buyingETHJob02)
-		scheduler.Every().Day().At("20:53").Run(buyingETHJob)
-		scheduler.Every().Day().At("22:53").Run(buyingETHJob02)
-		scheduler.Every().Day().At("00:03").Run(buyingETHJob03)
+		//scheduler.Every().Day().At("00:53").Run(buyingETHJob)
+		//scheduler.Every().Day().At("02:53").Run(buyingETHJob02)
+		//scheduler.Every().Day().At("04:53").Run(buyingETHJob03)
+		//scheduler.Every().Day().At("06:53").Run(buyingETHJob)
+		//scheduler.Every().Day().At("08:53").Run(buyingETHJob02)
+		//scheduler.Every().Day().At("10:53").Run(buyingETHJob)
+		//scheduler.Every().Day().At("12:53").Run(buyingETHJob02)
+		//scheduler.Every().Day().At("14:53").Run(buyingETHJob03)
+		//scheduler.Every().Day().At("16:53").Run(buyingETHJob)
+		//scheduler.Every().Day().At("18:53").Run(buyingETHJob02)
+		//scheduler.Every().Day().At("20:53").Run(buyingETHJob)
+		//scheduler.Every().Day().At("22:53").Run(buyingETHJob02)
+		//scheduler.Every().Day().At("00:03").Run(buyingETHJob03)
+
+		// Start 20210513修正
+		scheduler.Every().Day().At("02:55").Run(buyingJob)
+		scheduler.Every().Day().At("06:55").Run(buyingJob02)
+		scheduler.Every().Day().At("10:55").Run(buyingJob03)
+		scheduler.Every().Day().At("14:55").Run(buyingJob)
+		scheduler.Every().Day().At("18:55").Run(buyingJob02)
+		scheduler.Every().Day().At("22:55").Run(buyingJob03)
+
+		scheduler.Every().Day().At("01:53").Run(buyingETHJob)
+		scheduler.Every().Day().At("04:53").Run(buyingETHJob02)
+		scheduler.Every().Day().At("07:53").Run(buyingETHJob03)
+		scheduler.Every().Day().At("10:53").Run(buyingETHJob04)
+		scheduler.Every().Day().At("13:53").Run(buyingETHJob)
+		scheduler.Every().Day().At("16:53").Run(buyingETHJob02)
+		scheduler.Every().Day().At("19:53").Run(buyingETHJob03)
+		scheduler.Every().Day().At("22:53").Run(buyingETHJob04)
+
+		scheduler.Every().Day().At("00:53").Run(buyingJob99)
+		scheduler.Every().Day().At("00:55").Run(buyingETHJob99)
+		// End
 
 		scheduler.Every(45).Seconds().Run(ethFilledCheckJob)
 		scheduler.Every(45).Seconds().Run(btcFilledCheckJob)
@@ -322,21 +356,26 @@ ENDOFFILLEDCHECK:
 func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient) {
 	log.Printf("strategy:%v", strategy)
 	log.Println("【buyingJob】start of job")
-	shouldSkip := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
+	//shouldSkip, err := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
+	//if err != nil {
+	//	log.Printf("【ERROR】placeBuyOrder error:%v", err.Error())
+	//	return
+	//}
 
 	// for test
-	if strategy == -1 {
-		shouldSkip = false
-	}
+	//if strategy == -1 {
+	//	shouldSkip = false
+	//}
+	shouldSkip := false
+
 	log.Printf("ShouldSkip :%v max:%v", shouldSkip, apiClient.Max_sell_orders)
 
 	buyPrice := 0.0
-	var res *bitflyer.PlaceOrderResponse
-	var err error
-
 	bitbankClient := bitbank.GetBBTicker("btc_jpy")
 	log.Printf("bitbankClient  %f", bitbankClient)
 
+	var res *bitflyer.PlaceOrderResponse
+	var err error
 	if !shouldSkip {
 		ticker, _ := apiClient.GetTicker(productCode)
 
@@ -347,7 +386,9 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 			//ETH_JPYの場合
 			buyPrice = utils.CalculateBuyPrice(ticker.Ltp, ticker.BestBid, strategy)
 		}
-		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f", ticker.Ltp, ticker.BestBid, buyPrice)
+
+		minuteToExpire := models.CalculateMinuteToExpire(strategy)
+		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f minuteToExpire:%v", ticker.Ltp, ticker.BestBid, buyPrice, minuteToExpire)
 
 		order := &bitflyer.Order{
 			ProductCode:     productCode,
@@ -355,10 +396,9 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 			Side:            "BUY",
 			Price:           buyPrice,
 			Size:            size,
-			MinuteToExpires: 518400, //360 days
+			MinuteToExpires: minuteToExpire,
 			TimeInForce:     "GTC",
 		}
-
 		res, err = apiClient.PlaceOrder(order)
 		if err != nil || res == nil {
 			log.Println("BuyOrder failed.... Failure in [apiClient.PlaceOrder()]")
@@ -376,6 +416,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 			Price:       buyPrice,
 			Size:        size,
 			Exchange:    "bitflyer",
+			Strategy:    strategy,
 		}
 		err = event.BuyOrder()
 		if err != nil {
