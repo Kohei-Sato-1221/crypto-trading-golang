@@ -91,3 +91,21 @@ CREATE TABLE `buy_orders` (
 6. execute main file.
 
 
+# Terraform
+```
+// deploy to AWS
+cd terraform
+terraform plan -var 'public_key_path=~/.ssh/tf-20210724.pub'
+terraform apply -var 'public_key_path=~/.ssh/tf-20210724.pub'
+
+// destory resources on AWS
+terraform destory
+
+// check mysql password
+1. After deployed, go ec2 instance via SSH
+2. Execute this command,
+`sudo more /var/log/mysqld.log|grep password`
+3. You can get first root password of mysql
+4. login: `mysql -u root -p` with password you got
+```
+
