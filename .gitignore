@@ -11,6 +11,7 @@ trading.log
 .DS_Store
 
 # terraform
+private_key_script.txt
 **/.terraform/*
 *.tfstate
 *.tfstate.*

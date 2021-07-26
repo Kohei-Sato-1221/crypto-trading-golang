@@ -35,6 +35,55 @@ resource "aws_instance" "trading_server_ec2" {
 	user_data = <<EOF
 		#!/bin/bash
 		yum install -y go
+
+		touch /home/ec2-user/.ssh/id_rsa
+		echo "-----BEGIN OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
+		# NOTE: You have to complement rest of private key before using terraform.
+		echo "-----END OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
+		chmod 600 /home/ec2-user/.ssh/id_rsa
+		
+		mkdir -p /home/ec2-user/tradingapp
+		mkdir -p /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
+		git clone https://github.com/Kohei-Sato-1221/crypto-trading-golang.git /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
+		
+		cd /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
+		touch build.sh
+		chmod 755 build.sh
+		echo '#!/bin/bash' > build.sh
+		echo '' >> build.sh
+		echo 'export GOPATH=/home/ec2-user/go' >> build.sh
+		echo 'go get' >> build.sh
+		echo 'go build -o main main.go' >> build.sh
+		echo 'cp main /home/ec2-user/tradingapp/main' >> build.sh
+		echo 'cp [sample]private_config.ini /home/ec2-user/tradingapp/private_config.ini' >> build.sh
+		echo 'cp config.ini /home/ec2-user/tradingapp/config.ini' >> build.sh
+		# TODO: execute build shell in user data
+		# sh ./build.sh
+
+		cd /home/ec2-user/tradingapp
+		echo '#!/bin/bash' >> start.sh
+		echo "" >> start.sh
+		echo "nohup ./main &" >> start.sh
+		echo "nohup ./main &" >> start.sh
+
+		echo '#!/bin/bash' >> backup.sh
+		echo "" >> backup.sh
+		echo "cp /home/ec2-user/tradingapp/trading.log /home/ec2-user/tradingapp/trading_bk.log" >> backup.sh
+		echo 'echo "start logging!" > /home/ec2-user/tradingapp/trading.log' >> backup.sh
+
+		echo '#!/bin/bash' >> processCheck.sh
+		echo '' >> processCheck.sh
+		echo 'count=`ps -ef|grep ./main|wc -l`' >> processCheck.sh
+		echo "" >> processCheck.sh
+		echo 'echo "go process number:$count"' >> processCheck.sh
+		echo "" >> processCheck.sh
+		echo 'if [ $count -lt 2 ]; then' >> processCheck.sh
+		echo '    echo "Go Application down"' >> processCheck.sh
+		echo '    ./main > trading.log &' >> processCheck.sh
+		echo 'else' >> processCheck.sh
+		echo '    echo "Go Application running!!"' >> processCheck.sh
+		echo 'fi' >> processCheck.sh
+
 		yum remove -y mariadb-libs
 		yum localinstall -y https://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm
 		yum install -y --enablerepo=mysql80-community mysql-community-server
