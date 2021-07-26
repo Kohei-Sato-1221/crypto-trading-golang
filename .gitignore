@@ -9,3 +9,14 @@ main
 trading.log
 .vscode
 .DS_Store
+
+# terraform
+private_key_script.txt
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+/terraform/crash.log
+/terraform/override.tf
+/terraform/override.tf.json
+*_override.tf
+*_override.tf.json

@@ -91,3 +91,46 @@ CREATE TABLE `buy_orders` (
 6. execute main file.
 
 
+# Terraform
+```
+// deploy to AWS
+cd terraform
+terraform plan -var 'public_key_path=~/.ssh/tf-20210724.pub'
+terraform apply -var 'public_key_path=~/.ssh/tf-20210724.pub'
+
+// destory resources on AWS
+terraform destory -var 'public_key_path=~/.ssh/tf-20210724.pub'
+
+// set cron
+1. after login EC2 vis ssh, execute following command:
+(crontab -l 2>/dev/null; echo "10 17 * * * /home/ec2-user/tradingapp/backup.sh") | crontab -
+(crontab -l 2>/dev/null; echo "10 * * * * echo "" > /home/ec2-user/tradingapp/nohup.out") | crontab -
+(crontab -l 2>/dev/null; echo "25 * * * * cd /home/ec2-user/tradingapp && sh processCheck.sh > cron.log") | crontab -
+
+// build application
+cd /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
+sh ./build.sh
+
+// mysql
+1. After deployed, go ec2 instance via SSH
+2. Execute this command,
+`sudo more /var/log/mysqld.log|grep password`
+3. You can get first root password of mysql
+4. login: `mysql -u root -p` with password you got
+5. execute following commands in mysql
+  `ALTER USER 'root'@'localhost' IDENTIFIED BY'newPassword';`
+  `GRANT ALL ON *.* TO root@localhost;`
+  `CREATE USER trading IDENTIFIED BY 'password';`
+  `CREATE DATABASE trading;`
+  `GRANT ALL PRIVILEGES ON trading.* to 'trading'@'%';`
+
+// run application
+sh ./home/ec2-user/tradingapp/start.sh
+
+// memo
+show user:
+`select user, host, plugin from mysql.user;`
+
+access from Sequel pro:
+`ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'pasword';`
+```
