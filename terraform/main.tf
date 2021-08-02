@@ -91,5 +91,11 @@ resource "aws_instance" "trading_server_ec2" {
 		touch /var/log/mysqld.log
 		systemctl start mysqld
 		systemctl enable mysqld
+
+		echo '# ZONE="UTC"' > /etc/sysconfig/clock
+		echo 'ZONE="Japan"' >> /etc/sysconfig/clock
+		echo 'UTC=true' >> /etc/sysconfig/clock
+		ln -sf /usr/share/zoneinfo/Japan /etc/localtime
+		## you have to reboot!
 EOF
 }
