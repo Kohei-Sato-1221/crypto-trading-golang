@@ -37,9 +37,10 @@ resource "aws_instance" "trading_server_ec2" {
 		yum install -y go
 
 		touch /home/ec2-user/.ssh/id_rsa
-		echo "-----BEGIN OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
 		# NOTE: You have to complement rest of private key before using terraform.
-		echo "-----END OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
+        echo "-----BEGIN OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
+        echo "BAUGBw==" >> /home/ec2-user/.ssh/id_rsa
+        echo "-----END OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
 		chmod 600 /home/ec2-user/.ssh/id_rsa
 		
 		mkdir -p /home/ec2-user/tradingapp
@@ -84,18 +85,15 @@ resource "aws_instance" "trading_server_ec2" {
 		echo '    echo "Go Application running!!"' >> processCheck.sh
 		echo 'fi' >> processCheck.sh
 
-		yum remove -y mariadb-libs
-		yum localinstall -y https://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm
-		yum install -y --enablerepo=mysql80-community mysql-community-server
-		yum install -y --enablerepo=mysql80-community mysql-community-devel
-		touch /var/log/mysqld.log
-		systemctl start mysqld
-		systemctl enable mysqld
-
 		echo '# ZONE="UTC"' > /etc/sysconfig/clock
 		echo 'ZONE="Japan"' >> /etc/sysconfig/clock
 		echo 'UTC=true' >> /etc/sysconfig/clock
 		ln -sf /usr/share/zoneinfo/Japan /etc/localtime
+
+        echo '' > /home/ec2-user/tradingapp/trading.log
+
+        chmod 777 /home/ec2-user/tradingapp
+        chown ec2-user:ec2-user /home/ec2-user/tradingapp
 		## you have to reboot!
 EOF
 }

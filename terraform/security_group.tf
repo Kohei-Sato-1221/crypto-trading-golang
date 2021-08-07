@@ -2,6 +2,10 @@ resource "aws_security_group" "trading_server_ec2_sg" {
     name = "trading_server_ec2_sg"
 }
 
+resource "aws_security_group" "trading_db_sg" {
+    name = "trading_db_sg"
+}
+
 resource "aws_security_group_rule" "ingress_ssh" {
     type = "ingress"
     from_port = 22
@@ -16,7 +20,7 @@ resource "aws_security_group_rule" "ingress_mysql" {
     from_port = 3306
     to_port = 3306
     protocol = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] // todo limit ip address
     security_group_id = aws_security_group.trading_server_ec2_sg.id
 }
 
@@ -27,4 +31,13 @@ resource "aws_security_group_rule" "sugar_egress" {
     protocol = "-1"
     cidr_blocks = ["0.0.0.0/0"]
     security_group_id = aws_security_group.trading_server_ec2_sg.id
+}
+
+resource "aws_security_group_rule" "ingress_db" {
+    type = "ingress"
+    from_port = 3306
+    to_port = 3306
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] // todo limit ip address
+    security_group_id = aws_security_group.trading_db_sg.id
 }

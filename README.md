@@ -23,7 +23,7 @@ If they're, it places sell orders at a liite higher price of buy orders.(currenc
 1. In order to select exchange, modify src/main/main.go
    Currenty, you can choose bitflyer(jp) or OKEX for trading.
 
-2. Prepare MySQL Server. And execute following create sentences.
+2. Prepare RDS instance(MySQL 5.7). And execute following sentences.
 ```
 //for bitflyer
 CREATE TABLE `buy_orders` (
@@ -95,11 +95,11 @@ CREATE TABLE `buy_orders` (
 ```
 // deploy to AWS
 cd terraform
-terraform plan -var 'public_key_path=~/.ssh/tf-20210724.pub'
-terraform apply -var 'public_key_path=~/.ssh/tf-20210724.pub'
+terraform plan -var 'public_key_path=~/.ssh/tf-20210724.pub' -var 'db_password=yourdbpassword'
+terraform apply -var 'public_key_path=~/.ssh/tf-20210724.pub' -var 'db_password=yourdbpassword'
 
 // destory resources on AWS
-terraform destory -var 'public_key_path=~/.ssh/tf-20210724.pub'
+terraform destroy -var 'public_key_path=~/.ssh/tf-20210724.pub'
 
 // set cron
 1. after login EC2 vis ssh, execute following command:
@@ -109,20 +109,9 @@ terraform destory -var 'public_key_path=~/.ssh/tf-20210724.pub'
 
 // build application
 cd /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
-sh ./build.sh
-
-// mysql
-1. After deployed, go ec2 instance via SSH
-2. Execute this command,
-`sudo more /var/log/mysqld.log|grep password`
-3. You can get first root password of mysql
-4. login: `mysql -u root -p` with password you got
-5. execute following commands in mysql
-  `ALTER USER 'root'@'localhost' IDENTIFIED BY'newPassword';`
-  `GRANT ALL ON *.* TO root@localhost;`
-  `CREATE USER trading IDENTIFIED BY 'password';`
-  `CREATE DATABASE trading;`
-  `GRANT ALL PRIVILEGES ON trading.* to 'trading'@'%';`
+sudo sh ./build.sh
+cd /home/ec2-user/tradingapp
+sudo chown ec2-user:ec2-user *
 
 // run application
 sh ./home/ec2-user/tradingapp/start.sh
@@ -130,6 +119,9 @@ sh ./home/ec2-user/tradingapp/start.sh
 // memo
 show user:
 `select user, host, plugin from mysql.user;`
+
+data migration:
+mysqldump -u root -p trading > export.sql
 
 access from Sequel pro:
 `ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'pasword';`
