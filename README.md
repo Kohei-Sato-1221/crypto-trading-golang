@@ -40,7 +40,7 @@ CREATE TABLE `buy_orders` (
   `updatetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `orderId` (`order_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7305 DEFAULT CHARSET=latin1 COMMENT='bitflyer_buyorders';
+) ENGINE=InnoDB AUTO_INCREMENT=7305 COMMENT='bitflyer_buyorders';
 
 CREATE TABLE `sell_orders` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
@@ -56,7 +56,7 @@ CREATE TABLE `sell_orders` (
   `updatetime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `orderId` (`order_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4261 DEFAULT CHARSET=latin1 COMMENT='bitflyer_sellorders';
+) ENGINE=InnoDB AUTO_INCREMENT=4261 COMMENT='bitflyer_sellorders';
 
 
 // for OKEX
@@ -93,13 +93,22 @@ CREATE TABLE `buy_orders` (
 
 # Terraform
 ```
+// create S3 Bucket manually
+
+// get keypair
+1. create keypair on AWS console
+2. download private key 
+3. get publickey from private key
+  ssh-keygen -y -f /path_to_key_pair/my-key-pair.pem > my-key-pair.pub
+4. delete keypair from AWS console 
+
 // deploy to AWS
 cd terraform
-terraform plan -var 'public_key_path=~/.ssh/tf-20210724.pub' -var 'db_password=yourdbpassword'
-terraform apply -var 'public_key_path=~/.ssh/tf-20210724.pub' -var 'db_password=yourdbpassword'
+terraform plan -var 'public_key_path=~/.ssh/sugar-2022-keypair.cer' -var 'db_password=yourdbpassword'
+terraform apply -var 'public_key_path=~/.ssh/sugar-2022-keypair.cer' -var 'db_password=yourdbpassword'
 
 // destory resources on AWS
-terraform destroy -var 'public_key_path=~/.ssh/tf-20210724.pub'
+terraform destroy -var 'public_key_path=~/.ssh/sugar-2022-keypair.cer'
 
 // set cron
 1. after login EC2 vis ssh, execute following command:
@@ -114,7 +123,7 @@ cd /home/ec2-user/tradingapp
 sudo chown ec2-user:ec2-user *
 
 // run application
-sh ./home/ec2-user/tradingapp/start.sh
+sh /home/ec2-user/tradingapp/start.sh
 
 // memo
 show user:
@@ -125,4 +134,7 @@ mysqldump -u root -p trading > export.sql
 
 access from Sequel pro:
 `ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'pasword';`
+
+format terraform codes:
+terraform fmt -recursive
 ```

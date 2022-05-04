@@ -1,38 +1,38 @@
 variable "db_password" {}
 
 resource "aws_db_parameter_group" "crypto_trading_db" {
-	name = "crypto-trading-db"
-	family = "mysql5.7"
+  name   = "crypto-trading-db"
+  family = "mysql5.7"
 
-	parameter {
-	  name = "character_set_database"
-	  value = "utf8mb4"
-	}
+  parameter {
+    name  = "character_set_database"
+    value = "utf8mb4"
+  }
 
-	parameter {
-	  name = "time_zone"
-	  value = "Asia/Tokyo"
-	}
+  parameter {
+    name  = "time_zone"
+    value = "Asia/Tokyo"
+  }
 
-	parameter {
-	  name = "lc_time_names"
-	  value = "ja_JP"
-	}
+  parameter {
+    name  = "lc_time_names"
+    value = "ja_JP"
+  }
 }
 
 resource "aws_db_option_group" "crypto_trading_db" {
-	name = "crypto-trading-db"
-	engine_name = "mysql"
-	major_engine_version = "5.7"
+  name                 = "crypto-trading-db"
+  engine_name          = "mysql"
+  major_engine_version = "5.7"
 
-	option {
-	  option_name = "MARIADB_AUDIT_PLUGIN"
-	}
+  option {
+    option_name = "MARIADB_AUDIT_PLUGIN"
+  }
 }
 
 resource "aws_db_subnet_group" "crypto_trading_db" {
   name       = "crypto-trading-db"
-  subnet_ids = ["subnet-a20ba2ea", "subnet-6ea4bf35"]
+  subnet_ids = ["subnet-07c2ad4b0c24e29f0", "subnet-05514fe8997e7b3b1"]
 }
 
 resource "aws_db_instance" "crypto_trading_db" {
