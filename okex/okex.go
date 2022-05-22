@@ -23,7 +23,7 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*OrderResponse, error) {
 		return nil, err
 	}
 	requestPath := "/api/v5/trade/order"
-	resp, err := apiClient.doHttpRequest("POST", requestPath, map[string]string{}, data)
+	resp, err := apiClient.doHttpRequest("POST", requestPath, "", map[string]string{}, data)
 	if err != nil {
 		fmt.Printf("res:%s\n", resp)
 		return nil, err
@@ -47,7 +47,7 @@ func (apiClient *APIClient) CancelOrder(orderID string) (*CancelOrderResponse, e
 		return nil, err
 	}
 	requestPath := "/api/v5/trade/cancel-order"
-	resp, err := apiClient.doHttpRequest("POST", requestPath, map[string]string{}, data)
+	resp, err := apiClient.doHttpRequest("POST", requestPath, "", map[string]string{}, data)
 	if err != nil {
 		fmt.Printf("res:%s\n", resp)
 		return nil, err
@@ -64,7 +64,7 @@ func (apiClient *APIClient) CancelOrder(orderID string) (*CancelOrderResponse, e
 // GetTickerInfo
 func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 	requestPath := "/api/v5/market/ticker?instId=" + productCode
-	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
+	resp, err := apiClient.doHttpRequest("GET", requestPath, "", map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s\n", requestPath, string(resp))
 	if err != nil {
 		log.Printf("action=GetOkexTicker err=%s\n", err.Error())
@@ -81,8 +81,9 @@ func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 
 // GetBalance
 func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
-	requestPath := "/api/v5/account/balance?ccy=" + currency
-	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
+	requestPath := "/api/v5/account/balance"
+	queryParams := fmt.Sprintf("?ccy=%s", currency)
+	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s\n", requestPath, string(resp))
 	if err != nil {
 		log.Printf("action=GetBalance err=%s\n", err.Error())
@@ -107,9 +108,10 @@ func (apiClient *APIClient) GetOrderList(productCode, state string) (*[]Order, e
 }
 
 func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
-	requestPath := "/api/v5/trade/orders-pending?instType=SPOT&instId=" + productCode + "&state=live"
-	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
-	log.Printf("requestPath=%s resp=%s \n", requestPath, string(resp))
+	requestPath := "/api/v5/trade/orders-pending"
+	queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=live", productCode)
+	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
+	log.Printf("requestPath=%s queryParams=%s resp=%s \n", requestPath, queryParams, string(resp))
 	if err != nil {
 		log.Printf("action=GetOpenOrderList err=%s\n", err.Error())
 		return nil, err
@@ -124,9 +126,10 @@ func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error
 }
 
 func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
-	requestPath := "/api/v5/trade/orders-history?instType=SPOT&instId=" + productCode + "&state=filled"
-	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
-	log.Printf("requestPath=%s resp=%s \n", requestPath, string(resp))
+	requestPath := "/api/v5/trade/orders-history"
+	queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=filled", productCode)
+	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
+	log.Printf("requestPath=%s queryParams=%s resp=%s \n", requestPath, queryParams, string(resp))
 	if err != nil {
 		log.Printf("action=GetFilledOrderList err=%s", err.Error())
 		return nil, err
@@ -170,8 +173,8 @@ func (apiClient APIClient) header(method, requestPath string, body []byte) map[s
 	}
 }
 
-func (apiClient *APIClient) doHttpRequest(method, requestPath string, query map[string]string, data []byte) (body []byte, err error) {
-	endpoint := BaseURL + requestPath
+func (apiClient *APIClient) doHttpRequest(method, requestPath, queryParams string, query map[string]string, data []byte) (body []byte, err error) {
+	endpoint := BaseURL + requestPath + queryParams
 	log.Printf("action=doGETPOST endpoint=%s", endpoint)
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(data))
 	if err != nil {
