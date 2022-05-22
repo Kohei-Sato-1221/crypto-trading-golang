@@ -496,6 +496,7 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 	log.Println("【placeOkexOrder】start of job")
 	fixedSize = size
 	order := &okex.Order{
+		TradeMode:     "cash",
 		ClientOrderID: "SellOid" + buyOrderID,
 		OrderType:     "limit",
 		Side:          side,
@@ -513,21 +514,21 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 	if res == nil {
 		log.Println("Place Order(1) failed.... no response")
 		return "", fixedSize
-	} else if res.Data.ResultCode != "0" {
+	} else if res.Data[0].ResultCode != "0" {
 		text := getErrorMessageForSlack(
-			res.Data.ResultCode,
+			res.Data[0].ResultCode,
 			res.Message,
 			side,
 			pair,
 			FTs(RoundDecimal(price)),
 			FTs(size))
 
-		if res.Data.ResultCode == "33017" {
+		if res.Data[0].ResultCode == "33017" {
 			if side == "sell" {
 				fixedSize = size * 0.9
 				order.Size = FTs(fixedSize)
 				res, err = apiClient.PlaceOrder(order)
-				if res.Data.ResultCode == "33017" {
+				if res.Data[0].ResultCode == "33017" {
 					text += "## Application's Terminated!! ##"
 					slackClient.PostMessage(text, true)
 					panic("## Application's Terminated!! ##")
@@ -539,7 +540,7 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 				fixedSize = size * 0.5
 				order.Size = FTs(fixedSize)
 				res, err = apiClient.PlaceOrder(order)
-				if res.Data.ResultCode == "33017" {
+				if res.Data[0].ResultCode == "33017" {
 					text += "NewSize:" + order.Size + ". But new size's also higher than available...\n"
 					slackClient.PostMessage(text, true)
 				} else {
@@ -550,12 +551,12 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 		} else {
 			slackClient.PostMessage(text, true)
 		}
-	} else if res.Data.ResultCode != "0" {
+	} else if res.Data[0].ResultCode != "0" {
 		log.Println("Place Order(1) failed.... bad response")
 		return "", fixedSize
 	}
 	log.Println("【placeOkexOrder】end of job")
-	return res.Data.OrderID, fixedSize
+	return res.Data[0].OrderID, fixedSize
 }
 
 func getErrorMessageForSlack(errorCode, errorMsg, side, code, price, size string) string {
