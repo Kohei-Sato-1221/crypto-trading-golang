@@ -517,7 +517,7 @@ func placeOkexOrder(side, cOrderID, pair string, size, price float64, apiClient 
 		log.Println("Place Order(1) failed.... Failure in [apiClient.PlaceOrder()]")
 		return "", fixedSize
 	}
-	if res == nil {
+	if res == nil || len(res.Data) < 1 {
 		log.Println("Place Order(1) failed.... no response")
 		return "", fixedSize
 	} else if res.Data[0].ResultCode != "0" {
