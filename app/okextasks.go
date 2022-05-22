@@ -443,7 +443,7 @@ func GetAvailableBalance(currency string, apiClient *okex.APIClient) float64 {
 	if balance == nil {
 		return 0.00
 	} else {
-		return STf(balance.Details.Available)
+		return STf(balance.Available)
 	}
 }
 
@@ -476,21 +476,21 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 	if res == nil {
 		log.Println("Place Order(1) failed.... no response")
 		return "", fixedSize
-	} else if res.ResultCode != "0" {
+	} else if res.Data.ResultCode != "0" {
 		text := getErrorMessageForSlack(
-			res.ResultCode,
+			res.Data.ResultCode,
 			res.Message,
 			side,
 			pair,
 			FTs(RoundDecimal(price)),
 			FTs(size))
 
-		if res.ResultCode == "33017" {
+		if res.Data.ResultCode == "33017" {
 			if side == "sell" {
 				fixedSize = size * 0.9
 				order.Size = FTs(fixedSize)
 				res, err = apiClient.PlaceOrder(order)
-				if res.ResultCode == "33017" {
+				if res.Data.ResultCode == "33017" {
 					text += "## Application's Terminated!! ##"
 					slackClient.PostMessage(text, true)
 					panic("## Application's Terminated!! ##")
@@ -502,7 +502,7 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 				fixedSize = size * 0.5
 				order.Size = FTs(fixedSize)
 				res, err = apiClient.PlaceOrder(order)
-				if res.ResultCode == "33017" {
+				if res.Data.ResultCode == "33017" {
 					text += "NewSize:" + order.Size + ". But new size's also higher than available...\n"
 					slackClient.PostMessage(text, true)
 				} else {
@@ -513,12 +513,12 @@ func placeOkexOrder(side, buyOrderID, pair string, size, price float64, apiClien
 		} else {
 			slackClient.PostMessage(text, true)
 		}
-	} else if res.ResultCode != "0" {
+	} else if res.Data.ResultCode != "0" {
 		log.Println("Place Order(1) failed.... bad response")
 		return "", fixedSize
 	}
 	log.Println("【placeOkexOrder】end of job")
-	return res.OrderID, fixedSize
+	return res.Data.OrderID, fixedSize
 }
 
 func getErrorMessageForSlack(errorCode, errorMsg, side, code, price, size string) string {

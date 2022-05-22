@@ -12,14 +12,25 @@ type Order struct {
 	Size          string `json:"sz"`
 	Price         string `json:"px"`
 	Tag           string `json:"tag"`
+	Timestamp     string `json:"cTime"`
 }
 
 type OrderResponse struct {
-	OrderID       string `json:"ordId"`
-	ClientOrderID string `json:"clOrdId"`
-	Tag           string `json:"tag"`
-	ResultCode    string `json:"sCode"` //0 means success
-	Message       string `json:"sMsg"`
+	Code    string `json:"code"`
+	Message string `json:"msg"`
+	Data    struct {
+		OrderID       string `json:"ordId"`
+		ClientOrderID string `json:"clOrdId"`
+		Tag           string `json:"tag"`
+		ResultCode    string `json:"sCode"` //0 means success
+		Message       string `json:"sMsg"`
+	} `json:"data"`
+}
+
+type GetOrderListRes struct {
+	Code    string  `json:"code"`
+	Message string  `json:"msg"`
+	Data    []Order `json:"data"`
 }
 
 type CancelOrderParam struct {
@@ -28,10 +39,15 @@ type CancelOrderParam struct {
 }
 
 type CancelOrderResponse struct {
-	ClientOrderID string `json:"clOrdId"`
-	Tag           string `json:"tag"`
-	Result        string `json:"sCode"`
-	Message       string `json:"sMsg"`
+	Code    string `json:"code"`
+	Message string `json:"msg"`
+	Data    struct {
+		OrderID       string `json:"ordId"`
+		ClientOrderID string `json:"clOrdId"`
+		Tag           string `json:"tag"`
+		Result        string `json:"sCode"`
+		Message       string `json:"sMsg"`
+	} `json:"data"`
 }
 
 type Ticker struct {
@@ -42,13 +58,26 @@ type Ticker struct {
 	Low     string `json:"low24h"`
 }
 
+type GetTickerRes struct {
+	Code    string   `json:"code"`
+	Message string   `json:"msg"`
+	Data    []Ticker `json:"data"`
+}
+
 type Balance struct {
-	Details struct {
-		Balance   string `json:"cashBal"`
-		Hold      string `json:"frozenBal"`
-		Available string `json:"availEq"`
-		Currency  string `json:"ccy"`
-	} `json:"details"`
+	Balance   string `json:"cashBal"`
+	Hold      string `json:"frozenBal"`
+	Available string `json:"availEq"`
+	Currency  string `json:"ccy"`
+}
+
+type GetBalanceRes struct {
+	Code    string `json:"code"`
+	Message string `json:"msg"`
+	Data    struct {
+		AdjustedEquity string    `json:"adjEq"`
+		Details        []Balance `json:"details"`
+	} `json:"data"`
 }
 
 type APIClient struct {

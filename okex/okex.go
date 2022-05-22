@@ -70,13 +70,13 @@ func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 		log.Printf("action=GetOkexTicker err=%s", err.Error())
 		return nil, err
 	}
-	var ticker Ticker
+	var ticker GetTickerRes
 	err = json.Unmarshal(resp, &ticker)
 	if err != nil {
 		log.Printf("action=GetOkexTicker err=%s", err.Error())
 		return nil, err
 	}
-	return &ticker, nil
+	return &ticker.Data[0], nil
 }
 
 // GetBalance
@@ -88,13 +88,13 @@ func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
 		log.Printf("action=GetBalance err=%s", err.Error())
 		return nil, err
 	}
-	var balance Balance
+	var balance GetBalanceRes
 	err = json.Unmarshal(resp, &balance)
 	if err != nil {
 		log.Printf("action=GetBalance err=%s", err.Error())
 		return nil, err
 	}
-	return &balance, nil
+	return &balance.Data.Details[0], nil
 }
 
 // GetOrderList
@@ -114,13 +114,13 @@ func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error
 		log.Printf("action=GetOpenOrderList err=%s", err.Error())
 		return nil, err
 	}
-	var orders []Order
+	var orders GetOrderListRes
 	err = json.Unmarshal(resp, &orders)
 	if err != nil {
 		log.Printf("action=GetOpenOrderList err=%s", err.Error())
 		return nil, err
 	}
-	return &orders, nil
+	return &orders.Data, nil
 }
 
 func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
@@ -131,13 +131,13 @@ func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, err
 		log.Printf("action=GetFilledOrderList err=%s", err.Error())
 		return nil, err
 	}
-	var orders []Order
+	var orders GetOrderListRes
 	err = json.Unmarshal(resp, &orders)
 	if err != nil {
 		log.Printf("action=GetFilledOrderList err=%s", err.Error())
 		return nil, err
 	}
-	return &orders, nil
+	return &orders.Data, nil
 }
 
 func New(key, secret, passphrase, exchange string) *APIClient {
