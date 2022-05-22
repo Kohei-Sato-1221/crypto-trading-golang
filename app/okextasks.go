@@ -492,7 +492,9 @@ func placeOkexBuyOrder(pair string, size, price float64, apiClient *okex.APIClie
 }
 
 func placeOkexSellOrder(buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, fixedSize float64) {
-	return placeOkexOrder("sell", "sell_"+buyOrderID, pair, size, price, apiClient, slackClinet)
+	now := time.Now().Format("2006_01_02_15_04_05")
+	clientOID := fmt.Sprintf("sell_%s_%s", pair, now)
+	return placeOkexOrder("sell", clientOID, pair, size, price, apiClient, slackClinet)
 }
 
 func placeOkexOrder(side, cOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClient *slack.APIClient) (orderId string, fixedSize float64) {
