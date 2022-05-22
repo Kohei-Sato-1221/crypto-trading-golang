@@ -2,12 +2,13 @@ package models
 
 import (
 	"errors"
-	"github.com/Kohei-Sato-1221/crypto-trading-golang/enums"
-	"github.com/Kohei-Sato-1221/crypto-trading-golang/utils"
 	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/enums"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/utils"
 )
 
 type OrderEvent struct {
@@ -76,7 +77,7 @@ func FilledCheck(productCode string) ([]string, error) {
 	cmd, _ := AppDB.Prepare(`SELECT order_id FROM buy_orders WHERE filled = 0 and order_id != '' and product_code = ? union SELECT order_id FROM sell_orders WHERE filled = 0 and order_id != '' and product_code = ?`)
 	rows, err := cmd.Query(productCode, productCode)
 	if err != nil {
-		log.Printf("Failure to exec query..... %v", err)
+		log.Printf("Failure to exec query..... %v\n", err)
 		return nil, err
 	}
 
@@ -86,7 +87,7 @@ func FilledCheck(productCode string) ([]string, error) {
 		var orderId string
 
 		if err := rows.Scan(&orderId); err != nil {
-			log.Printf("Failure to get records..... %v", err)
+			log.Printf("Failure to get records..... %v\n", err)
 			log.Println("Failure to get records.....")
 			return nil, err
 		}
@@ -142,7 +143,7 @@ func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) (bool, error) {
 		}
 		rowCnt = rowCnt + 1
 	}
-	log.Printf("ShouldPlaceBuyOrder: numberOfExistingBuyOrders:%v numberOfExistingSellOrders:%v", numberOfExistingBuyOrders, numberOfExistingSellOrders)
+	log.Printf("ShouldPlaceBuyOrder: numberOfExistingBuyOrders:%v numberOfExistingSellOrders:%v\n", numberOfExistingBuyOrders, numberOfExistingSellOrders)
 	if numberOfExistingBuyOrders < max_buy_orders &&
 		numberOfExistingSellOrders < max_sell_orders {
 		return false, nil
@@ -229,9 +230,9 @@ func UpdateCancelledBuyOrder(order_id string) error {
 }
 
 func UpdateFilledOrderWithBuyOrder(order_id string) error {
-	log.Printf("##")
-	log.Printf("##UpdateFilledOrderWithBuyOrder: %v", order_id)
-	log.Printf("##")
+	log.Printf("##\n")
+	log.Printf("##UpdateFilledOrderWithBuyOrder: %v\n", order_id)
+	log.Printf("##\n")
 	cmd1, _ := AppDB.Prepare(`update buy_orders set filled = 2 where order_id = ?`)
 	_, err := cmd1.Exec(order_id)
 	if err != nil {
@@ -259,12 +260,12 @@ func SyncBuyOrders(events *[]OrderEvent) {
 				"'" + strconv.FormatFloat(e.Size, 'f', 4, 64) + "'," +
 				"'" + e.Exchange + "'," +
 				"'" + strconv.Itoa(e.Filled) + "')"
-			log.Printf("state: %v", state)
+			log.Printf("state: %v\n", state)
 			_, err := AppDB.Exec(state)
 			if err != nil {
 				log.Println("Failure to do SyncBuyOrders..... %v", err)
 			} else {
-				log.Printf("order_id %v has been newly inserted!", e.OrderID)
+				log.Printf("order_id %v has been newly inserted!\n", e.OrderID)
 			}
 		}
 		rowsExist.Close()

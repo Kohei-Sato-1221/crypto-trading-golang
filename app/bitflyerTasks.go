@@ -93,7 +93,7 @@ func StartBfService() {
 			productCode := buyOrderInfo.ProductCode
 			size := buyOrderInfo.Size
 			sellPrice := buyOrderInfo.CalculateSellOrderPrice()
-			log.Printf("No%d Id:%v sellPrice:%10.2f strategy:%v", i, orderID, sellPrice, buyOrderInfo.Strategy)
+			log.Printf("No%d Id:%v sellPrice:%10.2f strategy:%v\n", i, orderID, sellPrice, buyOrderInfo.Strategy)
 
 			sellOrder := &bitflyer.Order{
 				ProductCode:     productCode,
@@ -122,7 +122,7 @@ func StartBfService() {
 				log.Println("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
 				break
 			}
-			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderID)
+			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s\n", orderID)
 
 			utc, _ := time.LoadLocation("UTC")
 			utcCurrentDate := time.Now().In(utc)
@@ -139,7 +139,7 @@ func StartBfService() {
 			if err != nil {
 				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
 			} else {
-				log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)
+				log.Printf("BuyOrder Succeeded! OrderId:%v\n", res.OrderId)
 			}
 		}
 	ENDOFSELLORDER:
@@ -161,7 +161,7 @@ func StartBfService() {
 	deleteRecordJob := func() {
 		log.Println("【deleteRecordJob】Start of job")
 		cnt := models.DeleteStrangeBuyOrderRecords()
-		log.Printf("DELETE strange buy_order records :  %v rows deleted", cnt)
+		log.Printf("DELETE strange buy_order records :  %v rows deleted\n", cnt)
 		log.Println("【deleteRecordJob】End of job")
 	}
 
@@ -170,15 +170,15 @@ func StartBfService() {
 		buyOrders, err := models.GetCancelledBuyOrders()
 
 		if err != nil {
-			log.Printf("## failed to cancel order....")
+			log.Printf("## failed to cancel order....\n")
 			goto ENDOFCENCELORDER
 		}
 
 		for i, order := range buyOrders {
-			log.Printf("## %v %v", i, order.OrderID)
+			log.Printf("## %v %v\n", i, order.OrderID)
 			timestamp, err := time.Parse(layout, order.Timestamp)
 			if err != nil {
-				log.Printf("## failed to cancel order....")
+				log.Printf("## failed to cancel order....\n")
 				goto ENDOFCENCELORDER
 			}
 			cancelCriteria := time.Now().AddDate(0, 0, bfCancelCriteria)
@@ -190,7 +190,7 @@ func StartBfService() {
 				}
 				apiClient.CancelOrder(cancelOrderParam)
 				models.UpdateCancelledBuyOrder(order.OrderID)
-				log.Printf("### %v is cancelled!!", order.OrderID)
+				log.Printf("### %v is cancelled!!\n", order.OrderID)
 			}
 		}
 
@@ -284,7 +284,7 @@ func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 				Filled:      0,
 			}
 			orderEvents = append(orderEvents, event)
-			log.Printf("【order】%v", event)
+			log.Printf("【order】%v\n", event)
 		}
 	}
 	// Completedされた注文に関しては2日以内に約定した注文のみ同期
@@ -306,7 +306,7 @@ func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 				Filled:      1,
 			}
 			orderEvents = append(orderEvents, event)
-			log.Printf("【order】%v", event)
+			log.Printf("【order】%v\n", event)
 		}
 	}
 	models.SyncBuyOrders(&orderEvents)
@@ -334,7 +334,7 @@ func filledCheckJob(productCode string, apiClient *bitflyer.APIClient) {
 		for _, order := range *completed_orders {
 			if orderId == order.ChildOrderAcceptanceID {
 				orderIdExist = true
-				log.Printf("## filledCheckJob  orderid:%v has been filled!")
+				log.Printf("## filledCheckJob  orderid:%v has been filled!\n")
 				break
 			}
 		}
@@ -344,7 +344,7 @@ func filledCheckJob(productCode string, apiClient *bitflyer.APIClient) {
 				log.Println("Failure to update records.....")
 				break
 			}
-			log.Printf("Order updated successfully!! orderId:%s", orderId)
+			log.Printf("Order updated successfully!! orderId:%s\n", orderId)
 		}
 	}
 ENDOFFILLEDCHECK:
@@ -353,7 +353,7 @@ ENDOFFILLEDCHECK:
 }
 
 func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient) {
-	log.Printf("strategy:%v", strategy)
+	log.Printf("strategy:%v\n", strategy)
 	log.Println("【buyingJob】start of job")
 	//shouldSkip, err := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
 	//if err != nil {
@@ -387,7 +387,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		}
 
 		minuteToExpire := models.CalculateMinuteToExpire(strategy)
-		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f minuteToExpire:%v", ticker.Ltp, ticker.BestBid, buyPrice, minuteToExpire)
+		log.Printf("LTP:%10.2f  BestBid:%10.2f  myPrice:%10.2f minuteToExpire:%v\n", ticker.Ltp, ticker.BestBid, buyPrice, minuteToExpire)
 
 		order := &bitflyer.Order{
 			ProductCode:     productCode,
@@ -421,7 +421,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		if err != nil {
 			log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
 		} else {
-			log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)
+			log.Printf("BuyOrder Succeeded! OrderId:%v\n", res.OrderId)
 		}
 	}
 	log.Println("【buyingJob】end of job")

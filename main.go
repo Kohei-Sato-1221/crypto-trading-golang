@@ -15,11 +15,11 @@ func main() {
 	models.NewMysqlBase()
 	utils.LogSetting(config.Config.LogFile)
 
-	log.Printf("#######")
-	log.Printf("#######")
-	log.Printf("config:%#v", config.Config)
-	log.Printf("#######")
-	log.Printf("#######")
+	log.Printf("#######\n")
+	log.Printf("#######\n")
+	log.Printf("config:%#v\n", config.Config)
+	log.Printf("#######\n")
+	log.Printf("#######\n")
 
 	useExchange := config.Config.Exchange
 

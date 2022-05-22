@@ -65,15 +65,15 @@ func (apiClient *APIClient) CancelOrder(orderID string) (*CancelOrderResponse, e
 func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 	requestPath := "/api/v5/market/ticker?instId=" + productCode
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
-	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
+	log.Printf("requestPath=%s resp=%s\n", requestPath, string(resp))
 	if err != nil {
-		log.Printf("action=GetOkexTicker err=%s", err.Error())
+		log.Printf("action=GetOkexTicker err=%s\n", err.Error())
 		return nil, err
 	}
 	var ticker GetTickerRes
 	err = json.Unmarshal(resp, &ticker)
 	if err != nil {
-		log.Printf("action=GetOkexTicker err=%s", err.Error())
+		log.Printf("action=GetOkexTicker err=%s\n", err.Error())
 		return nil, err
 	}
 	return &ticker.Data[0], nil
@@ -83,15 +83,15 @@ func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
 	requestPath := "/api/v5/account/balance?ccy=" + currency
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
-	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
+	log.Printf("requestPath=%s resp=%s\n", requestPath, string(resp))
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetBalance err=%s\n", err.Error())
 		return nil, err
 	}
 	var balance GetBalanceRes
 	err = json.Unmarshal(resp, &balance)
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetBalance err=%s\n", err.Error())
 		return nil, err
 	}
 	return &balance.Data.Details[0], nil
@@ -109,15 +109,15 @@ func (apiClient *APIClient) GetOrderList(productCode, state string) (*[]Order, e
 func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
 	requestPath := "/api/v5/trade/orders-pending?instType=SPOT&instId=" + productCode + "&state=live"
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
-	log.Printf("requestPath=%s resp=%s ", requestPath, string(resp))
+	log.Printf("requestPath=%s resp=%s \n", requestPath, string(resp))
 	if err != nil {
-		log.Printf("action=GetOpenOrderList err=%s", err.Error())
+		log.Printf("action=GetOpenOrderList err=%s\n", err.Error())
 		return nil, err
 	}
 	var orders GetOrderListRes
 	err = json.Unmarshal(resp, &orders)
 	if err != nil {
-		log.Printf("action=GetOpenOrderList err=%s", err.Error())
+		log.Printf("action=GetOpenOrderList err=%s\n", err.Error())
 		return nil, err
 	}
 	return &orders.Data, nil
@@ -126,7 +126,7 @@ func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error
 func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
 	requestPath := "/api/v5/trade/orders-history?instType=SPOT&instId=" + productCode + "&state=filled"
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
-	log.Printf("requestPath=%s resp=%s ", requestPath, string(resp))
+	log.Printf("requestPath=%s resp=%s \n", requestPath, string(resp))
 	if err != nil {
 		log.Printf("action=GetFilledOrderList err=%s", err.Error())
 		return nil, err
@@ -134,7 +134,7 @@ func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, err
 	var orders GetOrderListRes
 	err = json.Unmarshal(resp, &orders)
 	if err != nil {
-		log.Printf("action=GetFilledOrderList err=%s", err.Error())
+		log.Printf("action=GetFilledOrderList err=%s\n", err.Error())
 		return nil, err
 	}
 	return &orders.Data, nil
@@ -154,10 +154,10 @@ func (apiClient APIClient) header(method, requestPath string, body []byte) map[s
 
 	preHashStr := getPreHashString(timestamp, method, requestPath, string(body))
 
-	log.Printf("preHashStr:%s ", preHashStr)
-	log.Printf("timeStamp:%s ", timestamp)
+	log.Printf("preHashStr:%s \n", preHashStr)
+	log.Printf("timeStamp:%s \n", timestamp)
 
-	log.Printf("message:%s ", message)
+	log.Printf("message:%s \n", message)
 
 	sign := signBySha256Base64(preHashStr, apiClient.apisecret)
 	return map[string]string{

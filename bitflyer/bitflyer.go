@@ -91,15 +91,15 @@ type Balance struct {
 func (apiClient *APIClient) GetBalance() ([]Balance, error) {
 	url := "me/getbalance"
 	resp, err := apiClient.doGETPOST("GET", url, map[string]string{}, nil)
-	log.Printf("url=%s resp=%s", url, string(resp))
+	log.Printf("url=%s resp=%s\n", url, string(resp))
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetBalance err=%s\n", err.Error())
 		return nil, err
 	}
 	var balance []Balance
 	err = json.Unmarshal(resp, &balance)
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetBalance err=%s\n", err.Error())
 		return nil, err
 	}
 	return balance, nil
@@ -137,9 +137,9 @@ func (apiClient *APIClient) GetActiveBuyOrders(product_code, order_status string
 	params["product_code"] = product_code
 	params["child_order_state"] = order_status
 	resp, err := apiClient.doGETPOST("GET", url, params, nil)
-	log.Printf("url=%s resp=%s", url, string(resp))
+	log.Printf("url=%s resp=%s\n", url, string(resp))
 	if err != nil {
-		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
+		log.Printf("action=GetOrderByOrderId err=%s\n", err.Error())
 		return nil, err
 	}
 	var orders []Order
@@ -170,7 +170,7 @@ func (t *Ticker) GetMiddlePrice() float64 {
 func (t *Ticker) DateTime() time.Time {
 	dateTime, err := time.Parse(time.RFC3339, t.Timestamp)
 	if err != nil {
-		log.Printf("action=DateTime, err=%s", err.Error())
+		log.Printf("action=DateTime, err=%s\n", err.Error())
 	}
 	return dateTime
 }
@@ -182,15 +182,15 @@ func (t *Ticker) TruncateDateTime(duration time.Duration) time.Time {
 func (apiClient *APIClient) GetTicker(productCode string) (*Ticker, error) {
 	url := "ticker"
 	resp, err := apiClient.doGETPOST("GET", url, map[string]string{"product_code": productCode}, nil)
-	log.Printf("url=%s resp=%s", url, string(resp))
+	log.Printf("url=%s resp=%s\n", url, string(resp))
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetBalance err=%s\n", err.Error())
 		return nil, err
 	}
 	var ticker Ticker
 	err = json.Unmarshal(resp, &ticker)
 	if err != nil {
-		log.Printf("action=GetBalance err=%s", err.Error())
+		log.Printf("action=GetBalance err=%s\n", err.Error())
 		return nil, err
 	}
 	return &ticker, nil

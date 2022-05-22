@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"github.com/Kohei-Sato-1221/crypto-trading-golang/enums"
 	"log"
 	"math"
+
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/enums"
 )
 
 func Round(f float64) float64 {
@@ -11,7 +12,7 @@ func Round(f float64) float64 {
 }
 
 func CalculateBuyPrice(ltp, low float64, strategy int) float64 {
-	log.Printf("LTP:%10.2f  BestBid:%10.2f ", ltp, low)
+	log.Printf("LTP:%10.2f  BestBid:%10.2f \n", ltp, low)
 
 	if strategy == enums.TEST_STG {
 		return Round(ltp * 0.8)

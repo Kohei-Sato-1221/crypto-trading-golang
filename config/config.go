@@ -67,12 +67,12 @@ var Config ConfigList
 func NewConfig() {
 	cfg, err := ini.Load("config.ini")
 	if err != nil {
-		log.Printf("Failed to read file: %v", err)
+		log.Printf("Failed to read file: %v\n", err)
 		os.Exit(1)
 	}
 	pcfg, err := ini.Load("private_config.ini")
 	if err != nil {
-		log.Printf("Failed to read file: %v", err)
+		log.Printf("Failed to read file: %v\n", err)
 		os.Exit(1)
 	}
 
