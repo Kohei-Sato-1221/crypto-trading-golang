@@ -86,16 +86,19 @@ type GetBalanceRes struct {
 	Code    string `json:"code"`
 	Message string `json:"msg"`
 	Data    []struct {
-		AdjustedEquity string  `json:"adjEq"`
-		Details        Balance `json:"details"`
+		AdjustedEquity string    `json:"adjEq"`
+		Details        []Balance `json:"details"`
 	} `json:"data"`
 }
 
 func (b *GetBalanceRes) getSpecifiedCcyBalance(currency string) *Balance {
 	var balance Balance
-	for _, data := range b.Data {
-		if data.Details.Currency == currency {
-			balance = data.Details
+	if len(b.Data) < 1 {
+		return &balance
+	}
+	for _, data := range b.Data[0].Details {
+		if data.Currency == currency {
+			balance = data
 			return &balance
 		}
 	}

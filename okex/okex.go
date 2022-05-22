@@ -109,7 +109,7 @@ func (apiClient *APIClient) GetOrderList(productCode, state string) (*[]Order, e
 }
 
 func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
-	requestPath := "/api/v5/trade/orders-pending"
+	requestPath := "/api/v5/trade/orders-pending?instType=SPOT"
 	// queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=live", productCode)
 	queryParams := ""
 	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
