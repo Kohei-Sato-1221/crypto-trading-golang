@@ -13,6 +13,7 @@ type Order struct {
 	Price         string `json:"px"`
 	Tag           string `json:"tag"`
 	Timestamp     string `json:"cTime"`
+	State         string `json:"state"`
 }
 
 type OrderResponse struct {
@@ -31,6 +32,16 @@ type GetOrderListRes struct {
 	Code    string  `json:"code"`
 	Message string  `json:"msg"`
 	Data    []Order `json:"data"`
+}
+
+func (l *GetOrderListRes) getSpecifiedInstOrderList(instrumentID, state string) *[]Order {
+	var orders []Order
+	for _, order := range l.Data {
+		if order.InstrumentID == instrumentID && order.State == state {
+			orders = append(orders, order)
+		}
+	}
+	return &orders
 }
 
 type CancelOrderParam struct {
@@ -65,19 +76,30 @@ type GetTickerRes struct {
 }
 
 type Balance struct {
+	Currency  string `json:"ccy"`
 	Balance   string `json:"cashBal"`
 	Hold      string `json:"frozenBal"`
 	Available string `json:"availEq"`
-	Currency  string `json:"ccy"`
 }
 
 type GetBalanceRes struct {
 	Code    string `json:"code"`
 	Message string `json:"msg"`
-	Data    struct {
-		AdjustedEquity string    `json:"adjEq"`
-		Details        []Balance `json:"details"`
+	Data    []struct {
+		AdjustedEquity string  `json:"adjEq"`
+		Details        Balance `json:"details"`
 	} `json:"data"`
+}
+
+func (b *GetBalanceRes) getSpecifiedCcyBalance(currency string) *Balance {
+	var balance Balance
+	for _, data := range b.Data {
+		if data.Details.Currency == currency {
+			balance = data.Details
+			return &balance
+		}
+	}
+	return &balance
 }
 
 type APIClient struct {

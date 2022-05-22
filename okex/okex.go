@@ -82,7 +82,8 @@ func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 // GetBalance
 func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
 	requestPath := "/api/v5/account/balance"
-	queryParams := fmt.Sprintf("?ccy=%s", currency)
+	// queryParams := fmt.Sprintf("?ccy=%s", currency)
+	queryParams := ""
 	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s\n", requestPath, string(resp))
 	if err != nil {
@@ -95,7 +96,7 @@ func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
 		log.Printf("action=GetBalance err=%s\n", err.Error())
 		return nil, err
 	}
-	return &balance.Data.Details[0], nil
+	return balance.getSpecifiedCcyBalance(currency), nil
 }
 
 // GetOrderList
@@ -103,13 +104,14 @@ func (apiClient *APIClient) GetOrderList(productCode, state string) (*[]Order, e
 	if state == "0" {
 		return GetOpenOrderList(apiClient, productCode)
 	} else {
-		return GetOpenOrderList(apiClient, productCode)
+		return GetFilledOrderList(apiClient, productCode)
 	}
 }
 
 func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
 	requestPath := "/api/v5/trade/orders-pending"
-	queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=live", productCode)
+	// queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=live", productCode)
+	queryParams := ""
 	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
 	log.Printf("requestPath=%s queryParams=%s resp=%s \n", requestPath, queryParams, string(resp))
 	if err != nil {
@@ -122,12 +124,13 @@ func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error
 		log.Printf("action=GetOpenOrderList err=%s\n", err.Error())
 		return nil, err
 	}
-	return &orders.Data, nil
+	return orders.getSpecifiedInstOrderList(productCode, "live"), nil
 }
 
 func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
 	requestPath := "/api/v5/trade/orders-history"
-	queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=filled", productCode)
+	// queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=filled", productCode)
+	queryParams := ""
 	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
 	log.Printf("requestPath=%s queryParams=%s resp=%s \n", requestPath, queryParams, string(resp))
 	if err != nil {
@@ -140,7 +143,7 @@ func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, err
 		log.Printf("action=GetFilledOrderList err=%s\n", err.Error())
 		return nil, err
 	}
-	return &orders.Data, nil
+	return orders.getSpecifiedInstOrderList(productCode, "filled"), nil
 }
 
 func New(key, secret, passphrase, exchange string) *APIClient {
