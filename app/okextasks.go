@@ -378,10 +378,13 @@ func StartOKEXService(exchange string) {
 		log.Println("")
 		log.Println("")
 		log.Println("")
-		scheduler.Every(1).Day().Run(postSlackJob)
-		scheduler.Every(1).Day().Run(buyingBTCJob01)
-		scheduler.Every(1).Day().Run(buyingETHJob01)
-		scheduler.Every().Day().At("06:30").Run(postSlackJob)
+
+		postSlackJob()
+		buyingBTCJob01()
+		buyingETHJob01()
+
+		time.Sleep(time.Second * 60)
+
 		scheduler.Every(30).Seconds().Run(syncOrderListJob)
 		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
 		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
