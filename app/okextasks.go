@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/config"
@@ -486,14 +487,14 @@ func GetAvailableBalance(currency string, apiClient *okex.APIClient) float64 {
 }
 
 func placeOkexBuyOrder(pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, fixedSize float64) {
-	now := time.Now().Format("2006_01_02_15_04_05")
-	clientOID := fmt.Sprintf("buy_%s_%s", pair, now)
+	now := time.Now().Format("20060102150405")
+	clientOID := fmt.Sprintf("buy%s_%s", strings.Replace(pair, "-", "", -1), now)
 	return placeOkexOrder("buy", clientOID, pair, size, price, apiClient, slackClinet)
 }
 
 func placeOkexSellOrder(buyOrderID, pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, fixedSize float64) {
-	now := time.Now().Format("2006_01_02_15_04_05")
-	clientOID := fmt.Sprintf("sell_%s_%s", pair, now)
+	now := time.Now().Format("20060102150405")
+	clientOID := fmt.Sprintf("sell%s%s", strings.Replace(pair, "-", "", -1), now)
 	return placeOkexOrder("sell", clientOID, pair, size, price, apiClient, slackClinet)
 }
 
