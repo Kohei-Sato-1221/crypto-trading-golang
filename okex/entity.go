@@ -18,7 +18,7 @@ type Order struct {
 type OrderResponse struct {
 	Code    string `json:"code"`
 	Message string `json:"msg"`
-	Data    struct {
+	Data    []struct {
 		OrderID       string `json:"ordId"`
 		ClientOrderID string `json:"clOrdId"`
 		Tag           string `json:"tag"`
