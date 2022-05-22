@@ -22,7 +22,7 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*OrderResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	requestPath := "/api/spot/v3/orders"
+	requestPath := "/api/v5/trade/order"
 	resp, err := apiClient.doHttpRequest("POST", requestPath, map[string]string{}, data)
 	if err != nil {
 		fmt.Printf("res:%s\n", resp)
@@ -38,24 +38,24 @@ func (apiClient *APIClient) PlaceOrder(order *Order) (*OrderResponse, error) {
 }
 
 // Cancel an Order
-func (apiClient *APIClient) CancelOrder(orderID, pair string) (*OrderResponse, error) {
-	cancelOrderParam := &Order{
-		InstrumentID: pair,
+func (apiClient *APIClient) CancelOrder(orderID string) (*CancelOrderResponse, error) {
+	cancelOrderParam := &CancelOrderParam{
+		OrderID: orderID,
 	}
 	data, err := json.Marshal(cancelOrderParam)
 	if err != nil {
 		return nil, err
 	}
-	requestPath := "/api/spot/v3/cancel_orders/" + orderID
+	requestPath := "/api/v5/trade/cancel-order"
 	resp, err := apiClient.doHttpRequest("POST", requestPath, map[string]string{}, data)
 	if err != nil {
 		fmt.Printf("res:%s\n", resp)
 		return nil, err
 	}
-	var response OrderResponse
+	var response CancelOrderResponse
 	err = json.Unmarshal(resp, &response)
 	if err != nil {
-		fmt.Printf("error in CancelOrder err:%s\n", response.ErrorMsg)
+		fmt.Printf("error in CancelOrder err:%s\n", response.Message)
 		return nil, err
 	}
 	return &response, nil
@@ -63,7 +63,7 @@ func (apiClient *APIClient) CancelOrder(orderID, pair string) (*OrderResponse, e
 
 // GetTickerInfo
 func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
-	requestPath := "/api/spot/v3/instruments/" + productCode + "/ticker"
+	requestPath := "/api/v5/market/ticker?instId=" + productCode
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
 	if err != nil {
@@ -81,7 +81,7 @@ func (apiClient *APIClient) GetOkexTicker(productCode string) (*Ticker, error) {
 
 // GetBalance
 func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
-	requestPath := "/api/spot/v3/accounts/" + currency
+	requestPath := "/api/v5/account/balance?ccy=" + currency
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s", requestPath, string(resp))
 	if err != nil {
@@ -99,65 +99,45 @@ func (apiClient *APIClient) GetBlance(currency string) (*Balance, error) {
 
 // GetOrderList
 func (apiClient *APIClient) GetOrderList(productCode, state string) (*[]Order, error) {
-	requestPath := "/api/spot/v3/orders?instrument_id=" + productCode + "&state=" + state
+	if state == "0" {
+		return GetOpenOrderList(apiClient, productCode)
+	} else {
+		return GetOpenOrderList(apiClient, productCode)
+	}
+}
+
+func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
+	requestPath := "/api/v5/trade/orders-pending?instType=SPOT&instId=" + productCode + "&state=live"
 	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
 	log.Printf("requestPath=%s resp=%s ", requestPath, string(resp))
 	if err != nil {
-		log.Printf("action=GetOrderList err=%s", err.Error())
+		log.Printf("action=GetOpenOrderList err=%s", err.Error())
 		return nil, err
 	}
 	var orders []Order
 	err = json.Unmarshal(resp, &orders)
 	if err != nil {
-		log.Printf("action=GetOrderList err=%s", err.Error())
+		log.Printf("action=GetOpenOrderList err=%s", err.Error())
 		return nil, err
 	}
 	return &orders, nil
 }
 
-type Order struct {
-	OrderID      string `json:"order_id"`
-	ClientOid    string `json:"client_oid"`
-	Type         string `json:"type"`
-	Side         string `json:"side"`
-	InstrumentID string `json:"instrument_id"`
-	OrderType    string `json:"order_type"`
-	Price        string `json:"price"`
-	Size         string `json:"size"`
-	State        string `json:"state"`
-	Timestamp    string `json:"timestamp"`
-}
-
-type Ticker struct {
-	BestAsk string `json:"best_ask"`
-	BestBid string `json:"best_bid"`
-	Ltp     string `json:"last"`
-	High    string `json:"high_24h"`
-	Low     string `json:"low_24h"`
-}
-
-type Balance struct {
-	Balance   string `json:"balance"`
-	Hold      string `json:"hold"`
-	Available string `json:"available"`
-	Currency  string `json:"currency"`
-	ID        string `json:"id"`
-}
-
-type OrderResponse struct {
-	OrderId   string `json:"order_id"`
-	ClientOid string `json:"client_oid"`
-	Result    bool   `json:"result"`
-	ErrorCode string `json:"error_code"`
-	ErrorMsg  string `json:"error_message"`
-}
-
-type APIClient struct {
-	apikey     string
-	apisecret  string
-	passphrase string
-	exchange   string
-	httpClient *http.Client
+func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
+	requestPath := "/api/v5/trade/orders-history?instType=SPOT&instId=" + productCode + "&state=filled"
+	resp, err := apiClient.doHttpRequest("GET", requestPath, map[string]string{}, nil)
+	log.Printf("requestPath=%s resp=%s ", requestPath, string(resp))
+	if err != nil {
+		log.Printf("action=GetFilledOrderList err=%s", err.Error())
+		return nil, err
+	}
+	var orders []Order
+	err = json.Unmarshal(resp, &orders)
+	if err != nil {
+		log.Printf("action=GetFilledOrderList err=%s", err.Error())
+		return nil, err
+	}
+	return &orders, nil
 }
 
 func New(key, secret, passphrase, exchange string) *APIClient {
