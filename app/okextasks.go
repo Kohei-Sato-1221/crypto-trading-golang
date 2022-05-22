@@ -303,12 +303,11 @@ func StartOKEXService(exchange string) {
 	}
 
 	smallRunnning := false
+	scheduler.Every().Day().At("06:30").Run(postSlackJob)
+	scheduler.Every(30).Seconds().Run(syncOrderListJob)
+	scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
+	scheduler.Every(55).Seconds().Run(placeSellOrderJob)
 	if !config.Config.IsTest {
-		scheduler.Every().Day().At("06:30").Run(postSlackJob)
-		scheduler.Every(30).Seconds().Run(syncOrderListJob)
-		scheduler.Every(300).Seconds().Run(syncSellOrderListJob)
-		scheduler.Every(55).Seconds().Run(placeSellOrderJob)
-
 		if !smallRunnning {
 			scheduler.Every().Day().At("03:55").Run(buyingJob01)
 			scheduler.Every().Day().At("02:55").Run(buyingOKBJob01)
@@ -348,6 +347,10 @@ func StartOKEXService(exchange string) {
 		scheduler.Every().Day().At("20:40").Run(buyingETHJob03)
 
 		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
+	} else {
+		scheduler.Every(1).Day().Run(postSlackJob)
+		scheduler.Every(1).Day().Run(buyingBTCJob01)
+		scheduler.Every(1).Day().Run(buyingETHJob01)
 	}
 	runtime.Goexit()
 }
