@@ -128,7 +128,7 @@ func GetOpenOrderList(apiClient *APIClient, productCode string) (*[]Order, error
 }
 
 func GetFilledOrderList(apiClient *APIClient, productCode string) (*[]Order, error) {
-	requestPath := "/api/v5/trade/orders-history"
+	requestPath := "/api/v5/trade/orders-history?instType=SPOT"
 	// queryParams := fmt.Sprintf("?instType=SPOT&instId=%s&state=filled", productCode)
 	queryParams := ""
 	resp, err := apiClient.doHttpRequest("GET", requestPath, queryParams, map[string]string{}, nil)
