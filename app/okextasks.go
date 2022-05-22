@@ -488,7 +488,7 @@ func GetAvailableBalance(currency string, apiClient *okex.APIClient) float64 {
 
 func placeOkexBuyOrder(pair string, size, price float64, apiClient *okex.APIClient, slackClinet *slack.APIClient) (orderId string, fixedSize float64) {
 	now := time.Now().Format("20060102150405")
-	clientOID := fmt.Sprintf("buy%s_%s", strings.Replace(pair, "-", "", -1), now)
+	clientOID := fmt.Sprintf("buy%s%s", strings.Replace(pair, "-", "", -1), now)
 	return placeOkexOrder("buy", clientOID, pair, size, price, apiClient, slackClinet)
 }
 
