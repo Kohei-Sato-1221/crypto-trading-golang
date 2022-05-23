@@ -79,7 +79,7 @@ type Balance struct {
 	Currency  string `json:"ccy"`
 	Balance   string `json:"cashBal"`
 	Hold      string `json:"frozenBal"`
-	Available string `json:"availEq"`
+	Available string `json:"availBal"`
 }
 
 type GetBalanceRes struct {
