@@ -101,7 +101,7 @@ func StartBfService() {
 				Side:            "SELL",
 				Price:           sellPrice,
 				Size:            size,
-				MinuteToExpires: 518400, //360days
+				MinuteToExpires: 43200, //30days
 				TimeInForce:     "GTC",
 			}
 
