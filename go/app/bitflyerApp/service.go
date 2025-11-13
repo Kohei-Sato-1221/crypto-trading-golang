@@ -96,6 +96,10 @@ func StartBfService() {
 		log.Println("【deleteRecordJob】End of job")
 	}
 
+	savePriceHistoryJobFunc := func() {
+		savePriceHistoryJob(apiClient)
+	}
+
 	cancelBuyOrderJob := func() {
 		// 一定期間が経過した買い注文は削除するようにする
 		log.Println("【cancelBuyOrderJob】Start of job")
@@ -151,6 +155,10 @@ func StartBfService() {
 		scheduler.Every(90).Seconds().Run(ethFilledCheckJob)
 		scheduler.Every(90).Seconds().Run(btcFilledCheckJob)
 		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
+
+		// 毎日6時と18時に価格履歴を保存
+		scheduler.Every().Day().At("06:00").Run(savePriceHistoryJobFunc)
+		scheduler.Every().Day().At("18:00").Run(savePriceHistoryJobFunc)
 
 		// 毎日朝9時に収益結果をSlackに送信
 		scheduler.Every().Day().At("06:45").Run(sendResultsJob)
