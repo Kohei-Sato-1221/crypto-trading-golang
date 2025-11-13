@@ -34,39 +34,39 @@ func StartBfService() {
 	)
 
 	buyingBTCJob := func() {
-		placeBuyOrder(enums.Stg0BtcLtp3low7, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient)
+		placeBuyOrder(enums.Stg0BtcLtp3low7, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayThursday))
 	}
 
 	// buyingBTCJob02 := func() {
-	// 	placeBuyOrder(enums.Stg1BtcLtp997, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient)
+	// 	placeBuyOrder(enums.Stg1BtcLtp997, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient, nil)
 	// }
 
 	// buyingBTCJob03 := func() {
-	// 	placeBuyOrder(enums.Stg2BtcLtp98, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
+	// 	placeBuyOrder(enums.Stg2BtcLtp98, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient, nil)
 	// }
 
 	// buyingBTCJob99 := func() {
-	// 	placeBuyOrder(enums.Stg3BtcLtp90, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
+	// 	placeBuyOrder(enums.Stg3BtcLtp90, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient, nil)
 	// }
 
 	buyingETHJob := func() {
-		placeBuyOrder(enums.Stg10EthLtp995, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient)
+		placeBuyOrder(enums.Stg10EthLtp995, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayThursday))
 	}
 
 	// buyingETHJob02 := func() {
-	// 	placeBuyOrder(enums.Stg11EthLtp98, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient)
+	// 	placeBuyOrder(enums.Stg11EthLtp98, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient, nil)
 	// }
 
 	// buyingETHJob03 := func() {
-	// 	placeBuyOrder(enums.Stg12EthLtp97, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
+	// 	placeBuyOrder(enums.Stg12EthLtp97, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, nil)
 	// }
 
 	// buyingETHJob04 := func() {
-	// 	placeBuyOrder(enums.Stg13EthLtp3low7, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
+	// 	placeBuyOrder(enums.Stg13EthLtp3low7, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, nil)
 	// }
 
 	// buyingETHJob99 := func() {
-	// 	placeBuyOrder(enums.Stg14EthLtp90, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
+	// 	placeBuyOrder(enums.Stg14EthLtp90, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, nil)
 	// }
 
 	btcFilledCheckJob := func() {
@@ -135,17 +135,19 @@ func StartBfService() {
 	}
 
 	if !config.Config.IsTest {
+		scheduler.Every().Day().At("14:53").Run(buyingBTCJob)
+		scheduler.Every().Day().At("14:53").Run(buyingETHJob)
+		// scheduler.Every().Thursday().At("14:35").Run(buyingBTCJob)
+		// scheduler.Every().Thursday().At("14:35").Run(buyingETHJob)
+
+		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
+	} else {
 		scheduler.Every(240).Seconds().Run(sellOrderJob)
 		scheduler.Every(90).Seconds().Run(syncBTCBuyOrderJob)
 		scheduler.Every(90).Seconds().Run(syncETHBuyOrderJob)
 		scheduler.Every(90).Seconds().Run(ethFilledCheckJob)
 		scheduler.Every(90).Seconds().Run(btcFilledCheckJob)
 		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
-
-		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
-	} else {
-		scheduler.Every().Thursday().At("13:15").Run(buyingBTCJob)
-		scheduler.Every().Thursday().At("13:15").Run(buyingETHJob)
 		// 動作確認用のジョブ
 		// scheduler.Every(100000).Seconds().Run(buyingBTCJob)
 		// scheduler.Every(100000).Seconds().Run(buyingETHJob)

@@ -144,6 +144,8 @@ type ConfigList struct {
 	SlackToken  string
 
 	IsTest bool
+
+	BudgetCriteria float64 // 日本円がこの金額以下なら買い注文をしない
 }
 
 var BaseURL string

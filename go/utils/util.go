@@ -25,6 +25,10 @@ func FTs(f64 float64) string {
 	return str
 }
 
+func ToP[T any](value T) *T {
+	return &value
+}
+
 func RoundDecimal(num float64) float64 {
 	return math.Round(num*100) / 100
 }
