@@ -137,6 +137,10 @@ func StartBfService() {
 		savePriceHistoryJob(apiClient)
 	}
 
+	sendResultsJobFunc := func() {
+		sendResultsJob(apiClient)
+	}
+
 	cancelBuyOrderJob := func() {
 		// 一定期間が経過した買い注文は削除するようにする
 		log.Println("【cancelBuyOrderJob】Start of job")
@@ -198,7 +202,9 @@ func StartBfService() {
 		scheduler.Every().Day().At("18:00").Run(wrapJob(savePriceHistoryJobFunc))
 
 		// 毎日朝9時に収益結果をSlackに送信
-		scheduler.Every().Day().At("06:45").Run(wrapJob(sendResultsJob))
+		scheduler.Every(90).Seconds().Run(wrapJob(sendResultsJobFunc))
+		// scheduler.Every().Day().At("06:45").Run(wrapJob(sendResultsJobFunc))
+
 		scheduler.Every().Day().At("23:45").Run(wrapJob(cancelBuyOrderJob))
 
 		// 12:20と22:50にアプリをグレースフルシャットダウン（実行中のジョブ完了を待機）
