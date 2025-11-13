@@ -3,7 +3,9 @@ package bitflyerApp
 import (
 	"fmt"
 	"log"
+	"os"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
@@ -15,7 +17,42 @@ import (
 	"github.com/carlescere/scheduler"
 )
 
-var slackClient *slack.APIClient
+var (
+	slackClient *slack.APIClient
+	runningJobs sync.WaitGroup // 実行中のジョブを追跡
+)
+
+// wrapJob はジョブをラップして、実行開始時にWaitGroupに追加し、終了時にDoneを呼びます
+func wrapJob(job func()) func() {
+	return func() {
+		runningJobs.Add(1)
+		defer runningJobs.Done()
+		job()
+	}
+}
+
+// gracefulShutdown は実行中のジョブが完了するまで待機してから終了します
+func gracefulShutdown(timeoutMinutes int) {
+	log.Println("【app】グレースフルシャットダウン開始 - 実行中のジョブの完了を待機します")
+
+	// タイムアウト付きで待機
+	done := make(chan struct{})
+	go func() {
+		runningJobs.Wait()
+		close(done)
+	}()
+
+	timeout := time.Duration(timeoutMinutes) * time.Minute
+	select {
+	case <-done:
+		log.Println("【app】すべてのジョブが完了しました")
+	case <-time.After(timeout):
+		log.Printf("【app】タイムアウト（%d分）経過 - 強制終了します", timeoutMinutes)
+	}
+
+	log.Println("【app】アプリケーションを終了します")
+	os.Exit(0)
+}
 
 func StartBfService() {
 	log.Println("【StartBfService】start")
@@ -135,35 +172,42 @@ func StartBfService() {
 	}
 
 	if !config.Config.IsTest {
-		scheduler.Every().Day().At("6:30").Run(buyingBTCJob)
-		scheduler.Every().Day().At("6:30").Run(buyingETHJob)
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob))
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob))
 
-		scheduler.Every().Day().At("6:30").Run(buyingBTCJob02)
-		scheduler.Every().Day().At("6:30").Run(buyingETHJob02)
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob02))
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob02))
 
-		scheduler.Every().Day().At("6:30").Run(buyingBTCJob03)
-		scheduler.Every().Day().At("6:30").Run(buyingETHJob03)
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob03))
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob03))
 
-		scheduler.Every().Day().At("6:30").Run(buyingETHJob04)
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob04))
 
-		scheduler.Every().Day().At("6:30").Run(buyingETHJob99)
-		scheduler.Every().Day().At("6:30").Run(buyingBTCJob99)
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob99))
+		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob99))
 
-		scheduler.Every(90).Seconds().Run(syncBTCBuyOrderJob)
-		scheduler.Every(90).Seconds().Run(syncETHBuyOrderJob)
-		scheduler.Every(180).Seconds().Run(sellOrderJob)
-		scheduler.Every(90).Seconds().Run(ethFilledCheckJob)
-		scheduler.Every(90).Seconds().Run(btcFilledCheckJob)
-		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
+		scheduler.Every(90).Seconds().Run(wrapJob(syncBTCBuyOrderJob))
+		scheduler.Every(90).Seconds().Run(wrapJob(syncETHBuyOrderJob))
+		scheduler.Every(180).Seconds().Run(wrapJob(sellOrderJob))
+		scheduler.Every(90).Seconds().Run(wrapJob(ethFilledCheckJob))
+		scheduler.Every(90).Seconds().Run(wrapJob(btcFilledCheckJob))
+		scheduler.Every(7200).Seconds().Run(wrapJob(deleteRecordJob))
 
 		// 毎日6時と18時に価格履歴を保存
-		scheduler.Every().Day().At("06:00").Run(savePriceHistoryJobFunc)
-		scheduler.Every().Day().At("18:00").Run(savePriceHistoryJobFunc)
+		scheduler.Every().Day().At("06:00").Run(wrapJob(savePriceHistoryJobFunc))
+		scheduler.Every().Day().At("18:00").Run(wrapJob(savePriceHistoryJobFunc))
 
 		// 毎日朝9時に収益結果をSlackに送信
-		scheduler.Every().Day().At("06:45").Run(sendResultsJob)
+		scheduler.Every().Day().At("06:45").Run(wrapJob(sendResultsJob))
+		scheduler.Every().Day().At("23:45").Run(wrapJob(cancelBuyOrderJob))
 
-		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
+		// 12:20と22:50にアプリをグレースフルシャットダウン（実行中のジョブ完了を待機）
+		scheduler.Every().Day().At("12:20").Run(func() {
+			gracefulShutdown(5) // 最大5分待機
+		})
+		scheduler.Every().Day().At("22:50").Run(func() {
+			gracefulShutdown(5) // 最大5分待機
+		})
 	} else {
 		// 動作確認用のジョブ
 		// scheduler.Every(100000).Seconds().Run(buyingBTCJob)
