@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync"
 	"time"
@@ -48,6 +49,21 @@ func gracefulShutdown(timeoutMinutes int) {
 		log.Println("【app】すべてのジョブが完了しました")
 	case <-time.After(timeout):
 		log.Printf("【app】タイムアウト（%d分）経過 - 強制終了します", timeoutMinutes)
+	}
+
+	log.Println("【app】systemdサービスを停止します")
+	// systemdサービスを停止（Restart=alwaysのため、プロセス終了だけでは再起動される）
+	// サーバー再起動時の自動起動は有効のまま（systemctl enableの状態を維持）
+	stopCmd := exec.Command("sudo", "systemctl", "stop", "bfTradingApp.service")
+	stopCmd.Stdout = nil
+	stopCmd.Stderr = nil
+
+	// サービスを停止
+	if err := stopCmd.Run(); err != nil {
+		log.Printf("【app】systemctl stop の実行に失敗しました: %v", err)
+		log.Println("【app】プロセスを終了します（サービスは自動的に再起動される可能性があります）")
+	} else {
+		log.Println("【app】systemdサービスを停止しました（サーバー再起動時には自動起動します）")
 	}
 
 	log.Println("【app】アプリケーションを終了します")
