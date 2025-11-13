@@ -1,0 +1,49 @@
+---
+description: このファイルはプロジェクトのディレクトリ構成やTerraformの適応方法について説明するものです。
+globs: ["**/*"]
+alwaysApply: true
+---
+
+## ディレクトリ構成
+プロジェクトのディレクトリ構造やその設計思想等は以下を読めばわかります。
+@file ../../README.md
+
+
+## マンド
+基本的にMakefileのMakeコマンドで実行することができます。
+@file ../../Makefile
+
+## 開発ルール
+
+### Terraform
+- Makefileに記載されている`make`コマンドを使ってterraformの操作を行うこと（terraformコマンドは直接利用しないこと）
+- Terraformの修正が完了した場合は、`make plan`を実行してエラーが発生しないことを確認すること。
+- `terraform.tfvars`は機密情報を含むため、Gitにコミットしないこと（`.gitignore`に含まれている）
+
+### データベースマイグレーション
+- データベーススキーマの変更は必ずAtlasを使用してマイグレーションファイルを作成すること
+- マイグレーションファイルの作成手順：
+  1. `db/crypto-trading-db/atlas/schema.hcl`を更新
+  2. `cd db && make atlas-diff n=<timestamp>_<description>`でマイグレーションファイルを生成
+  3. 生成されたSQLファイルを確認
+  4. `make atlas-apply`でマイグレーションを適用
+- マイグレーションファイルを手動で編集した場合は、`make atlas-hash`でチェックサムを更新すること
+- マイグレーションコマンドは`db/Makefile`に定義されているため、`cd db`ディレクトリで実行すること
+
+### コード構造
+- ジョブ関数は可読性のため、可能な限り別ファイルに分離すること（例：`savePriceHistoryJob.go`、`sendResultJob.go`）
+- 重複コードはDRY原則に従って共通関数に抽出すること
+- エラーハンドリングでは、エラーメッセージをSlackに通知すること（`slackClient.PostMessage()`を使用）
+
+### タイムゾーン
+- スケジューラーの時刻指定は、システムのタイムゾーンに依存しない実装を心がけること
+- JST（日本時間）で実行したい場合は、UTC時刻に変換して設定すること（JST = UTC + 9時間）
+- または、ジョブ内でJST時刻を明示的にチェックする方法を使用すること
+
+### 機密情報
+- `private_config.ini`や`terraform.tfvars`などの機密情報を含むファイルはGitにコミットしないこと
+- APIキーやパスワードなどの機密情報は環境変数や設定ファイルで管理し、コードに直接書かないこと
+
+### エラーハンドリング
+- APIエラーレスポンス（`Status != 0`や`ErrorMessage`）は適切に処理し、Slackに通知すること
+- エラーメッセージには、どのオーダーで失敗したか（OrderID、Price、Size、Strategyなど）を含めること

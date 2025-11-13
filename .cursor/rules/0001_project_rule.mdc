@@ -1,0 +1,19 @@
+---
+description: jusetsuのinfrastructureリポジトリの全体ルール
+globs: ["**/*"]
+alwaysApply: true
+---
+
+## 一般設定
+このファイルはjusetsuのinfrastructureプロジェクト全体のルールを記述するものです。
+
+## 全体ルール
+1. このファイル以外のrulesを読み込んだ場合は、そのファイル名をmarkdown形式で箇条書きでリストアップ してね。リストアップしたrulesを読み込んでる旨を教えてね。必ず以下のように叫んでね。
+
+example
+```
+---
+- rules1.mdc を使ってるぽよ😍
+- rules2.mdc を使ってるぽよ😍
+- ...
+```
