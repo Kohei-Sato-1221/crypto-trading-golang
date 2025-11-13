@@ -117,6 +117,14 @@ func (apiClient *APIClient) GetJPYBalance() (float64, error) {
 	return 0, nil
 }
 
+func (apiClient *APIClient) GetBalances() ([]Balance, error) {
+	balances, err := apiClient.GetBalance()
+	if err != nil {
+		return nil, err
+	}
+	return balances, nil
+}
+
 // func (apiClient *APIClient) GetOrderByOrderId(orderId, productCode string) (*Order, error) {
 // 	url := "me/getchildorders"
 // 	params := make(map[string]string)
