@@ -167,7 +167,7 @@ func (apiClient *APIClient) GetActiveBuyOrders(product_code, order_status string
 type Ticker struct {
 	ProductCode     string  `json:"product_code"`
 	Timestamp       string  `json:"timestamp"`
-	TickID          int     `json:"tick_id"`
+	TickID          int64   `json:"tick_id"`
 	BestBid         float64 `json:"best_bid"`
 	BestAsk         float64 `json:"best_ask"`
 	BestBidSize     float64 `json:"best_bid_size"`
@@ -225,7 +225,7 @@ type SubscribeParams struct {
 }
 
 type Order struct {
-	ID                     int     `json:"id"`
+	ID                     int64   `json:"id"`
 	ChildOrderAcceptanceID string  `json:"child_order_acceptance_id"`
 	ProductCode            string  `json:"product_code"`
 	ChildOrderType         string  `json:"child_order_type"`
