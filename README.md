@@ -23,7 +23,7 @@ If they're, it places sell orders at a liite higher price of buy orders.(currenc
 1. In order to select exchange, modify src/main/main.go
    Currenty, you can choose bitflyer(jp) or OKEX for trading.
 
-2. Prepare RDS instance(MySQL 5.7). And execute following sentences.
+2. Prepare RDS instance(MySQL 8.4.7). And execute following sentences.
 ```
 //for bitflyer
 CREATE TABLE `buy_orders` (
@@ -92,49 +92,109 @@ CREATE TABLE `buy_orders` (
 
 
 # Terraform
+
+This project uses Terraform to manage AWS infrastructure for the crypto trading application.
+
+## Directory Structure
+
 ```
-// create S3 Bucket manually
-
-// get keypair
-1. create keypair on AWS console
-2. download private key 
-3. get publickey from private key
-  ssh-keygen -y -f /path_to_key_pair/my-key-pair.pem > my-key-pair.pub
-4. delete keypair from AWS console 
-
-// deploy to AWS
-cd terraform
-terraform plan -var 'public_key_path=~/.ssh/sugar-2022-keypair.cer' -var 'db_password=yourdbpassword'
-terraform apply -var 'public_key_path=~/.ssh/sugar-2022-keypair.cer' -var 'db_password=yourdbpassword'
-
-// destory resources on AWS
-terraform destroy -var 'public_key_path=~/.ssh/sugar-2022-keypair.cer'
-
-// set cron
-1. after login EC2 vis ssh, execute following command:
-(crontab -l 2>/dev/null; echo "10 17 * * * /home/ec2-user/tradingapp/backup.sh") | crontab -
-(crontab -l 2>/dev/null; echo "10 * * * * echo "" > /home/ec2-user/tradingapp/nohup.out") | crontab -
-(crontab -l 2>/dev/null; echo "25 * * * * cd /home/ec2-user/tradingapp && sh processCheck.sh > cron.log") | crontab -
-
-// build application
-cd /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
-sudo sh ./build.sh
-cd /home/ec2-user/tradingapp
-sudo chown ec2-user:ec2-user *
-
-// run application
-sh /home/ec2-user/tradingapp/start.sh
-
-// memo
-show user:
-`select user, host, plugin from mysql.user;`
-
-data migration:
-mysqldump -u root -p trading > export.sql
-
-access from Sequel pro:
-`ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'pasword';`
-
-format terraform codes:
-terraform fmt -recursive
+terraform/
+├── main.tf                 # Main Terraform configuration file
+├── terraform.tfvars        # Variable values (contains sensitive data)
+├── .terraform.lock.hcl     # Provider version lock file
+└── modules/
+    ├── network/
+    │   └── main.tf         # VPC, Subnets, Route Tables
+    └── database/
+        ├── variables.tf    # Module variables
+        ├── database.tf     # RDS instance configuration
+        ├── database_params.tf  # DB parameter and option groups
+        └── security_group.tf   # Security groups for DB and EC2
 ```
+
+## Important Notes
+
+1. **Sensitive Data**: The `terraform.tfvars` file contains sensitive information (database passwords). 
+   - **DO NOT commit this file to version control**
+   - Add `terraform.tfvars` to `.gitignore`
+   - Use environment-specific variable files or AWS Secrets Manager for production
+
+2. **Terraform State**: The state file is stored in S3 backend:
+   - Bucket: `tfstate-crypto-trading-20251113`
+   - Region: `ap-northeast-1`
+   - Ensure the S3 bucket exists before running `terraform init`
+
+3. **AWS Profile**: The configuration uses AWS profile `crypto-trading-20251113`
+   - Make sure this profile is configured in `~/.aws/credentials` and `~/.aws/config`
+
+4. **Terraform Version**: This project requires Terraform version `1.13.5` exactly
+   - Use `tfenv` to manage Terraform versions
+
+5. **Module Structure**:
+   - `network` module: Manages VPC, private subnets, and route tables
+   - `database` module: Manages RDS MySQL instance, security groups, and related resources
+
+## Using Makefile
+
+The project includes a Makefile to simplify Terraform operations. All commands should be run from the project root directory.
+
+### Available Commands
+
+```bash
+# Show all available commands
+make help
+
+# Format Terraform code
+make fmt
+
+# Initialize Terraform (formats code and runs terraform init)
+make init
+
+# Plan infrastructure changes
+make plan
+
+# Apply infrastructure changes
+make apply
+```
+
+### Command Details
+
+- **`make fmt`**: Formats all Terraform files recursively
+- **`make init`**: 
+  - Formats code
+  - Sets Terraform version to 1.13.5
+  - Initializes Terraform in the `terraform/` directory
+- **`make plan`**: 
+  - Formats code
+  - Sets Terraform version
+  - Shows planned infrastructure changes
+- **`make apply`**: 
+  - Formats code
+  - Sets Terraform version
+  - Applies infrastructure changes
+
+### Workflow Example
+
+```bash
+# First time setup
+make init
+
+# Review changes
+make plan
+
+# Apply changes
+make apply
+```
+
+## Prerequisites
+
+1. **Terraform**: Install Terraform 1.13.5 (recommended: use `tfenv`)
+2. **AWS CLI**: Configure AWS credentials with the profile `crypto-trading-20251113`
+3. **S3 Bucket**: Create the S3 bucket for Terraform state:
+   ```bash
+   aws s3 mb s3://tfstate-crypto-trading-20251113 --region ap-northeast-1 --profile crypto-trading-20251113
+   ```
+4. **tfvars file**: Create `terraform/terraform.tfvars` with required variables:
+   ```hcl
+   db_password = "your-database-password"
+   ```
