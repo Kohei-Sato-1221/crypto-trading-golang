@@ -87,6 +87,8 @@ func NewConfig() {
 		SlackAPIURL: pcfg.Section("slack").Key("api_url").String(),
 		SlackToken:  pcfg.Section("slack").Key("token").String(),
 
+		BudgetCriteria: cfg.Section("app").Key("budget_criteria").MustFloat64(500000),
+
 		IsTest: isTest,
 	}
 

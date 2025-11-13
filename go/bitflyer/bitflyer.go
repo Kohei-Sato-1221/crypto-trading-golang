@@ -103,6 +103,20 @@ func (apiClient *APIClient) GetBalance() ([]Balance, error) {
 	return balance, nil
 }
 
+// GetJPYBalance returns the available JPY balance
+func (apiClient *APIClient) GetJPYBalance() (float64, error) {
+	balances, err := apiClient.GetBalance()
+	if err != nil {
+		return 0, err
+	}
+	for _, balance := range balances {
+		if balance.CurrentCode == "JPY" {
+			return balance.Available, nil
+		}
+	}
+	return 0, nil
+}
+
 // func (apiClient *APIClient) GetOrderByOrderId(orderId, productCode string) (*Order, error) {
 // 	url := "me/getchildorders"
 // 	params := make(map[string]string)

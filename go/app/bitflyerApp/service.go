@@ -135,16 +135,17 @@ func StartBfService() {
 	}
 
 	if !config.Config.IsTest {
-		scheduler.Every().Day().At("14:53").Run(buyingBTCJob)
+		scheduler.Every(240).Seconds().Run(buyingBTCJob)
+		// scheduler.Every().Day().At("14:53").Run(buyingBTCJob)
 		scheduler.Every().Day().At("14:53").Run(buyingETHJob)
 		// scheduler.Every().Thursday().At("14:35").Run(buyingBTCJob)
 		// scheduler.Every().Thursday().At("14:35").Run(buyingETHJob)
 
 		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
 	} else {
-		scheduler.Every(240).Seconds().Run(sellOrderJob)
 		scheduler.Every(90).Seconds().Run(syncBTCBuyOrderJob)
 		scheduler.Every(90).Seconds().Run(syncETHBuyOrderJob)
+		scheduler.Every(180).Seconds().Run(sellOrderJob)
 		scheduler.Every(90).Seconds().Run(ethFilledCheckJob)
 		scheduler.Every(90).Seconds().Run(btcFilledCheckJob)
 		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
