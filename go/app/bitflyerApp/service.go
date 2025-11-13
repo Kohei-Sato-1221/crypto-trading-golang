@@ -152,6 +152,9 @@ func StartBfService() {
 		scheduler.Every(90).Seconds().Run(btcFilledCheckJob)
 		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
 
+		// 毎日朝9時に収益結果をSlackに送信
+		scheduler.Every().Day().At("06:45").Run(sendResultsJob)
+
 		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
 	} else {
 		// 動作確認用のジョブ
