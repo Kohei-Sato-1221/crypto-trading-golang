@@ -22,6 +22,8 @@ resource "aws_db_instance" "crypto_trading_db" {
   option_group_name          = aws_db_option_group.crypto_trading_db.name
   db_subnet_group_name       = aws_db_subnet_group.crypto_trading_db.name
 
+  tags = var.tags
+
   lifecycle {
     ignore_changes = [password]
   }

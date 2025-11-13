@@ -43,6 +43,12 @@ variable "db_port" {
   default     = 3306
 }
 
+variable "slack_url" {
+  description = "Slack Incoming Webhook URL"
+  type        = string
+  sensitive   = true
+}
+
 # ネットワークモジュール（VPC、Subnet、RouteTableを統合）
 module "network" {
   source = "./modules/network"
@@ -165,7 +171,19 @@ module "database" {
   ]
 
   tags = {
-    Environment = "production"
-    Project     = "crypto-trading"
+    Environment            = "production"
+    Project                = "crypto-trading"
+    CryptoTradingScheduler = "true"
   }
+}
+
+# Schedulerモジュール
+module "scheduler" {
+  source = "./modules/scheduler"
+
+  app_name                  = "crypto-trading"
+  environment               = "production"
+  start_schedule_expression = "cron(0 9 * * ? *)"  # 毎日9時（UTC）に起動
+  stop_schedule_expression  = "cron(0 18 * * ? *)" # 毎日18時（UTC）に停止
+  slack_url                 = var.slack_url
 }
