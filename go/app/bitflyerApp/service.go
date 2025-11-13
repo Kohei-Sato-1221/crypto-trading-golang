@@ -202,8 +202,7 @@ func StartBfService() {
 		scheduler.Every().Day().At("18:00").Run(wrapJob(savePriceHistoryJobFunc))
 
 		// 毎日朝9時に収益結果をSlackに送信
-		scheduler.Every(90).Seconds().Run(wrapJob(sendResultsJobFunc))
-		// scheduler.Every().Day().At("06:45").Run(wrapJob(sendResultsJobFunc))
+		scheduler.Every().Day().At("06:45").Run(wrapJob(sendResultsJobFunc))
 
 		scheduler.Every().Day().At("23:45").Run(wrapJob(cancelBuyOrderJob))
 
