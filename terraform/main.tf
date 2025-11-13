@@ -2,120 +2,170 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "4.5.0"
+      version = "~> 6.17.0"
     }
   }
 
   backend "s3" {
     region                  = "ap-northeast-1"
-    bucket                  = "sugar2022-tf-state"
-    key                     = "sugar2022/terraform.tfstate"
-    profile                 = "sugar2022"
+    bucket                  = "tfstate-crypto-trading-20251113"
+    key                     = "terraform.tfstate"
+    profile                 = "crypto-trading-20251113"
     shared_credentials_file = "~/.aws/credentials"
   }
 
-  required_version = "= 1.1.8"
+  required_version = "= 1.13.5"
 }
 
 provider "aws" {
-  profile                  = "sugar2022"
+  profile                  = "crypto-trading-20251113"
   region                   = "ap-northeast-1"
   shared_config_files      = ["~/.aws/config"]
   shared_credentials_files = ["~/.aws/credentials"]
 }
 
-locals {
-  ec2_tag       = "Crypto_Trading_Server"
-  instance_type = "t2.micro"
+# Variables
+variable "db_password" {
+  description = "Database password"
+  type        = string
+  sensitive   = true
 }
 
-data "aws_ami" "recent_amazon_linux_2" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-2.0.????????-x86_64-gp2"]
-  }
-
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
+variable "db_name" {
+  description = "Database name"
+  type        = string
+  default     = "crypto_trading_db"
 }
 
-resource "aws_instance" "trading_server_ec2" {
-  ami                    = data.aws_ami.recent_amazon_linux_2.image_id
-  instance_type          = local.instance_type
-  key_name               = aws_key_pair.key_pair.key_name
-  vpc_security_group_ids = [aws_security_group.trading_server_ec2_sg.id]
+variable "db_port" {
+  description = "Database port"
+  type        = string
+  default     = 3306
+}
+
+# ネットワークモジュール（VPC、Subnet、RouteTableを統合）
+module "network" {
+  source = "./modules/network"
+
+  vpc_cidr             = "210.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  vpc_tags = {
+    Environment = "production"
+    Project     = "crypto-trading"
+  }
+
+  subnets = [
+    {
+      name                    = "crypto-trading-public-subnet-1a"
+      cidr                    = "210.0.1.0/24"
+      availability_zone       = "ap-northeast-1a"
+      map_public_ip_on_launch = true
+      tags = {
+        Name        = "crypto-trading-public-subnet-1a"
+        Type        = "public"
+        Environment = "production"
+        Project     = "crypto-trading"
+      }
+    },
+    {
+      name                    = "crypto-trading-public-subnet-1c"
+      cidr                    = "210.0.2.0/24"
+      availability_zone       = "ap-northeast-1c"
+      map_public_ip_on_launch = true
+      tags = {
+        Name        = "crypto-trading-public-subnet-1c"
+        Type        = "public"
+        Environment = "production"
+        Project     = "crypto-trading"
+      }
+    },
+    {
+      name                    = "crypto-trading-private-subnet-1a"
+      cidr                    = "210.0.3.0/24"
+      availability_zone       = "ap-northeast-1a"
+      map_public_ip_on_launch = false
+      tags = {
+        Name        = "crypto-trading-private-subnet-1a"
+        Type        = "private"
+        Environment = "production"
+        Project     = "crypto-trading"
+      }
+    },
+    {
+      name                    = "crypto-trading-private-subnet-1c"
+      cidr                    = "210.0.4.0/24"
+      availability_zone       = "ap-northeast-1c"
+      map_public_ip_on_launch = false
+      tags = {
+        Name        = "crypto-trading-private-subnet-1c"
+        Type        = "private"
+        Environment = "production"
+        Project     = "crypto-trading"
+      }
+    }
+  ]
+
+  route_tables = [
+    {
+      name = "crypto-trading-public-route-table"
+      routes = [
+        {
+          cidr_block = "0.0.0.0/0"
+          gateway_id = module.network.internet_gateway_id
+        }
+      ]
+      subnet_names = [
+        "crypto-trading-public-subnet-1a",
+        "crypto-trading-public-subnet-1c"
+      ]
+      tags = {
+        Name        = "crypto-trading-public-route-table"
+        Type        = "public"
+        Environment = "production"
+        Project     = "crypto-trading"
+      }
+    },
+    {
+      name   = "crypto-trading-private-route-table"
+      routes = []
+      # インターネットアクセスが必要な場合は、NATゲートウェイへのルートを追加
+      # routes = [
+      #   {
+      #     cidr_block     = "0.0.0.0/0"
+      #     nat_gateway_id = module.nat_gateway.nat_gateway_id
+      #   }
+      # ]
+      subnet_names = [
+        "crypto-trading-private-subnet-1a",
+        "crypto-trading-private-subnet-1c"
+      ]
+      tags = {
+        Name        = "crypto-trading-private-route-table"
+        Type        = "private"
+        Environment = "production"
+        Project     = "crypto-trading"
+      }
+    }
+  ]
+}
+
+# Databaseモジュール（Security Groupも含む）
+module "database" {
+  source = "./modules/database"
+
+  db_password = var.db_password
+  db_port     = 1221
+  db_name     = var.db_name
+  vpc_id      = module.network.vpc_id
+  subnet_ids = [
+    module.network.subnet_ids["crypto-trading-public-subnet-1a"],
+    module.network.subnet_ids["crypto-trading-public-subnet-1c"]
+  ]
 
   tags = {
-    Name = local.ec2_tag
+    Environment = "production"
+    Project     = "crypto-trading"
   }
-
-  user_data = <<EOF
-		#!/bin/bash
-		yum install -y go
-
-		touch /home/ec2-user/.ssh/id_rsa
-		# NOTE: You have to complement rest of private key before using terraform.
-        echo "-----BEGIN OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
-        echo "BAUGBw==" >> /home/ec2-user/.ssh/id_rsa
-        echo "-----END OPENSSH PRIVATE KEY-----" >> /home/ec2-user/.ssh/id_rsa
-		chmod 600 /home/ec2-user/.ssh/id_rsa
-		
-		mkdir -p /home/ec2-user/tradingapp
-		mkdir -p /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
-		git clone https://github.com/Kohei-Sato-1221/crypto-trading-golang.git /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
-		
-		cd /home/ec2-user/go/src/github.com/Kohei-Sato-1221/crypto-trading-golang
-		touch build.sh
-		chmod 755 build.sh
-		echo '#!/bin/bash' > build.sh
-		echo '' >> build.sh
-		echo 'export GOPATH=/home/ec2-user/go' >> build.sh
-		echo 'go get' >> build.sh
-		echo 'go build -o main main.go' >> build.sh
-		echo 'cp main /home/ec2-user/tradingapp/main' >> build.sh
-		echo 'cp [sample]private_config.ini /home/ec2-user/tradingapp/private_config.ini' >> build.sh
-		echo 'cp config.ini /home/ec2-user/tradingapp/config.ini' >> build.sh
-		# TODO: execute build shell in user data
-		# sh ./build.sh
-
-		cd /home/ec2-user/tradingapp
-		echo '#!/bin/bash' >> start.sh
-		echo "" >> start.sh
-		echo "nohup ./main &" >> start.sh
-		echo "nohup ./main &" >> start.sh
-
-		echo '#!/bin/bash' >> backup.sh
-		echo "" >> backup.sh
-		echo "cp /home/ec2-user/tradingapp/trading.log /home/ec2-user/tradingapp/trading_bk.log" >> backup.sh
-		echo 'echo "start logging!" > /home/ec2-user/tradingapp/trading.log' >> backup.sh
-
-		echo '#!/bin/bash' >> processCheck.sh
-		echo '' >> processCheck.sh
-		echo 'count=`ps -ef|grep ./main|wc -l`' >> processCheck.sh
-		echo "" >> processCheck.sh
-		echo 'echo "go process number:$count"' >> processCheck.sh
-		echo "" >> processCheck.sh
-		echo 'if [ $count -lt 2 ]; then' >> processCheck.sh
-		echo '    echo "Go Application down"' >> processCheck.sh
-		echo '    ./main > trading.log &' >> processCheck.sh
-		echo 'else' >> processCheck.sh
-		echo '    echo "Go Application running!!"' >> processCheck.sh
-		echo 'fi' >> processCheck.sh
-
-		echo '# ZONE="UTC"' > /etc/sysconfig/clock
-		echo 'ZONE="Japan"' >> /etc/sysconfig/clock
-		echo 'UTC=true' >> /etc/sysconfig/clock
-		ln -sf /usr/share/zoneinfo/Japan /etc/localtime
-
-        echo '' > /home/ec2-user/tradingapp/trading.log
-
-        chmod 777 /home/ec2-user/tradingapp
-        chown ec2-user:ec2-user /home/ec2-user/tradingapp
-		## you have to reboot!
-EOF
 }

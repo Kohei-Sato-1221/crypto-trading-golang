@@ -1,0 +1,4 @@
+.db_develop.env
+.db_staging.env
+.db_production.env
+.db.env

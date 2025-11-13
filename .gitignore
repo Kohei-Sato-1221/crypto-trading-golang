@@ -3,12 +3,14 @@
 *.log
 .project
 bitcoindata.sql
-/private_config.ini
-/src/private_config.ini
+config/private_config.ini
+*/private_config.ini
 main
 trading.log
 .vscode
 .DS_Store
+*/bfTradingApp
+
 
 # terraform
 private_key_script.txt
@@ -20,3 +22,4 @@ private_key_script.txt
 /terraform/override.tf.json
 *_override.tf
 *_override.tf.json
+/terraform/terraform.tfvars
