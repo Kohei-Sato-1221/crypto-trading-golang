@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	OrderStatusUnfilled  = "UNFILLED"
-	OrderStatusFilled    = "FILLED"
-	OrderStatusCancelled = "CANCELLED"
+	OrderStatusUnfilled              = "UNFILLED"
+	OrderStatusFilled                = "FILLED"
+	OrderStatusFilledSellOrderPlaced = "FILLED(SELL ORDER PLACED)"
+	OrderStatusCancelled             = "CANCELLED"
 )
 
 type OrderEvent struct {
@@ -184,6 +185,7 @@ func CalculateMinuteToExpire(strategy int) int {
 	}
 }
 
+// 約定済みかつ、売却の注文がない買い注文を取得する
 func CheckFilledBuyOrders() []BuyOrderInfo {
 	rows, err := AppDB.Query(`SELECT order_id, price, product_code, size, exchange, strategy FROM buy_orders WHERE status = 'FILLED' and order_id != ''`)
 	if err != nil {
@@ -236,12 +238,8 @@ func UpdateCancelledBuyOrder(order_id string) error {
 }
 
 func UpdateFilledOrderWithBuyOrder(order_id string) error {
-	log.Printf("##")
-	log.Printf("##UpdateFilledOrderWithBuyOrder: %v", order_id)
-	log.Printf("##")
-	// filled = 2 means sell order has been placed, but we keep status as FILLED
-	cmd1, _ := AppDB.Prepare(`update buy_orders set status = 'FILLED' where order_id = ?`)
-	_, err := cmd1.Exec(order_id)
+	cmd1, _ := AppDB.Prepare(`update buy_orders set status = ? where order_id = ?`)
+	_, err := cmd1.Exec(OrderStatusFilledSellOrderPlaced, order_id)
 	if err != nil {
 		return err
 	}
