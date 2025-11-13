@@ -87,6 +87,8 @@ func NewConfig() {
 		SlackAPIURL: pcfg.Section("slack").Key("api_url").String(),
 		SlackToken:  pcfg.Section("slack").Key("token").String(),
 
+		BudgetCriteria: cfg.Section("app").Key("budget_criteria").MustFloat64(500000),
+
 		IsTest: isTest,
 	}
 
@@ -144,6 +146,8 @@ type ConfigList struct {
 	SlackToken  string
 
 	IsTest bool
+
+	BudgetCriteria float64 // 日本円がこの金額以下なら買い注文をしない
 }
 
 var BaseURL string

@@ -11,9 +11,19 @@ import (
 
 func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 	active_orders, err := apiClient.GetActiveBuyOrders(product_code, "ACTIVE")
-	completed_orders, err := apiClient.GetActiveBuyOrders(product_code, "COMPLETED")
 	if err != nil {
-		log.Println("GetActiveOrders failed....")
+		log.Printf("GetActiveOrders failed (ACTIVE): %v", err)
+		return
+	}
+	var completed_orders *[]bitflyer.Order
+	completed_orders, err = apiClient.GetActiveBuyOrders(product_code, "COMPLETED")
+	if err != nil {
+		log.Printf("GetActiveOrders failed (COMPLETED): %v", err)
+		return
+	}
+	if active_orders == nil || completed_orders == nil {
+		log.Println("GetActiveOrders returned nil")
+		return
 	}
 	var orderEvents []models.OrderEvent
 	utc, _ := time.LoadLocation("UTC")

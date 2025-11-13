@@ -34,40 +34,36 @@ func StartBfService() {
 	)
 
 	buyingBTCJob := func() {
-		placeBuyOrder(enums.Stg0BtcLtp3low7, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient)
+		placeBuyOrder(enums.Stg0BtcLtp3low7, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
 	}
-
-	// buyingBTCJob02 := func() {
-	// 	placeBuyOrder(enums.Stg1BtcLtp997, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient)
-	// }
-
-	// buyingBTCJob03 := func() {
-	// 	placeBuyOrder(enums.Stg2BtcLtp98, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
-	// }
-
-	// buyingBTCJob99 := func() {
-	// 	placeBuyOrder(enums.Stg3BtcLtp90, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient)
-	// }
-
 	buyingETHJob := func() {
-		placeBuyOrder(enums.Stg10EthLtp995, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient)
+		placeBuyOrder(enums.Stg10EthLtp995, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
 	}
 
-	// buyingETHJob02 := func() {
-	// 	placeBuyOrder(enums.Stg11EthLtp98, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient)
-	// }
+	buyingBTCJob02 := func() {
+		placeBuyOrder(enums.Stg1BtcLtp997, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient, utils.ToP(enums.WeekdayTuesday))
+	}
+	buyingETHJob02 := func() {
+		placeBuyOrder(enums.Stg11EthLtp98, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient, utils.ToP(enums.WeekdayTuesday))
+	}
 
-	// buyingETHJob03 := func() {
-	// 	placeBuyOrder(enums.Stg12EthLtp97, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
-	// }
+	buyingBTCJob03 := func() {
+		placeBuyOrder(enums.Stg2BtcLtp98, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient, utils.ToP(enums.WeekdayFriday))
+	}
+	buyingETHJob03 := func() {
+		placeBuyOrder(enums.Stg12EthLtp97, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, utils.ToP(enums.WeekdayFriday))
+	}
 
-	// buyingETHJob04 := func() {
-	// 	placeBuyOrder(enums.Stg13EthLtp3low7, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
-	// }
+	buyingETHJob04 := func() {
+		placeBuyOrder(enums.Stg13EthLtp3low7, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, utils.ToP(enums.WeekdaySaturday))
+	}
 
-	// buyingETHJob99 := func() {
-	// 	placeBuyOrder(enums.Stg14EthLtp90, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient)
-	// }
+	buyingETHJob99 := func() {
+		placeBuyOrder(enums.Stg14EthLtp90, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, utils.ToP(enums.WeekdaySunday))
+	}
+	buyingBTCJob99 := func() {
+		placeBuyOrder(enums.Stg3BtcLtp90, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient, utils.ToP(enums.WeekdaySunday))
+	}
 
 	btcFilledCheckJob := func() {
 		filledCheckJob("BTC_JPY", apiClient)
@@ -78,70 +74,7 @@ func StartBfService() {
 	}
 
 	sellOrderJob := func() {
-		log.Println("【sellOrderjob】start of job")
-		// get list of orderis whose filled param equqls "1"
-		buyOrderInfos := models.CheckFilledBuyOrders()
-		if buyOrderInfos == nil {
-			log.Println("【sellOrderjob】 : No order ids ")
-			goto ENDOFSELLORDER
-		}
-
-		for i, buyOrderInfo := range buyOrderInfos {
-			orderID := buyOrderInfo.OrderID
-			productCode := buyOrderInfo.ProductCode
-			size := buyOrderInfo.Size
-			sellPrice := buyOrderInfo.CalculateSellOrderPrice()
-			log.Printf("No%d Id:%v sellPrice:%10.2f strategy:%v", i, orderID, sellPrice, buyOrderInfo.Strategy)
-
-			sellOrder := &bitflyer.Order{
-				ProductCode:     productCode,
-				ChildOrderType:  "LIMIT",
-				Side:            "SELL",
-				Price:           sellPrice,
-				Size:            size,
-				MinuteToExpires: 43200, // 30days
-				TimeInForce:     "GTC",
-			}
-
-			log.Printf("sell order:%v\n", sellOrder)
-			res, err := apiClient.PlaceOrder(sellOrder)
-			log.Printf("sell res:%v\n", res)
-			if err != nil {
-				log.Println("SellOrder failed.... Failure in [apiClient.PlaceOrder()]")
-				break
-			}
-			if res.OrderId == "" {
-				log.Println("SellOrder failed.... no response")
-				break
-			}
-
-			err = models.UpdateFilledOrderWithBuyOrder(orderID)
-			if err != nil {
-				log.Println("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
-				break
-			}
-			log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderID)
-
-			utc, _ := time.LoadLocation("UTC")
-			utcCurrentDate := time.Now().In(utc)
-			event := models.OrderEvent{
-				OrderID:     res.OrderId,
-				Time:        utcCurrentDate,
-				ProductCode: productCode,
-				Side:        "Sell",
-				Price:       sellPrice,
-				Size:        size,
-				Exchange:    "bitflyer",
-			}
-			err = event.SellOrder(orderID)
-			if err != nil {
-				log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
-			} else {
-				log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)
-			}
-		}
-	ENDOFSELLORDER:
-		log.Println("【sellOrderjob】end of job")
+		placeSellOrder(apiClient)
 	}
 
 	syncBTCBuyOrderJob := func() {
@@ -161,6 +94,10 @@ func StartBfService() {
 		cnt := models.DeleteStrangeBuyOrderRecords()
 		log.Printf("DELETE strange buy_order records :  %v rows deleted", cnt)
 		log.Println("【deleteRecordJob】End of job")
+	}
+
+	savePriceHistoryJobFunc := func() {
+		savePriceHistoryJob(apiClient)
 	}
 
 	cancelBuyOrderJob := func() {
@@ -198,31 +135,33 @@ func StartBfService() {
 	}
 
 	if !config.Config.IsTest {
-		scheduler.Every(150).Seconds().Run(sellOrderJob)
+		scheduler.Every().Day().At("6:30").Run(buyingBTCJob)
+		scheduler.Every().Day().At("6:30").Run(buyingETHJob)
 
-		scheduler.Every(120).Seconds().Run(syncBTCBuyOrderJob)
-		scheduler.Every(120).Seconds().Run(syncETHBuyOrderJob)
+		scheduler.Every().Day().At("6:30").Run(buyingBTCJob02)
+		scheduler.Every().Day().At("6:30").Run(buyingETHJob02)
 
-		// 木曜日 12:30 JST (日本時間で実行)
-		// システムのタイムゾーンがUTCの場合、JST 12:30 = UTC 03:30
-		// システムのタイムゾーンがJSTの場合、そのまま "12:30" でOK
-		// 確実にJSTで実行するため、UTC時刻に変換して指定
-		// JST 12:30 = UTC 03:30 (JSTはUTC+9時間)
-		scheduler.Every().Thursday().At("03:45").Run(buyingBTCJob) // JST 12:45
-		scheduler.Every().Thursday().At("03:45").Run(buyingETHJob) // JST 12:45
+		scheduler.Every().Day().At("6:30").Run(buyingBTCJob03)
+		scheduler.Every().Day().At("6:30").Run(buyingETHJob03)
 
-		// scheduler.Every().Tuesday().At("06:55").Run(buyingBTCJob02) // 火曜日
-		// scheduler.Every().Day().At("10:55").Run(buyingBTCJob03)
-		// scheduler.Every().Day().At("00:53").Run(buyingBTCJob99)
+		scheduler.Every().Day().At("6:30").Run(buyingETHJob04)
 
-		// scheduler.Every().Day().At("04:53").Run(buyingETHJob02)
-		// scheduler.Every().Day().At("07:53").Run(buyingETHJob03)
-		// scheduler.Every().Day().At("10:53").Run(buyingETHJob04)
-		// scheduler.Every().Day().At("00:55").Run(buyingETHJob99)
+		scheduler.Every().Day().At("6:30").Run(buyingETHJob99)
+		scheduler.Every().Day().At("6:30").Run(buyingBTCJob99)
 
-		scheduler.Every(45).Seconds().Run(ethFilledCheckJob)
-		scheduler.Every(45).Seconds().Run(btcFilledCheckJob)
+		scheduler.Every(90).Seconds().Run(syncBTCBuyOrderJob)
+		scheduler.Every(90).Seconds().Run(syncETHBuyOrderJob)
+		scheduler.Every(180).Seconds().Run(sellOrderJob)
+		scheduler.Every(90).Seconds().Run(ethFilledCheckJob)
+		scheduler.Every(90).Seconds().Run(btcFilledCheckJob)
 		scheduler.Every(7200).Seconds().Run(deleteRecordJob)
+
+		// 毎日6時と18時に価格履歴を保存
+		scheduler.Every().Day().At("06:00").Run(savePriceHistoryJobFunc)
+		scheduler.Every().Day().At("18:00").Run(savePriceHistoryJobFunc)
+
+		// 毎日朝9時に収益結果をSlackに送信
+		scheduler.Every().Day().At("06:45").Run(sendResultsJob)
 
 		scheduler.Every().Day().At("23:45").Run(cancelBuyOrderJob)
 	} else {

@@ -7,14 +7,41 @@ import (
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitbank"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/config"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/enums"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/utils"
 )
 
-func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient) {
+func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient, weekday *string) {
 	log.Printf("strategy:%v", strategy)
 	log.Println("【buyingJob】start of job")
 
+	// 今日が指定された曜日でなければスキップする
+	if weekday != nil && !enums.IsTodayWeekday(*weekday) {
+		log.Printf("【buyingJob】Skipped!! Today is not %s\n", *weekday)
+		return
+	}
+
+	// 日本円の残高を調べて、BudgetCriteria未満であればスキップする
+	jpyBalance, err := apiClient.GetJPYBalance()
+	if err != nil {
+		errMsg := fmt.Sprintf("【ERROR】Failed to get JPY balance: %v", err)
+		log.Printf("%s\n", errMsg)
+		slackClient.PostMessage(errMsg, true)
+		log.Println("【buyingJob】end of job as error")
+		return
+	}
+	if jpyBalance < config.Config.BudgetCriteria {
+		msg := fmt.Sprintf("【buyingJob】Skipped!! JPY balance (%.2f) is below BudgetCriteria (%.2f)", jpyBalance, config.Config.BudgetCriteria)
+		log.Println(msg)
+		log.Println("【buyingJob】end of job as skip")
+		slackClient.PostMessage(msg, false)
+		return
+	}
+	log.Printf("【buyingJob】JPY balance: %.2f (BudgetCriteria: %.2f)", jpyBalance, config.Config.BudgetCriteria)
+
+	// 最大注文数を超えている場合はスキップする
 	shouldSkip, err := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
 	if err != nil {
 		errMsg := fmt.Sprintf("【ERROR】placeBuyOrder error:%v", err.Error())
