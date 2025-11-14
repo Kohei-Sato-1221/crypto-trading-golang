@@ -53,7 +53,25 @@ func gracefulShutdown(timeoutMinutes int) {
 
 	log.Println("【app】systemdサービスを停止します")
 	// systemdサービスを停止（Restart=alwaysのため、プロセス終了だけでは再起動される）
-	// サーバー再起動時の自動起動は有効のまま（systemctl enableの状態を維持）
+	// サーバー再起動時の自動起動を確実にするため、停止前にdaemon-reloadとenableを実行
+	daemonReloadCmd := exec.Command("sudo", "systemctl", "daemon-reload")
+	daemonReloadCmd.Stdout = nil
+	daemonReloadCmd.Stderr = nil
+	if err := daemonReloadCmd.Run(); err != nil {
+		log.Printf("【app】systemctl daemon-reload の実行に失敗しました: %v", err)
+	} else {
+		log.Println("【app】systemdの設定を再読み込みしました")
+	}
+
+	enableCmd := exec.Command("sudo", "systemctl", "enable", "bfTradingApp.service")
+	enableCmd.Stdout = nil
+	enableCmd.Stderr = nil
+	if err := enableCmd.Run(); err != nil {
+		log.Printf("【app】systemctl enable の実行に失敗しました: %v", err)
+	} else {
+		log.Println("【app】systemdサービスの自動起動を有効化しました")
+	}
+
 	stopCmd := exec.Command("sudo", "systemctl", "stop", "bfTradingApp.service")
 	stopCmd.Stdout = nil
 	stopCmd.Stderr = nil
