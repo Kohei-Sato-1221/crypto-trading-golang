@@ -21,6 +21,7 @@ run-binary: ## run bitflyer traging app via binary ## run-binary
 	cd go && ./bfTradingApp
 
 build: ## build bitflyer trading app ## build
+	rm -rf go/bfTradingApp
 	cd go && go build cmds/bifflyer_trading/main.go && mv main bfTradingApp && chmod 500 bfTradingApp
 
 tfenv: ## change terraform version ## tfenv
