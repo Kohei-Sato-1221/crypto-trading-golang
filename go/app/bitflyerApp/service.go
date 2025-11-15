@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"runtime"
 	"sync"
 	"time"
@@ -19,23 +18,42 @@ import (
 )
 
 var (
-	slackClient *slack.APIClient
-	runningJobs sync.WaitGroup // 実行中のジョブを追跡
+	slackClient    *slack.APIClient
+	runningJobs    sync.WaitGroup // 実行中のジョブを追跡
+	shuttingDown   sync.RWMutex   // シャットダウン中かどうかを保護するRWMutex
+	isShuttingDown bool           // シャットダウン中かどうかのフラグ
 )
 
 // wrapJob はジョブをラップして、実行開始時にWaitGroupに追加し、終了時にDoneを呼びます
+// シャットダウン中は新しいジョブの実行をブロックします
 func wrapJob(job func()) func() {
 	return func() {
+		// シャットダウン中かチェック
+		shuttingDown.RLock()
+		if isShuttingDown {
+			shuttingDown.RUnlock()
+			log.Println("【app】シャットダウン中のため、ジョブの実行をスキップします")
+			return
+		}
+		shuttingDown.RUnlock()
+
 		runningJobs.Add(1)
 		defer runningJobs.Done()
 		job()
 	}
 }
 
-// gracefulShutdown は実行中のジョブが完了するまで待機してから終了します
+// gracefulShutdown は実行中のジョブが完了するまで待機し、その後15分間ウェイトしてから終了します
 func gracefulShutdown(timeoutMinutes int) {
-	log.Println("【app】グレースフルシャットダウン開始 - 実行中のジョブの完了を待機します")
+	log.Println("【app】グレースフルシャットダウン開始 - 新しいジョブの実行をブロックします")
 
+	// シャットダウンフラグを設定して、新しいジョブの実行をブロック
+	shuttingDown.Lock()
+	isShuttingDown = true
+	shuttingDown.Unlock()
+	log.Println("【app】新しいジョブの実行をブロックしました")
+
+	log.Println("【app】実行中のジョブの完了を待機します")
 	// タイムアウト付きで待機
 	done := make(chan struct{})
 	go func() {
@@ -51,38 +69,11 @@ func gracefulShutdown(timeoutMinutes int) {
 		log.Printf("【app】タイムアウト（%d分）経過 - 強制終了します", timeoutMinutes)
 	}
 
-	log.Println("【app】systemdサービスを停止します")
-	// systemdサービスを停止（Restart=alwaysのため、プロセス終了だけでは再起動される）
-	// サーバー再起動時の自動起動を確実にするため、停止前にdaemon-reloadとenableを実行
-	daemonReloadCmd := exec.Command("sudo", "systemctl", "daemon-reload")
-	daemonReloadCmd.Stdout = nil
-	daemonReloadCmd.Stderr = nil
-	if err := daemonReloadCmd.Run(); err != nil {
-		log.Printf("【app】systemctl daemon-reload の実行に失敗しました: %v", err)
-	} else {
-		log.Println("【app】systemdの設定を再読み込みしました")
-	}
-
-	enableCmd := exec.Command("sudo", "systemctl", "enable", "bfTradingApp.service")
-	enableCmd.Stdout = nil
-	enableCmd.Stderr = nil
-	if err := enableCmd.Run(); err != nil {
-		log.Printf("【app】systemctl enable の実行に失敗しました: %v", err)
-	} else {
-		log.Println("【app】systemdサービスの自動起動を有効化しました")
-	}
-
-	stopCmd := exec.Command("sudo", "systemctl", "stop", "bfTradingApp.service")
-	stopCmd.Stdout = nil
-	stopCmd.Stderr = nil
-
-	// サービスを停止
-	if err := stopCmd.Run(); err != nil {
-		log.Printf("【app】systemctl stop の実行に失敗しました: %v", err)
-		log.Println("【app】プロセスを終了します（サービスは自動的に再起動される可能性があります）")
-	} else {
-		log.Println("【app】systemdサービスを停止しました（サーバー再起動時には自動起動します）")
-	}
+	// 15分間ウェイトして、新しいジョブが発生しないようにする
+	waitMinutes := 15
+	log.Printf("【app】%d分間ウェイトして、新しいジョブが発生しないようにします", waitMinutes)
+	time.Sleep(time.Duration(waitMinutes) * time.Minute)
+	log.Printf("【app】%d分間のウェイトが完了しました", waitMinutes)
 
 	log.Println("【app】アプリケーションを終了します")
 	os.Exit(0)
