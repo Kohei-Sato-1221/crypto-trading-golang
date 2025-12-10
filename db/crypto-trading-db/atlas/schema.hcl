@@ -44,11 +44,11 @@ table "buy_orders" {
     null = true
   }
 
-  column "filled" {
-    type = tinyint
-    null = false
-    default = 0
-    comment = "0:unfilled / 1:filled"
+  column "status" {
+    type = varchar(100)
+    null = true
+    default = "UNFILLED"
+    comment = "UNFILLED / FILLED / FILLED(SELL ORDER PLACED) / CANCELLED"
   }
 
   column "strategy" {
@@ -132,11 +132,11 @@ table "sell_orders" {
     null = true
   }
 
-  column "filled" {
-    type = tinyint
-    null = false
-    default = 0
-    comment = "0:unfilled / 1:filled"
+  column "status" {
+    type = varchar(100)
+    null = true
+    default = "UNFILLED"
+    comment = "UNFILLED / FILLED / CANCELLED"
   }
 
   column "remarks" {
@@ -164,6 +164,54 @@ table "sell_orders" {
   index "orderId" {
     unique = true
     columns = [column.order_id]
+  }
+}
+
+table "price_histories" {
+  schema = schema.crypto_trading_db
+  comment = "価格履歴テーブル"
+
+  column "id" {
+    type = int
+    unsigned = true
+    null = false
+    auto_increment = true
+  }
+
+  column "datetime" {
+    type = timestamp
+    null = false
+    default = sql("CURRENT_TIMESTAMP")
+  }
+
+  column "product_code" {
+    type = varchar(50)
+    null = false
+  }
+
+  column "price" {
+    type = float
+    null = false
+  }
+
+  column "price_ratio_24h" {
+    type = float
+    null = true
+    comment = "24時間前との価格比率（少数形式: 例: 0.95 = 95%, 1.21 = 121%）"
+  }
+
+  column "created_at" {
+    type = timestamp
+    null = false
+    default = sql("CURRENT_TIMESTAMP")
+  }
+
+  primary_key {
+    columns = [column.id]
+  }
+
+  index "idx_product_code_datetime" {
+    columns = [column.product_code, column.datetime]
   }
 }
 
