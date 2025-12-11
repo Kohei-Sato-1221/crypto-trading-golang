@@ -24,6 +24,12 @@ provider "aws" {
   shared_credentials_files = ["~/.aws/credentials"]
 }
 
+variable "db_username" {
+  description = "Database username"
+  type        = string
+  default     = "dummy_username"
+}
+
 # Variables
 variable "db_password" {
   description = "Database password"
@@ -161,8 +167,9 @@ module "network" {
 module "database" {
   source = "./modules/database"
 
+  db_username = var.db_username
   db_password = var.db_password
-  db_port     = 1221
+  db_port     = var.db_port
   db_name     = var.db_name
   vpc_id      = module.network.vpc_id
   subnet_ids = [

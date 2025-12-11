@@ -7,6 +7,11 @@ import (
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
 )
 
+// SavePriceHistoryJob 価格履歴を保存するジョブ
+func SavePriceHistoryJob(apiClient *bitflyer.APIClient) {
+	savePriceHistoryJob(apiClient)
+}
+
 func savePriceHistoryJob(apiClient *bitflyer.APIClient) {
 	log.Println("【savePriceHistoryJob】Start of job")
 

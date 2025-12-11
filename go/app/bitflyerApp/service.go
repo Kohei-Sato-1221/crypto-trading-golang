@@ -24,6 +24,16 @@ var (
 	isShuttingDown bool           // シャットダウン中かどうかのフラグ
 )
 
+// InitSlackClient Slackクライアントを初期化する
+func InitSlackClient() {
+	slackClient = slack.NewSlack(
+		config.Config.SlackToken,
+		"C01HQKSTK5G",
+		"C01M257KX1C",
+		config.Config.SlackAPIURL,
+	)
+}
+
 // wrapJob はジョブをラップして、実行開始時にWaitGroupに追加し、終了時にDoneを呼びます
 // シャットダウン中は新しいジョブの実行をブロックします
 func wrapJob(job func()) func() {
@@ -159,11 +169,11 @@ func StartBfService() {
 	}
 
 	savePriceHistoryJobFunc := func() {
-		savePriceHistoryJob(apiClient)
+		SavePriceHistoryJob(apiClient)
 	}
 
 	sendResultsJobFunc := func() {
-		sendResultsJob(apiClient)
+		SendResultsJob(apiClient)
 	}
 
 	cancelBuyOrderJob := func() {
