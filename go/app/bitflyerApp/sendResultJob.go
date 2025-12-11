@@ -8,6 +8,11 @@ import (
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
 )
 
+// SendResultsJob 結果をSlackに送信するジョブ
+func SendResultsJob(apiClient *bitflyer.APIClient) {
+	sendResultsJob(apiClient)
+}
+
 func sendResultsJob(apiClient *bitflyer.APIClient) {
 	log.Println("【sendResultsJob】Start of job")
 	results, err := models.GetResults()

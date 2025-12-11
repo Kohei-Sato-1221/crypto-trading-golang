@@ -20,6 +20,12 @@ run: ## run bitflyer trading ## run
 run-binary: ## run bitflyer traging app via binary ## run-binary
 	cd go && ./bfTradingApp
 
+run-save-price-history: ## run savePriceHistoryJob ## run-save-price-history
+	cd go && go run cmds/save_price_history_job/main.go
+
+run-send-results: ## run sendResultsJob ## run-send-results
+	cd go && go run cmds/send_results_job/main.go
+
 build: ## build bitflyer trading app ## build
 	rm -rf go/bfTradingApp
 	cd go && go build cmds/bifflyer_trading/main.go && mv main bfTradingApp && chmod 500 bfTradingApp
