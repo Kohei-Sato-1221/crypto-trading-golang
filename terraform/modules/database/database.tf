@@ -5,7 +5,7 @@ resource "aws_db_instance" "crypto_trading_db" {
   instance_class             = "db.t3.micro"
   allocated_storage          = 20
   storage_type               = "gp3"
-  username                   = "crypto_trading_root"
+  username                   = var.db_username
   password                   = var.db_password
   db_name                    = var.db_name != "" ? var.db_name : null
   multi_az                   = false
