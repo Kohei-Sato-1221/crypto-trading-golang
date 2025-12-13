@@ -252,6 +252,7 @@ func StartBfService() {
 		// 動作確認用のジョブ
 		// scheduler.Every(100000).Seconds().Run(buyingBTCJob)
 		// scheduler.Every(100000).Seconds().Run(buyingETHJob)
+		scheduler.Every().Day().At("15:35").Run(wrapJob(savePriceHistoryJobFunc))
 	}
 	runtime.Goexit()
 }

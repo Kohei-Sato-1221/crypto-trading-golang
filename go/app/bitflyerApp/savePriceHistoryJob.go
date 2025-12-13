@@ -1,6 +1,7 @@
 package bitflyerApp
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
@@ -17,18 +18,19 @@ func savePriceHistoryJob(apiClient *bitflyer.APIClient) {
 
 	productCodes := []string{"BTC_JPY", "ETH_JPY", "XRP_JPY", "MONA_JPY"}
 	for _, productCode := range productCodes {
-		savePriceHistoryForProduct(apiClient, productCode)
+		res := savePriceHistoryForProduct(apiClient, productCode)
+		slackClient.PostMessage(res, false)
 	}
 
 	log.Println("【savePriceHistoryJob】End of job")
 }
 
-func savePriceHistoryForProduct(apiClient *bitflyer.APIClient, productCode string) {
+func savePriceHistoryForProduct(apiClient *bitflyer.APIClient, productCode string) string {
 	ticker, err := apiClient.GetTicker(productCode)
 	if err != nil {
 		log.Printf("【ERROR】Failed to get %s ticker: %v", productCode, err)
 		slackClient.PostMessage("【ERROR】Failed to get "+productCode+" ticker", true)
-		return
+		return "savePriceHistoryForProduct failed...."
 	}
 
 	// 24時間前の価格を取得
@@ -38,8 +40,9 @@ func savePriceHistoryForProduct(apiClient *bitflyer.APIClient, productCode strin
 	}
 
 	var priceRatio24h *float64
+	var ratio float64
 	if price24hAgo != nil && *price24hAgo > 0 {
-		ratio := ticker.Ltp / *price24hAgo
+		ratio = ticker.Ltp / *price24hAgo
 		priceRatio24h = &ratio
 		log.Printf("%s: current=%.2f, 24h_ago=%.2f, ratio=%.4f", productCode, ticker.Ltp, *price24hAgo, ratio)
 	} else {
@@ -51,4 +54,6 @@ func savePriceHistoryForProduct(apiClient *bitflyer.APIClient, productCode strin
 		log.Printf("【ERROR】Failed to save %s price history: %v", productCode, err)
 		slackClient.PostMessage("【ERROR】Failed to save "+productCode+" price history", true)
 	}
+
+	return fmt.Sprintf("🔸%s %.2f(%.4f)", productCode, ticker.Ltp, ratio)
 }
