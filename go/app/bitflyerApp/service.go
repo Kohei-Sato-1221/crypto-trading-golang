@@ -105,36 +105,53 @@ func StartBfService() {
 		config.Config.SlackAPIURL,
 	)
 
-	buyingBTCJob := func() {
-		placeBuyOrder(enums.Stg0BtcLtp3low7, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
+	buyingBTCJobEveryDay := func() {
+		placeBuyOrder(enums.StrategyLTP99, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, nil)
 	}
-	buyingETHJob := func() {
-		placeBuyOrder(enums.Stg10EthLtp995, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
-	}
-
-	buyingBTCJob02 := func() {
-		placeBuyOrder(enums.Stg1BtcLtp997, "BTC_JPY", config.Config.BFBTCBuyAmount02, apiClient, utils.ToP(enums.WeekdayTuesday))
-	}
-	buyingETHJob02 := func() {
-		placeBuyOrder(enums.Stg11EthLtp98, "ETH_JPY", config.Config.BFETHBuyAmount02, apiClient, utils.ToP(enums.WeekdayTuesday))
+	buyingETHJobEveryDay := func() {
+		placeBuyOrder(enums.StrategyLTP99, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, nil)
 	}
 
-	buyingBTCJob03 := func() {
-		placeBuyOrder(enums.Stg2BtcLtp98, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient, utils.ToP(enums.WeekdayFriday))
+	buyingBTCJobLTP95Mon := func() {
+		placeBuyOrder(enums.StrategyLTP95, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
 	}
-	buyingETHJob03 := func() {
-		placeBuyOrder(enums.Stg12EthLtp97, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, utils.ToP(enums.WeekdayFriday))
-	}
-
-	buyingETHJob04 := func() {
-		placeBuyOrder(enums.Stg13EthLtp3low7, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, utils.ToP(enums.WeekdaySaturday))
+	buyingETHJobLTP95Mon := func() {
+		placeBuyOrder(enums.StrategyLTP95, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
 	}
 
-	buyingETHJob99 := func() {
-		placeBuyOrder(enums.Stg14EthLtp90, "ETH_JPY", config.Config.BFETHBuyAmount03, apiClient, utils.ToP(enums.WeekdaySunday))
+	buyingBTCJobLTP98Tue := func() {
+		placeBuyOrder(enums.StrategyLTP98, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayTuesday))
 	}
-	buyingBTCJob99 := func() {
-		placeBuyOrder(enums.Stg3BtcLtp90, "BTC_JPY", config.Config.BFBTCBuyAmount03, apiClient, utils.ToP(enums.WeekdaySunday))
+	buyingETHJobLTP98Tue := func() {
+		placeBuyOrder(enums.StrategyLTP98, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayTuesday))
+	}
+
+	buyingBTCJobLTP5t5Wed := func() {
+		placeBuyOrder(enums.StrategyLtpLowestIn7days5t5, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayWednesday))
+	}
+	buyingETHJobLTP5t5Wed := func() {
+		placeBuyOrder(enums.StrategyLtpLowestIn7days5t5, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayWednesday))
+	}
+
+	buyingBTCJobLTP98Sat := func() {
+		placeBuyOrder(enums.StrategyLTP98, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdaySaturday))
+	}
+	buyingETHJobLTP98Sat := func() {
+		placeBuyOrder(enums.StrategyLTP98, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdaySaturday))
+	}
+
+	buyingBTCJobLTP5t5Sun := func() {
+		placeBuyOrder(enums.StrategyLtpLowestIn7days2t8, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdaySunday))
+	}
+	buyingETHJobLTP5t5Sun := func() {
+		placeBuyOrder(enums.StrategyLtpLowestIn7days2t8, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdaySunday))
+	}
+
+	buyingBTCJobLTP95TEST := func() {
+		placeBuyOrder(enums.StrategyLTP95, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdaySaturday))
+	}
+	buyingETHJobLTP95TEST := func() {
+		placeBuyOrder(enums.StrategyLTP95, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdaySaturday))
 	}
 
 	btcFilledCheckJob := func() {
@@ -211,19 +228,23 @@ func StartBfService() {
 	}
 
 	if !config.Config.IsTest {
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob))
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobEveryDay))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobEveryDay))
 
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob02))
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob02))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP95Mon))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP95Mon))
 
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob03))
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob03))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP98Tue))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP98Tue))
 
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob04))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP5t5Wed))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP5t5Wed))
 
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingETHJob99))
-		scheduler.Every().Day().At("6:30").Run(wrapJob(buyingBTCJob99))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP98Sat))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP98Sat))
+
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP5t5Sun))
+		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP5t5Sun))
 
 		scheduler.Every(90).Seconds().Run(wrapJob(syncBTCBuyOrderJob))
 		scheduler.Every(90).Seconds().Run(wrapJob(syncETHBuyOrderJob))
@@ -252,7 +273,9 @@ func StartBfService() {
 		// 動作確認用のジョブ
 		// scheduler.Every(100000).Seconds().Run(buyingBTCJob)
 		// scheduler.Every(100000).Seconds().Run(buyingETHJob)
-		scheduler.Every().Day().At("15:35").Run(wrapJob(savePriceHistoryJobFunc))
+		// scheduler.Every().Day().At("15:35").Run(wrapJob(savePriceHistoryJobFunc))
+		scheduler.Every().Day().At("16:24").Run(wrapJob(buyingBTCJobLTP95TEST))
+		scheduler.Every().Day().At("16:24").Run(wrapJob(buyingETHJobLTP95TEST))
 	}
 	runtime.Goexit()
 }

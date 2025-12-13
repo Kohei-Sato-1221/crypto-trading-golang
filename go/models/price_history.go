@@ -60,3 +60,28 @@ func GetPrice24HoursAgo(productCode string) (*float64, error) {
 	log.Printf("Found price 24h ago for %s: price=%.2f (searched before %v)", productCode, *price, twentyThreeHoursAgo)
 	return price, nil
 }
+
+// GetLowestPriceInPast7Days 過去7日間の最低価格を取得する
+func GetLowestPriceInPast7Days(productCode string) (*float64, error) {
+	utc, _ := time.LoadLocation("UTC")
+	now := time.Now().In(utc)
+	sevenDaysAgo := now.Add(-7 * 24 * time.Hour)
+
+	cmd, err := AppDB.Prepare("SELECT MIN(price) FROM price_histories WHERE product_code = ? AND datetime >= ?")
+	if err != nil {
+		log.Printf("[ERROR] GetLowestPriceInPast7Days01: %s\n", err)
+		return nil, err
+	}
+
+	var price *float64
+	err = cmd.QueryRow(productCode, sevenDaysAgo).Scan(&price)
+	if err != nil {
+		log.Printf("No price data found in past 7 days for %s (searched from %v)", productCode, sevenDaysAgo)
+		return nil, nil
+	}
+
+	if price != nil {
+		log.Printf("Found lowest price in past 7 days for %s: price=%.2f (searched from %v)", productCode, *price, sevenDaysAgo)
+	}
+	return price, nil
+}

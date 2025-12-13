@@ -63,12 +63,18 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 	var res *bitflyer.PlaceOrderResponse
 	ticker, _ := apiClient.GetTicker(productCode)
 
+	// 過去7日間の最低価格を取得
+	var lowestPriceInPast7Days *float64
+	if strategy >= 20001 {
+		lowestPriceInPast7Days, _ = models.GetLowestPriceInPast7Days(productCode)
+	}
+
 	if strategy < 10 {
 		// BTC_JPYの場合
-		buyPrice = utils.CalculateBuyPrice(bitbankClient.Last, bitbankClient.Low, strategy)
+		buyPrice = utils.CalculateBuyPrice(bitbankClient.Last, bitbankClient.Low, strategy, lowestPriceInPast7Days)
 	} else {
 		// ETH_JPYの場合
-		buyPrice = utils.CalculateBuyPrice(ticker.Ltp, ticker.BestBid, strategy)
+		buyPrice = utils.CalculateBuyPrice(ticker.Ltp, ticker.BestBid, strategy, lowestPriceInPast7Days)
 	}
 
 	minuteToExpire := models.CalculateMinuteToExpire(strategy)
