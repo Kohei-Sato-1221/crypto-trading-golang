@@ -228,8 +228,8 @@ func StartBfService() {
 	}
 
 	if !config.Config.IsTest {
-		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobEveryDay))
-		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobEveryDay))
+		scheduler.Every().Day().At("18:45").Run(wrapJob(buyingBTCJobEveryDay))
+		scheduler.Every().Day().At("18:45").Run(wrapJob(buyingETHJobEveryDay))
 
 		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP95Mon))
 		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP95Mon))
@@ -243,8 +243,8 @@ func StartBfService() {
 		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP98Sat))
 		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP98Sat))
 
-		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingBTCJobLTP5t5Sun))
-		scheduler.Every().Day().At("17:30").Run(wrapJob(buyingETHJobLTP5t5Sun))
+		scheduler.Every().Day().At("18:45").Run(wrapJob(buyingBTCJobLTP5t5Sun))
+		scheduler.Every().Day().At("18:45").Run(wrapJob(buyingETHJobLTP5t5Sun))
 
 		scheduler.Every(90).Seconds().Run(wrapJob(syncBTCBuyOrderJob))
 		scheduler.Every(90).Seconds().Run(wrapJob(syncETHBuyOrderJob))
@@ -255,7 +255,7 @@ func StartBfService() {
 
 		// 毎日6時と18時に価格履歴を保存
 		scheduler.Every().Day().At("06:00").Run(wrapJob(savePriceHistoryJobFunc))
-		scheduler.Every().Day().At("18:00").Run(wrapJob(savePriceHistoryJobFunc))
+		scheduler.Every().Day().At("18:45").Run(wrapJob(savePriceHistoryJobFunc))
 
 		// 毎日朝9時に収益結果をSlackに送信
 		scheduler.Every().Day().At("06:45").Run(wrapJob(sendResultsJobFunc))
