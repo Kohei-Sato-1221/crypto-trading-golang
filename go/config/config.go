@@ -84,6 +84,10 @@ func NewConfig() {
 		Port:           cfg.Section("web").Key("port").MustInt(),
 		ParallelOrders: cfg.Section("tradeSetting").Key("parallel_orders").MustInt(),
 
+		TriggerTime01: cfg.Section("tradeSetting").Key("trigger_time_01").String(),
+		TriggerTime02: cfg.Section("tradeSetting").Key("trigger_time_02").String(),
+		TriggerTime03: cfg.Section("tradeSetting").Key("trigger_time_03").String(),
+
 		SlackAPIURL: pcfg.Section("slack").Key("api_url").String(),
 		SlackToken:  pcfg.Section("slack").Key("token").String(),
 
@@ -141,6 +145,10 @@ type ConfigList struct {
 	SQLDriver      string
 	Port           int
 	ParallelOrders int
+
+	TriggerTime01 string
+	TriggerTime02 string
+	TriggerTime03 string
 
 	SlackAPIURL string
 	SlackToken  string

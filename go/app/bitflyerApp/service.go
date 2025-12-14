@@ -227,24 +227,28 @@ func StartBfService() {
 		log.Println("【cancelBuyOrderJob】End of job")
 	}
 
+	triggerTime01 := config.Config.TriggerTime01
+	triggerTime02 := config.Config.TriggerTime02
+	triggerTime03 := config.Config.TriggerTime03
+
 	if !config.Config.IsTest {
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingBTCJobEveryDay))
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingETHJobEveryDay))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobEveryDay))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobEveryDay))
 
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingBTCJobLTP95Mon))
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingETHJobLTP95Mon))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP95Mon))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP95Mon))
 
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingBTCJobLTP98Tue))
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingETHJobLTP98Tue))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP98Tue))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP98Tue))
 
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingBTCJobLTP5t5Wed))
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingETHJobLTP5t5Wed))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP5t5Wed))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP5t5Wed))
 
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingBTCJobLTP98Sat))
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingETHJobLTP98Sat))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP98Sat))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP98Sat))
 
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingBTCJobLTP5t5Sun))
-		scheduler.Every().Day().At("06:15").Run(wrapJob(buyingETHJobLTP5t5Sun))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP5t5Sun))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP5t5Sun))
 
 		scheduler.Every(90).Seconds().Run(wrapJob(syncBTCBuyOrderJob))
 		scheduler.Every(90).Seconds().Run(wrapJob(syncETHBuyOrderJob))
@@ -254,11 +258,11 @@ func StartBfService() {
 		scheduler.Every(7200).Seconds().Run(wrapJob(deleteRecordJob))
 
 		// 毎日6時と18時に価格履歴を保存
-		scheduler.Every().Day().At("06:00").Run(wrapJob(savePriceHistoryJobFunc))
-		scheduler.Every().Day().At("18:00").Run(wrapJob(savePriceHistoryJobFunc))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(savePriceHistoryJobFunc))
+		scheduler.Every().Day().At(triggerTime03).Run(wrapJob(savePriceHistoryJobFunc))
 
 		// 毎日朝9時に収益結果をSlackに送信
-		scheduler.Every().Day().At("06:30").Run(wrapJob(sendResultsJobFunc))
+		scheduler.Every().Day().At(triggerTime02).Run(wrapJob(sendResultsJobFunc))
 
 		scheduler.Every().Day().At("23:45").Run(wrapJob(cancelBuyOrderJob))
 
