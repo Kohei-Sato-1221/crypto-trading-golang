@@ -50,7 +50,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 	log.Printf("【buyingJob】JPY balance: %.2f (BudgetCriteria: %.2f)", jpyBalance, config.Config.BudgetCriteria)
 
 	// 最大注文数を超えている場合はスキップする
-	shouldSkip, err := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
+	shouldSkip, err, msg := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
 	if err != nil {
 		errMsg := fmt.Sprintf("【ERROR】placeBuyOrder error:%v", err.Error())
 		log.Printf("%s\n", errMsg)
@@ -59,8 +59,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		return
 	}
 	if shouldSkip {
-		msg := fmt.Sprintf("placeBuyOrder ShouldSkip :%v max:%v", shouldSkip, apiClient.Max_sell_orders)
-		log.Println(msg)
+		log.Printf("placeBuyOrder ShouldSkip :%v max:%v\n", shouldSkip, apiClient.Max_sell_orders)
 		log.Println("【buyingJob】end of job as skip")
 		slackClient.PostMessage(msg, true)
 		return

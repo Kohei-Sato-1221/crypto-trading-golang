@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -126,10 +127,10 @@ func GetUnfilledBuyOrders() ([]BuyOrder, error) {
  2. 未約定の売り注文数 < 最大売り注文数
     を両方満たす場合にtrueを返却。
 */
-func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) (bool, error) {
+func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) (bool, error, string) {
 	rows, err := AppDB.Query(`SELECT COUNT(order_id) FROM buy_orders WHERE status = 'UNFILLED' and order_id != '' union all SELECT COUNT(order_id) FROM sell_orders WHERE status = 'UNFILLED' and order_id != ''`)
 	if err != nil {
-		return true, err
+		return true, err, ""
 	}
 	defer rows.Close()
 
@@ -140,7 +141,7 @@ func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) (bool, error) {
 	for rows.Next() {
 		if err := rows.Scan(&cnt); err != nil {
 			log.Println("Failure to get records.....")
-			return true, err
+			return true, err, ""
 		}
 		if rowCnt == 0 {
 			numberOfExistingBuyOrders = cnt
@@ -150,12 +151,14 @@ func ShouldPlaceBuyOrder(max_buy_orders, max_sell_orders int) (bool, error) {
 		}
 		rowCnt = rowCnt + 1
 	}
-	log.Printf("ShouldPlaceBuyOrder: numberOfExistingBuyOrders:%v numberOfExistingSellOrders:%v", numberOfExistingBuyOrders, numberOfExistingSellOrders)
+
+	msg := fmt.Sprintf("ShouldPlaceBuyOrder: numberOfExistingBuyOrders:%v numberOfExistingSellOrders:%v", numberOfExistingBuyOrders, numberOfExistingSellOrders)
+	log.Println(msg)
 	if numberOfExistingBuyOrders < max_buy_orders &&
 		numberOfExistingSellOrders < max_sell_orders {
-		return false, nil
+		return false, nil, msg
 	}
-	return true, nil
+	return true, nil, msg
 }
 
 type BuyOrderInfo struct {
