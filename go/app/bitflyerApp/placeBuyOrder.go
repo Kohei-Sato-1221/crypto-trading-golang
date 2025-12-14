@@ -14,12 +14,16 @@ import (
 )
 
 func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient, weekday *string) {
+	slackClient.PostMessage(fmt.Sprintf("placeBuyOrder: code:%s strategry:%v size:%v weekday:%s", productCode, strategy, size, *weekday), false)
+
 	log.Printf("strategy:%v", strategy)
 	log.Println("【buyingJob】start of job")
 
 	// 今日が指定された曜日でなければスキップする
 	if weekday != nil && !enums.IsTodayWeekday(*weekday) {
-		log.Printf("【buyingJob】Skipped!! Today is not %s\n", *weekday)
+		msg := fmt.Sprintf("【buyingJob】Skipped!! Today is not %s\n", *weekday)
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
 		return
 	}
 
@@ -51,8 +55,10 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		return
 	}
 	if shouldSkip {
-		log.Printf("ShouldSkip :%v max:%v", shouldSkip, apiClient.Max_sell_orders)
+		msg := fmt.Sprintf("placeBuyOrder ShouldSkip :%v max:%v", shouldSkip, apiClient.Max_sell_orders)
+		log.Println(msg)
 		log.Println("【buyingJob】end of job as skip")
+		slackClient.PostMessage(msg, true)
 		return
 	}
 
