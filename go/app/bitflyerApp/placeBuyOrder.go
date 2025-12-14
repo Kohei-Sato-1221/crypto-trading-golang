@@ -14,7 +14,11 @@ import (
 )
 
 func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient, weekday *string) {
-	slackClient.PostMessage(fmt.Sprintf("placeBuyOrder: code:%s strategry:%v size:%v weekday:%s", productCode, strategy, size, *weekday), false)
+	weekdayStr := "nil"
+	if weekday != nil {
+		weekdayStr = *weekday
+	}
+	slackClient.PostMessage(fmt.Sprintf("placeBuyOrder: code:%s strategry:%v size:%v weekday:%s", productCode, strategy, size, weekdayStr), false)
 
 	log.Printf("strategy:%v", strategy)
 	log.Println("【buyingJob】start of job")
