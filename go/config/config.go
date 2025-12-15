@@ -87,6 +87,7 @@ func NewConfig() {
 		TriggerTime01: cfg.Section("tradeSetting").Key("trigger_time_01").String(),
 		TriggerTime02: cfg.Section("tradeSetting").Key("trigger_time_02").String(),
 		TriggerTime03: cfg.Section("tradeSetting").Key("trigger_time_03").String(),
+		TriggerTime04: cfg.Section("tradeSetting").Key("trigger_time_04").String(),
 
 		SlackAPIURL: pcfg.Section("slack").Key("api_url").String(),
 		SlackToken:  pcfg.Section("slack").Key("token").String(),
@@ -149,6 +150,7 @@ type ConfigList struct {
 	TriggerTime01 string
 	TriggerTime02 string
 	TriggerTime03 string
+	TriggerTime04 string
 
 	SlackAPIURL string
 	SlackToken  string

@@ -230,6 +230,7 @@ func StartBfService() {
 	triggerTime01 := config.Config.TriggerTime01
 	triggerTime02 := config.Config.TriggerTime02
 	triggerTime03 := config.Config.TriggerTime03
+	triggerTime04 := config.Config.TriggerTime04
 
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobEveryDay))
@@ -258,8 +259,8 @@ func StartBfService() {
 		scheduler.Every(7200).Seconds().Run(wrapJob(deleteRecordJob))
 
 		// 毎日6時と18時に価格履歴を保存
-		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(savePriceHistoryJobFunc))
 		scheduler.Every().Day().At(triggerTime03).Run(wrapJob(savePriceHistoryJobFunc))
+		scheduler.Every().Day().At(triggerTime04).Run(wrapJob(savePriceHistoryJobFunc))
 
 		// 毎日朝9時に収益結果をSlackに送信
 		scheduler.Every().Day().At(triggerTime02).Run(wrapJob(sendResultsJobFunc))
