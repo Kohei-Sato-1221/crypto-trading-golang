@@ -12,6 +12,9 @@ trading.log
 */bfTradingApp
 
 
+# data migration dumps
+dump/
+
 # terraform
 private_key_script.txt
 **/.terraform/*
