@@ -3,6 +3,8 @@ package models
 import (
 	"log"
 	"time"
+
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/database"
 )
 
 type PriceHistory struct {
@@ -19,11 +21,19 @@ func SavePriceHistory(productCode string, price float64, priceRatio24h *float64)
 	utc, _ := time.LoadLocation("UTC")
 	now := time.Now().In(utc)
 
-	cmd, err := AppDB.Prepare("INSERT INTO price_histories (datetime, product_code, price, price_ratio_24h) VALUES (?, ?, ?, ?)")
+	var query string
+	if database.CurrentDriver() == "postgres" {
+		query = "INSERT INTO price_histories (datetime, product_code, price, price_ratio_24h) VALUES ($1, $2, $3, $4)"
+	} else {
+		query = "INSERT INTO price_histories (datetime, product_code, price, price_ratio_24h) VALUES (?, ?, ?, ?)"
+	}
+
+	cmd, err := AppDB.Prepare(query)
 	if err != nil {
 		log.Printf("[ERROR] SavePriceHistory01: %s\n", err)
 		return err
 	}
+	defer cmd.Close()
 
 	_, err = cmd.Exec(now, productCode, price, priceRatio24h)
 	if err != nil {
@@ -40,19 +50,25 @@ func SavePriceHistory(productCode string, price float64, priceRatio24h *float64)
 func GetPrice24HoursAgo(productCode string) (*float64, error) {
 	utc, _ := time.LoadLocation("UTC")
 	now := time.Now().In(utc)
-	// 23時間前を基準として、その時点以前の最新レコードを取得
 	twentyThreeHoursAgo := now.Add(-23 * time.Hour)
 
-	cmd, err := AppDB.Prepare("SELECT price FROM price_histories WHERE product_code = ? AND datetime <= ? ORDER BY datetime DESC LIMIT 1")
+	var query string
+	if database.CurrentDriver() == "postgres" {
+		query = "SELECT price FROM price_histories WHERE product_code = $1 AND datetime <= $2 ORDER BY datetime DESC LIMIT 1"
+	} else {
+		query = "SELECT price FROM price_histories WHERE product_code = ? AND datetime <= ? ORDER BY datetime DESC LIMIT 1"
+	}
+
+	cmd, err := AppDB.Prepare(query)
 	if err != nil {
 		log.Printf("[ERROR] GetPrice24HoursAgo01: %s\n", err)
 		return nil, err
 	}
+	defer cmd.Close()
 
 	var price *float64
 	err = cmd.QueryRow(productCode, twentyThreeHoursAgo).Scan(&price)
 	if err != nil {
-		// 23時間前以前のデータがない場合はnilを返す（エラーではない）
 		log.Printf("No price data found before 23 hours ago for %s (searched before %v)", productCode, twentyThreeHoursAgo)
 		return nil, nil
 	}
@@ -67,11 +83,19 @@ func GetLowestPriceInPast7Days(productCode string) (*float64, error) {
 	now := time.Now().In(utc)
 	sevenDaysAgo := now.Add(-7 * 24 * time.Hour)
 
-	cmd, err := AppDB.Prepare("SELECT MIN(price) FROM price_histories WHERE product_code = ? AND datetime >= ?")
+	var query string
+	if database.CurrentDriver() == "postgres" {
+		query = "SELECT MIN(price) FROM price_histories WHERE product_code = $1 AND datetime >= $2"
+	} else {
+		query = "SELECT MIN(price) FROM price_histories WHERE product_code = ? AND datetime >= ?"
+	}
+
+	cmd, err := AppDB.Prepare(query)
 	if err != nil {
 		log.Printf("[ERROR] GetLowestPriceInPast7Days01: %s\n", err)
 		return nil, err
 	}
+	defer cmd.Close()
 
 	var price *float64
 	err = cmd.QueryRow(productCode, sevenDaysAgo).Scan(&price)

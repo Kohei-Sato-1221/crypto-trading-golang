@@ -50,7 +50,9 @@ func NewConfig() {
 		OKJApiSecret:  pcfg.Section("okj").Key("api_secret").String(),
 		OKJPassPhrase: pcfg.Section("okj").Key("pass_phrase").String(),
 
-		MySql: pcfg.Section("database").Key("mysql").String(),
+		DBDriver: pcfg.Section("database").Key("driver").String(),
+		MySql:    pcfg.Section("database").Key("mysql").String(),
+		Postgres: pcfg.Section("database").Key("postgres").String(),
 
 		BFMaxBuy:  cfg.Section("bitflyer").Key("max_buy_orders").MustInt(),
 		BFMaxSell: cfg.Section("bitflyer").Key("max_sell_orders").MustInt(),
@@ -130,7 +132,9 @@ type ConfigList struct {
 	LogFile     string
 	ProductCode string
 
-	MySql string
+	DBDriver string // "mysql" or "postgres" - DB切り替え用（private_config.ini [database] driver）
+	MySql    string // MySQL接続DSN
+	Postgres string // PostgreSQL接続DSN
 
 	OKApiKey     string
 	OKApiSecret  string

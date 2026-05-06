@@ -30,6 +30,35 @@ build: ## build bitflyer trading app ## build
 	rm -rf go/bfTradingApp
 	cd go && go build cmds/bifflyer_trading/main.go && mv main bfTradingApp && chmod 500 bfTradingApp
 
+db-up: ## start local PostgreSQL via docker-compose ## db-up
+	docker compose up -d postgres
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
+	@echo "PostgreSQL is ready on port 5433."
+
+db-down: ## stop local PostgreSQL ## db-down
+	docker compose down
+
+test: ## run integration tests with docker-compose PostgreSQL ## test
+	docker compose up -d postgres
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
+	@echo "PostgreSQL is ready."
+	cd go && go test ./tests/ -v -count=1
+	docker compose down
+
+test-keep-db: ## run tests without stopping PostgreSQL (for repeated runs) ## test-keep-db
+	cd go && go test ./tests/ -v -count=1
+
+migrate-dump: ## Dump MySQL data from AWS RDS and convert to PostgreSQL format ## migrate-dump
+	PATH="/opt/homebrew/opt/mysql-client/bin:$$PATH" bash scripts/migration/dump_mysql.sh
+
+migrate-import: ## Import dumped data to Supabase PostgreSQL ## migrate-import
+	PATH="/opt/homebrew/opt/libpq/bin:$$PATH" bash scripts/migration/import_to_supabase.sh
+
+migrate-reset: ## Drop all tables in Supabase (for re-import) ## migrate-reset
+	PATH="/opt/homebrew/opt/libpq/bin:$$PATH" bash scripts/migration/reset_supabase.sh
+
 tfenv: ## change terraform version ## tfenv
 	tfenv use ${TF_VERSION}
 

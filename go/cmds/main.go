@@ -12,7 +12,7 @@ import (
 
 func main() {
 	config.NewConfig()
-	models.NewMysqlBase()
+	models.InitDB()
 	utils.LogSetting(config.Config.LogFile)
 
 	log.Printf("#######")
