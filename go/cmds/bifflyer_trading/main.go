@@ -12,7 +12,7 @@ import (
 func main() {
 	log.Println("🔷Start Bifflyer Trading🔷")
 	config.NewConfig()
-	models.NewMysqlBase()
+	models.InitDB()
 	utils.LogSetting(config.Config.LogFile)
 	log.Printf("#######\n")
 	log.Printf("config:%#v\n", config.Config)
