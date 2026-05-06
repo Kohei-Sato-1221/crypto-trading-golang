@@ -30,6 +30,17 @@ build: ## build bitflyer trading app ## build
 	rm -rf go/bfTradingApp
 	cd go && go build cmds/bifflyer_trading/main.go && mv main bfTradingApp && chmod 500 bfTradingApp
 
+test: ## run integration tests with docker-compose PostgreSQL ## test
+	docker compose up -d postgres
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
+	@echo "PostgreSQL is ready."
+	cd go && go test ./tests/ -v -count=1
+	docker compose down
+
+test-keep-db: ## run tests without stopping PostgreSQL (for repeated runs) ## test-keep-db
+	cd go && go test ./tests/ -v -count=1
+
 tfenv: ## change terraform version ## tfenv
 	tfenv use ${TF_VERSION}
 
