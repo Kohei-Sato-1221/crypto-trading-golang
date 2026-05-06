@@ -30,6 +30,15 @@ build: ## build bitflyer trading app ## build
 	rm -rf go/bfTradingApp
 	cd go && go build cmds/bifflyer_trading/main.go && mv main bfTradingApp && chmod 500 bfTradingApp
 
+db-up: ## start local PostgreSQL via docker-compose ## db-up
+	docker compose up -d postgres
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
+	@echo "PostgreSQL is ready on port 5433."
+
+db-down: ## stop local PostgreSQL ## db-down
+	docker compose down
+
 test: ## run integration tests with docker-compose PostgreSQL ## test
 	docker compose up -d postgres
 	@echo "Waiting for PostgreSQL to be ready..."
