@@ -68,4 +68,21 @@ reset-db: ## reset db ## reset-db
 
 up: install-migration-tool ## prepare db by atlas ## up
 	make atlas-apply
-	
+
+# === PostgreSQL commands ===
+
+PG_LOCAL_URL = postgresql://postgres:postgres@localhost:5432/crypto_trading
+
+pg-status: ## check PostgreSQL migration status ## pg-status
+	atlas migrate status \
+		--dir "file://crypto-trading-db-postgres/migrations" \
+		-u "$(PG_LOCAL_URL)"
+
+pg-apply: ## apply PostgreSQL migration ## pg-apply
+	atlas migrate apply \
+		--dir "file://crypto-trading-db-postgres/migrations" \
+		-u "$(PG_LOCAL_URL)"
+
+pg-init: ## initialize local PostgreSQL with init SQL ## pg-init
+	psql "$(PG_LOCAL_URL)" -f crypto-trading-db-postgres/init/001_init.sql
+
