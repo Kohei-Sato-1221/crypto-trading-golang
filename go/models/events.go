@@ -53,20 +53,14 @@ func (e *OrderEvent) BuyOrder() error {
 	} else {
 		query = "INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange, strategy, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 	}
-	cmd1, err := AppDB.Prepare(query)
-	if err != nil {
-		log.Printf("[ERROR] BuyOrder01:%s\n", err)
-		return err
-	}
-	defer cmd1.Close()
 	log.Printf("BuyOrder() order_id:%s price:%10.2f size:%f side:%s strategy:%d", e.OrderID, e.Price, e.Size, e.Side, e.Strategy)
-	_, err = cmd1.Exec(e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange, e.Strategy, "placed by trading app")
+	_, err := AppDB.Exec(query, e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange, e.Strategy, "placed by trading app")
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") || strings.Contains(err.Error(), "duplicate key") {
 			log.Printf("[ERROR] BuyOrder duplicate:%s\n", err)
 			return nil
 		}
-		log.Printf("[ERROR] BuyOrder02:%s\n", err)
+		log.Printf("[ERROR] BuyOrder:%s\n", err)
 		return err
 	}
 	return nil
@@ -79,13 +73,7 @@ func (e *OrderEvent) SellOrder(pid string) error {
 	} else {
 		query = "INSERT INTO sell_orders (parentid, order_id, product_code, side, price, size, exchange) VALUES (?, ?, ?, ?, ?, ?, ?)"
 	}
-	cmd1, err := AppDB.Prepare(query)
-	if err != nil {
-		log.Printf("[ERROR] SellOrder Prepare:%s\n", err)
-		return err
-	}
-	defer cmd1.Close()
-	_, err = cmd1.Exec(pid, e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
+	_, err := AppDB.Exec(query, pid, e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") || strings.Contains(err.Error(), "duplicate key") {
 			log.Println(err)
@@ -103,13 +91,7 @@ func FilledCheck(productCode string) ([]string, error) {
 	} else {
 		query = `SELECT order_id FROM buy_orders WHERE status = 'UNFILLED' and order_id != '' and product_code = ? union SELECT order_id FROM sell_orders WHERE status = 'UNFILLED' and order_id != '' and product_code = ?`
 	}
-	cmd, err := AppDB.Prepare(query)
-	if err != nil {
-		log.Printf("[ERROR] FilledCheck Prepare: %v", err)
-		return nil, err
-	}
-	defer cmd.Close()
-	rows, err := cmd.Query(productCode, productCode)
+	rows, err := AppDB.Query(query, productCode, productCode)
 	if err != nil {
 		log.Printf("Failure to exec query..... %v", err)
 		return nil, err
@@ -245,23 +227,11 @@ func UpdateFilledOrder(order_id string) error {
 		q1 = `update buy_orders set status = 'FILLED' where order_id = ?`
 		q2 = `update sell_orders set status = 'FILLED' where order_id = ?`
 	}
-	cmd1, err := AppDB.Prepare(q1)
-	if err != nil {
-		log.Printf("[ERROR] UpdateFilledOrder Prepare q1: %v", err)
-		return err
-	}
-	defer cmd1.Close()
-	_, err = cmd1.Exec(order_id)
+	_, err := AppDB.Exec(q1, order_id)
 	if err != nil {
 		return err
 	}
-	cmd2, err := AppDB.Prepare(q2)
-	if err != nil {
-		log.Printf("[ERROR] UpdateFilledOrder Prepare q2: %v", err)
-		return err
-	}
-	defer cmd2.Close()
-	_, err = cmd2.Exec(order_id)
+	_, err = AppDB.Exec(q2, order_id)
 	if err != nil {
 		return err
 	}
@@ -275,13 +245,7 @@ func UpdateCancelledBuyOrder(order_id string) error {
 	} else {
 		query = `update buy_orders set status = 'CANCELLED' where order_id = ?`
 	}
-	cmd, err := AppDB.Prepare(query)
-	if err != nil {
-		log.Printf("[ERROR] UpdateCancelledBuyOrder Prepare: %v", err)
-		return err
-	}
-	defer cmd.Close()
-	_, err = cmd.Exec(order_id)
+	_, err := AppDB.Exec(query, order_id)
 	if err != nil {
 		return err
 	}
@@ -295,13 +259,7 @@ func UpdateFilledOrderWithBuyOrder(order_id string) error {
 	} else {
 		query = `update buy_orders set status = ? where order_id = ?`
 	}
-	cmd1, err := AppDB.Prepare(query)
-	if err != nil {
-		log.Printf("[ERROR] UpdateFilledOrderWithBuyOrder Prepare: %v", err)
-		return err
-	}
-	defer cmd1.Close()
-	_, err = cmd1.Exec(OrderStatusFilledSellOrderPlaced, order_id)
+	_, err := AppDB.Exec(query, OrderStatusFilledSellOrderPlaced, order_id)
 	if err != nil {
 		return err
 	}
@@ -319,40 +277,23 @@ func SyncBuyOrders(events *[]OrderEvent) {
 	}
 
 	for _, e := range *events {
-		cmd1, err := AppDB.Prepare(countQuery)
+		var cnt int
+		err := AppDB.QueryRow(countQuery, e.OrderID).Scan(&cnt)
 		if err != nil {
-			log.Printf("[ERROR] SyncBuyOrders Prepare countQuery: %v", err)
+			log.Printf("[ERROR] SyncBuyOrders count query: %v", err)
 			continue
 		}
-		rowsExist, err := cmd1.Query(e.OrderID)
-		if err != nil {
-			log.Printf("[ERROR] SyncBuyOrders Query: %v", err)
-			cmd1.Close()
-			continue
-		}
-		cnt := 0
-		for rowsExist.Next() {
-			rowsExist.Scan(&cnt)
-		}
-		rowsExist.Close()
-		cmd1.Close()
 		if cnt == 0 {
 			status := e.Status
 			if status == "" {
 				status = OrderStatusUnfilled
 			}
-			cmd2, err := AppDB.Prepare(insertQuery)
-			if err != nil {
-				log.Printf("[ERROR] SyncBuyOrders Prepare insertQuery: %v", err)
-				continue
-			}
-			_, err = cmd2.Exec(e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange, status, "placed manually")
+			_, err := AppDB.Exec(insertQuery, e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange, status, "placed manually")
 			if err != nil {
 				log.Printf("Failure to do SyncBuyOrders..... %v", err)
 			} else {
 				log.Printf("order_id %v has been newly inserted!", e.OrderID)
 			}
-			cmd2.Close()
 		}
 	}
 }

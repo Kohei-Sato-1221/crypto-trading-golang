@@ -28,16 +28,9 @@ func SavePriceHistory(productCode string, price float64, priceRatio24h *float64)
 		query = "INSERT INTO price_histories (datetime, product_code, price, price_ratio_24h) VALUES (?, ?, ?, ?)"
 	}
 
-	cmd, err := AppDB.Prepare(query)
+	_, err := AppDB.Exec(query, now, productCode, price, priceRatio24h)
 	if err != nil {
-		log.Printf("[ERROR] SavePriceHistory01: %s\n", err)
-		return err
-	}
-	defer cmd.Close()
-
-	_, err = cmd.Exec(now, productCode, price, priceRatio24h)
-	if err != nil {
-		log.Printf("[ERROR] SavePriceHistory02: %s\n", err)
+		log.Printf("[ERROR] SavePriceHistory: %s\n", err)
 		return err
 	}
 
@@ -59,15 +52,8 @@ func GetPrice24HoursAgo(productCode string) (*float64, error) {
 		query = "SELECT price FROM price_histories WHERE product_code = ? AND datetime <= ? ORDER BY datetime DESC LIMIT 1"
 	}
 
-	cmd, err := AppDB.Prepare(query)
-	if err != nil {
-		log.Printf("[ERROR] GetPrice24HoursAgo01: %s\n", err)
-		return nil, err
-	}
-	defer cmd.Close()
-
 	var price *float64
-	err = cmd.QueryRow(productCode, twentyThreeHoursAgo).Scan(&price)
+	err := AppDB.QueryRow(query, productCode, twentyThreeHoursAgo).Scan(&price)
 	if err != nil {
 		log.Printf("No price data found before 23 hours ago for %s (searched before %v)", productCode, twentyThreeHoursAgo)
 		return nil, nil
@@ -90,15 +76,8 @@ func GetLowestPriceInPast7Days(productCode string) (*float64, error) {
 		query = "SELECT MIN(price) FROM price_histories WHERE product_code = ? AND datetime >= ?"
 	}
 
-	cmd, err := AppDB.Prepare(query)
-	if err != nil {
-		log.Printf("[ERROR] GetLowestPriceInPast7Days01: %s\n", err)
-		return nil, err
-	}
-	defer cmd.Close()
-
 	var price *float64
-	err = cmd.QueryRow(productCode, sevenDaysAgo).Scan(&price)
+	err := AppDB.QueryRow(query, productCode, sevenDaysAgo).Scan(&price)
 	if err != nil {
 		log.Printf("No price data found in past 7 days for %s (searched from %v)", productCode, sevenDaysAgo)
 		return nil, nil

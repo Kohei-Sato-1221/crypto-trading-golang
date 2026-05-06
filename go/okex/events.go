@@ -1,7 +1,6 @@
 package okex
 
 import (
-	"database/sql"
 	"errors"
 	"log"
 	"strconv"
@@ -85,7 +84,7 @@ type OkjBuyOrder struct {
 
 var TableName string
 
-// OKEXからデー���を取得して、DBと同期するメソッド
+// OKEXからデータを取得して、DBと同期するメソッド
 func SyncOkexBuyOrders(exchange string, orders *[]OkexOrderEvent) {
 	var selectQuery, insertQuery, updateQuery string
 	if database.CurrentDriver() == "postgres" {
@@ -98,22 +97,13 @@ func SyncOkexBuyOrders(exchange string, orders *[]OkexOrderEvent) {
 		updateQuery = "UPDATE " + TableName + " SET state = ? WHERE order_id = ?"
 	}
 
-	cmd1, _ := models.AppDB.Prepare(selectQuery)
-	cmd2, _ := models.AppDB.Prepare(insertQuery)
-	cmd3, _ := models.AppDB.Prepare(updateQuery)
-	defer cmd1.Close()
-	defer cmd2.Close()
-	defer cmd3.Close()
 	for _, o := range *orders {
 		log.Printf("order_id %v ", o.OrderID)
-		rows, _ := cmd1.Query(o.OrderID)
-		state := -99
-		for rows.Next() {
-			rows.Scan(&state)
-		}
-		rows.Close()
-		if state == -99 {
-			_, err := cmd2.Exec(o.OrderID, o.InstrumentID, o.Side, o.Price, o.Size, exchange, o.State)
+		var state int
+		err := models.AppDB.QueryRow(selectQuery, o.OrderID).Scan(&state)
+		if err != nil {
+			// レコードが見つからない場合はINSERT
+			_, err := models.AppDB.Exec(insertQuery, o.OrderID, o.InstrumentID, o.Side, o.Price, o.Size, exchange, o.State)
 			if err != nil {
 				log.Println("Failure to do SyncBuyOrders.....")
 			} else {
@@ -121,7 +111,7 @@ func SyncOkexBuyOrders(exchange string, orders *[]OkexOrderEvent) {
 			}
 		} else if o.State != strconv.Itoa(state) {
 			log.Printf("Update!!! order_id:%v", o.OrderID)
-			_, err := cmd3.Exec(o.State, o.OrderID)
+			_, err := models.AppDB.Exec(updateQuery, o.State, o.OrderID)
 			if err != nil {
 				log.Println("Failure to do SyncBuyOrders.....")
 			} else {
@@ -138,11 +128,9 @@ func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
 	} else {
 		query = "UPDATE " + TableName + " SET sell_order_state = 2 WHERE sell_order_id = ?"
 	}
-	cmd1, _ := models.AppDB.Prepare(query)
-	defer cmd1.Close()
 	for _, o := range *orders {
 		log.Printf("order_id %v ", o.OrderID)
-		result, err := cmd1.Exec(o.OrderID)
+		result, err := models.AppDB.Exec(query, o.OrderID)
 		if err != nil {
 			log.Println("Failure to do SyncOkexSellOrders.....")
 		} else {
@@ -156,23 +144,22 @@ func SyncOkexSellOrders(orders *[]OkexOrderEvent) {
 
 // 売り注文を発注した際にDBのレコードをアップデートする
 func UpdateOkexSellOrders(order_id, sell_order_id string, sell_price, sell_size float64) {
-	var cmd *sql.Stmt
+	var query string
 	if database.CurrentDriver() == "postgres" {
 		if len(sell_order_id) == 0 {
-			cmd, _ = models.AppDB.Prepare("UPDATE " + TableName + " SET sell_order_state = -1, sell_order_id = $1, sell_price = $2, sell_size = $3 WHERE order_id = $4")
+			query = "UPDATE " + TableName + " SET sell_order_state = -1, sell_order_id = $1, sell_price = $2, sell_size = $3 WHERE order_id = $4"
 		} else {
-			cmd, _ = models.AppDB.Prepare("UPDATE " + TableName + " SET sell_order_state = 1, sell_order_id = $1, sell_price = $2, sell_size = $3 WHERE order_id = $4")
+			query = "UPDATE " + TableName + " SET sell_order_state = 1, sell_order_id = $1, sell_price = $2, sell_size = $3 WHERE order_id = $4"
 		}
 	} else {
 		if len(sell_order_id) == 0 {
-			cmd, _ = models.AppDB.Prepare("UPDATE " + TableName + " SET sell_order_state = -1, sell_order_id = ?, sell_price = ?, sell_size = ? WHERE order_id = ?")
+			query = "UPDATE " + TableName + " SET sell_order_state = -1, sell_order_id = ?, sell_price = ?, sell_size = ? WHERE order_id = ?"
 		} else {
-			cmd, _ = models.AppDB.Prepare("UPDATE " + TableName + " SET sell_order_state = 1, sell_order_id = ?, sell_price = ?, sell_size = ? WHERE order_id = ?")
+			query = "UPDATE " + TableName + " SET sell_order_state = 1, sell_order_id = ?, sell_price = ?, sell_size = ? WHERE order_id = ?"
 		}
 	}
 
-	defer cmd.Close()
-	_, err := cmd.Exec(sell_order_id, sell_price, sell_size, order_id)
+	_, err := models.AppDB.Exec(query, sell_order_id, sell_price, sell_size, order_id)
 	if err != nil {
 		log.Println("Failure to do updateOkexSellOrders.....")
 	} else {
@@ -188,9 +175,7 @@ func GetSoldBuyOrderList(pair string) []OkexFilledBuyOrder {
 	} else {
 		query = `SELECT order_id, price, size FROM ` + TableName + ` WHERE state = 2 and sell_order_state = 0 and pair = ?`
 	}
-	cmd1, _ := models.AppDB.Prepare(query)
-	defer cmd1.Close()
-	rows, err := cmd1.Query(pair)
+	rows, err := models.AppDB.Query(query, pair)
 	if err != nil {
 		return nil
 	}
@@ -339,9 +324,7 @@ func UpdateCancelledOrder(order_id string) error {
 	} else {
 		query = `update ` + TableName + ` set state = -1, sell_order_state = -1 where order_id = ?`
 	}
-	cmd, _ := models.AppDB.Prepare(query)
-	defer cmd.Close()
-	_, err := cmd.Exec(order_id)
+	_, err := models.AppDB.Exec(query, order_id)
 	if err != nil {
 		return err
 	}
