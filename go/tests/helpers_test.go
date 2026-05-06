@@ -12,7 +12,7 @@ import (
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
 )
 
-const testDSN = "postgresql://postgres:postgres@localhost:5432/crypto_trading?sslmode=disable"
+const testDSN = "postgresql://postgres:postgres@localhost:5433/crypto_trading?sslmode=disable"
 
 func setupTestDB(t *testing.T) {
 	t.Helper()

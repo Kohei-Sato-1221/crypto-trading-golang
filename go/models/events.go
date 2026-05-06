@@ -379,9 +379,9 @@ func getResultsPostgres() (string, error) {
 	rows, err := AppDB.Query(`
 		select
 		 'Total' as date,
-		 round((sum(average.profit) * 0.9989)::numeric, 2)::float as profit,
+		 COALESCE(round((sum(average.profit) * 0.9989)::numeric, 2)::float, 0) as profit,
 		 count(average.profit) as count,
-		 round((avg(average.profit) * 0.9989)::numeric, 2)::float as ppt
+		 COALESCE(round((avg(average.profit) * 0.9989)::numeric, 2)::float, 0) as ppt
 		from
 		(select
 			TO_CHAR(a.updatetime, 'YYYY-MM-DD') as date,
@@ -398,9 +398,9 @@ func getResultsPostgres() (string, error) {
 
 		select
 		 result.date as date,
-		 round((sum(result.profit) * 0.9989)::numeric, 2)::float as profit,
+		 COALESCE(round((sum(result.profit) * 0.9989)::numeric, 2)::float, 0) as profit,
 		 count(result.profit) as count,
-		 round((sum(result.profit) / count(result.profit) * 0.9989)::numeric, 2)::float as ppt
+		 COALESCE(round((sum(result.profit) / count(result.profit) * 0.9989)::numeric, 2)::float, 0) as ppt
 		from
 		(select
 			TO_CHAR(a.updatetime, 'YYYY-MM-DD') as date,

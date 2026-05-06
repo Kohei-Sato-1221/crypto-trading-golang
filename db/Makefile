@@ -71,7 +71,7 @@ up: install-migration-tool ## prepare db by atlas ## up
 
 # === PostgreSQL commands ===
 
-PG_LOCAL_URL = postgresql://postgres:postgres@localhost:5432/crypto_trading
+PG_LOCAL_URL = postgresql://postgres:postgres@localhost:5433/crypto_trading
 
 pg-status: ## check PostgreSQL migration status ## pg-status
 	atlas migrate status \
