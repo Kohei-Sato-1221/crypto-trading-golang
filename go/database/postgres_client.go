@@ -3,6 +3,8 @@ package database
 import (
 	"database/sql"
 	"log"
+	"net/url"
+	"strings"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -21,8 +23,29 @@ func NewPostgresClient(dsn string) *PostgresClient {
 	return &PostgresClient{dsn: dsn}
 }
 
+// ensureSimpleProtocol はDSNにdefault_query_exec_mode=simple_protocolを追加する。
+// PgBouncer(トランザクションモード)ではprepared statementが使えないため必須。
+func ensureSimpleProtocol(dsn string) string {
+	if strings.Contains(dsn, "default_query_exec_mode") {
+		return dsn
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		// パースできない場合はパラメータを直接追加
+		if strings.Contains(dsn, "?") {
+			return dsn + "&default_query_exec_mode=simple_protocol"
+		}
+		return dsn + "?default_query_exec_mode=simple_protocol"
+	}
+	q := u.Query()
+	q.Set("default_query_exec_mode", "simple_protocol")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 func (c *PostgresClient) Connect() error {
-	db, err := gorm.Open(postgres.Open(c.dsn), &gorm.Config{})
+	connDSN := ensureSimpleProtocol(c.dsn)
+	db, err := gorm.Open(postgres.Open(connDSN), &gorm.Config{})
 	if err != nil {
 		log.Printf("【ERROR】Failed to open PostgreSQL connection: %v", err)
 		return err
