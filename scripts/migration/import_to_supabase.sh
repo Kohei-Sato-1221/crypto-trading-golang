@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DUMP_DIR="$PROJECT_ROOT/dump"
 
-SUPABASE_DSN="postgresql://postgres:AbcfbG294QB2hR@db.hastyhkkwedwqchtlsiv.supabase.co:5432/postgres?sslmode=require"
+SUPABASE_DSN="postgresql://postgres.hastyhkkwedwqchtlsiv:AbcfbG294QB2hR@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require"
 
 if [ ! -f "$DUMP_DIR/postgres_data.sql" ]; then
   echo "ERROR: $DUMP_DIR/postgres_data.sql not found. Run 'make migrate-dump' first."

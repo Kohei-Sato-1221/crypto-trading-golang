@@ -51,13 +51,13 @@ test-keep-db: ## run tests without stopping PostgreSQL (for repeated runs) ## te
 	cd go && go test ./tests/ -v -count=1
 
 migrate-dump: ## Dump MySQL data from AWS RDS and convert to PostgreSQL format ## migrate-dump
-	bash scripts/migration/dump_mysql.sh
+	PATH="/opt/homebrew/opt/mysql-client/bin:$$PATH" bash scripts/migration/dump_mysql.sh
 
 migrate-import: ## Import dumped data to Supabase PostgreSQL ## migrate-import
-	bash scripts/migration/import_to_supabase.sh
+	PATH="/opt/homebrew/opt/libpq/bin:$$PATH" bash scripts/migration/import_to_supabase.sh
 
 migrate-reset: ## Drop all tables in Supabase (for re-import) ## migrate-reset
-	bash scripts/migration/reset_supabase.sh
+	PATH="/opt/homebrew/opt/libpq/bin:$$PATH" bash scripts/migration/reset_supabase.sh
 
 tfenv: ## change terraform version ## tfenv
 	tfenv use ${TF_VERSION}

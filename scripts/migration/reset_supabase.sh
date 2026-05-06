@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SUPABASE_DSN="postgresql://postgres:AbcfbG294QB2hR@db.hastyhkkwedwqchtlsiv.supabase.co:5432/postgres?sslmode=require"
+SUPABASE_DSN="postgresql://postgres.hastyhkkwedwqchtlsiv:AbcfbG294QB2hR@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require"
 
 echo "=== WARNING: This will DELETE ALL DATA in Supabase ==="
 read -p "Are you sure? (yes/no): " confirm

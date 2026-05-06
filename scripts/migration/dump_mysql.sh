@@ -9,9 +9,10 @@ mkdir -p "$DUMP_DIR"
 
 echo "=== Dumping MySQL data from AWS RDS ==="
 mysqldump -h crypto-trading-db.cva64ye44jkh.ap-northeast-1.rds.amazonaws.com \
-  -P 1221 -u crypto_trading_root -p'CryptoSl0S&mDGdY098' \
-  crypto_trading buy_orders sell_orders price_histories okj_buy_orders \
+  -P 2048 -u crypto_trading_root -p'CryptoSl0S&mDGdY098' \
+  crypto_trading_db buy_orders sell_orders price_histories \
   --no-create-info --complete-insert --skip-lock-tables \
+  --set-gtid-purged=OFF --no-tablespaces \
   > "$DUMP_DIR/mysql_data.sql"
 
 echo "=== Dump complete: $DUMP_DIR/mysql_data.sql ==="
