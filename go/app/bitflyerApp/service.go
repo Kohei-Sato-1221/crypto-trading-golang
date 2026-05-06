@@ -267,11 +267,8 @@ func StartBfService() {
 
 		scheduler.Every().Day().At("23:45").Run(wrapJob(cancelBuyOrderJob))
 
-		// 12:20と22:50にアプリをグレースフルシャットダウン（実行中のジョブ完了を待機）
-		scheduler.Every().Day().At("12:20").Run(func() {
-			gracefulShutdown(5) // 最大5分待機
-		})
-		scheduler.Every().Day().At("22:50").Run(func() {
+		// 01:20にアプリをグレースフルシャットダウン（実行中のジョブ完了を待機）
+		scheduler.Every().Day().At("01:20").Run(func() {
 			gracefulShutdown(5) // 最大5分待機
 		})
 	} else {
