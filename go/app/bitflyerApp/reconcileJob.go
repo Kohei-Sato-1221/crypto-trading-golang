@@ -25,6 +25,8 @@ reconcileJob は取引所とDBの状態を日次で突合し、乖離をSlackへ
  1. 注文: 取引所のACTIVE注文（BTC_JPY / ETH_JPY、ページング取得）と
     DBの UNFILLED（buy / sell）を売買方向ごとに突合し、「DBにのみ存在」「取引所にのみ存在」を検出する。
     「取引所にのみ存在」は、発注APIのレスポンス消失などで生じるオーファン注文の検出も兼ねる。
+    ただし SELL 側の「取引所にのみ存在」はユーザーの手動売却と区別できないため、
+    エラー通知はせず日次サマリへの掲載に留める（classifyOrderDiffs のコメントを参照）。
  2. 残高: 取引所のBTC / ETH残高とDB上の想定保有量を突合する。
  3. 発注ゼロ: ボットの買い注文が設定日数(no_order_alert_days)以上発生していないことを検出する。
  4. ローリング再試行待ち: RemarkRolloverPending が残り続けているレコード
@@ -119,6 +121,7 @@ type reconcileSummary struct {
 	botOrders24h    int
 	manualOrders24h int
 	rolloverPending []models.OrderRecord
+	diffDetails     orderDiffDetails
 	errors          int
 }
 
@@ -249,29 +252,72 @@ func reconcileOrdersForProduct(apiClient *bitflyer.APIClient, target reconcileTa
 	}
 }
 
-// notifyOrderDiffs は注文の乖離をSlackへ通知する（乖離が無ければ何もしない）。
+/*
+orderDiffDetails は注文突合の結果を「エラー通知するもの」と「日次サマリに載せるだけのもの」に
+分けて保持する。
+
+sell_orders は取引所から同期する仕組みが無い（syncBuyOrders は side=="BUY" のみ取り込む）。
+ユーザーは手動保有ポジションを自分のタイミングで売却するため、そのために取引所へ置いた
+SELL 指値は約定するまで必ず「取引所のみ ACTIVE」として現れる。これをエラー通知にすると
+売却を始めた日から毎日鳴り続け、本物の乖離が埋もれる。
+手動保有はシステムから存在しないものとして扱う方針（残高突合が Manual を判定から
+除外しているのと同じ考え方）に合わせ、SELL 側の「取引所のみ ACTIVE」は
+エラー通知せず日次サマリへの掲載に留める。
+
+ボットが発注した売り注文の取りこぼし（再発注レスポンスの消失によるオーファン注文）は、
+rolloverSellOrderJob の再発注前オーファン検出と [ROLLOVER_PENDING] 残留通知で検知する。
+*/
+type orderDiffDetails struct {
+	Alerts     []string // エラー通知に載せる明細
+	Info       []string // 日次サマリにのみ載せる明細
+	AlertCount int      // エラー通知の対象件数
+	InfoCount  int      // サマリ掲載のみの件数
+}
+
+/*
+classifyOrderDiffs は突合結果をエラー通知用・サマリ掲載用に振り分ける。
+
+  - DBのみ UNFILLED（buy / sell 両方） → エラー通知。失効の取りこぼしでスロットを食う
+  - 取引所のみ ACTIVE / BUY → エラー通知。ボットの買い注文はDBに必ず記録されるため、
+    記録されていない ACTIVE な買い注文は取りこぼし（オーファン）の疑いがある
+  - 取引所のみ ACTIVE / SELL → サマリ掲載のみ。ユーザーの手動売却と区別できないため
+*/
+func classifyOrderDiffs(diffs []orderDiff) orderDiffDetails {
+	details := orderDiffDetails{}
+	for _, diff := range diffs {
+		if len(diff.DBOnly) > 0 {
+			details.Alerts = append(details.Alerts, fmt.Sprintf("DBのみ %s/%s(%s) %d件: [%s]",
+				diff.ProductCode, diff.Side, diff.Table, len(diff.DBOnly), sampleOrderIDs(diff.DBOnly)))
+			details.AlertCount += len(diff.DBOnly)
+		}
+		if len(diff.ExchangeOnly) == 0 {
+			continue
+		}
+		if strings.ToUpper(diff.Side) == "SELL" {
+			details.Info = append(details.Info, fmt.Sprintf("取引所のみ %s/SELL %d件(手動売却の可能性。アラート対象外): [%s]",
+				diff.ProductCode, len(diff.ExchangeOnly), sampleOrderIDs(diff.ExchangeOnly)))
+			details.InfoCount += len(diff.ExchangeOnly)
+			continue
+		}
+		details.Alerts = append(details.Alerts, fmt.Sprintf("取引所のみ %s/%s %d件: [%s]",
+			diff.ProductCode, diff.Side, len(diff.ExchangeOnly), sampleOrderIDs(diff.ExchangeOnly)))
+		details.AlertCount += len(diff.ExchangeOnly)
+	}
+	return details
+}
+
+// notifyOrderDiffs は注文の乖離をSlackへ通知する（エラー通知対象が無ければ何もしない）。
+// サマリ掲載のみの明細は notifyReconcileResult が日次サマリに載せる。
 func notifyOrderDiffs(summary *reconcileSummary) {
-	dbOnly := summary.dbOnlyCount()
-	exchangeOnly := summary.exchangeOnlyCount()
-	if dbOnly == 0 && exchangeOnly == 0 {
+	summary.diffDetails = classifyOrderDiffs(summary.orderDiffs)
+	if summary.diffDetails.AlertCount == 0 {
 		return
 	}
 
-	details := make([]string, 0, len(summary.orderDiffs))
-	for _, diff := range summary.orderDiffs {
-		if len(diff.DBOnly) > 0 {
-			details = append(details, fmt.Sprintf("DBのみ %s/%s(%s) %d件: [%s]",
-				diff.ProductCode, diff.Side, diff.Table, len(diff.DBOnly), sampleOrderIDs(diff.DBOnly)))
-		}
-		if len(diff.ExchangeOnly) > 0 {
-			details = append(details, fmt.Sprintf("取引所のみ %s/%s %d件: [%s]",
-				diff.ProductCode, diff.Side, len(diff.ExchangeOnly), sampleOrderIDs(diff.ExchangeOnly)))
-		}
-	}
-
-	msg := fmt.Sprintf("🚨【reconcile】注文の乖離を検出: DBのみ UNFILLED:%d件 / 取引所のみ ACTIVE:%d件\n%s\n"+
+	msg := fmt.Sprintf("🚨【reconcile】注文の乖離を検出: DBのみ UNFILLED:%d件 / 取引所のみ ACTIVE(BUY):%d件\n%s\n"+
 		"※DBのみ=失効の取りこぼし（翌日の expireSweep で解消するか確認）／取引所のみ=DBに記録されていない注文（オーファン注文の疑い）",
-		dbOnly, exchangeOnly, strings.Join(details, "\n"))
+		summary.dbOnlyCount(), summary.diffDetails.AlertCount-summary.dbOnlyCount(),
+		strings.Join(summary.diffDetails.Alerts, "\n"))
 	log.Println(msg)
 	slackClient.PostMessage(msg, true)
 }
@@ -472,11 +518,18 @@ func notifyReconcileResult(summary *reconcileSummary) {
 		balanceText = "残高突合:\n" + strings.Join(balanceTexts, "\n")
 	}
 
-	msg := fmt.Sprintf("【reconcile】%s / 注文突合 DBのみ:%d件 取引所のみ:%d件 / "+
-		"ボット発注 直近24h:%d件 手動取り込み:%d件 最終発注(UTC):%s / ローリング再試行待ち:%d件 / エラー:%d件\n%s",
-		slotText, summary.dbOnlyCount(), summary.exchangeOnlyCount(),
+	// 取引所のみ ACTIVE(SELL) はエラー通知しない代わりに、必ずここへ明細を載せる
+	// （通知を消してしまうと気づけなくなるため）
+	orderText := ""
+	if len(summary.diffDetails.Info) > 0 {
+		orderText = "\n注文突合(アラート対象外):\n" + strings.Join(summary.diffDetails.Info, "\n")
+	}
+
+	msg := fmt.Sprintf("【reconcile】%s / 注文突合 DBのみ:%d件 取引所のみ:%d件(うちアラート対象外 SELL:%d件) / "+
+		"ボット発注 直近24h:%d件 手動取り込み:%d件 最終発注(UTC):%s / ローリング再試行待ち:%d件 / エラー:%d件\n%s%s",
+		slotText, summary.dbOnlyCount(), summary.exchangeOnlyCount(), summary.diffDetails.InfoCount,
 		summary.botOrders24h, summary.manualOrders24h, formatReconcileTime(summary.lastBotOrder),
-		len(summary.rolloverPending), summary.errors, balanceText)
+		len(summary.rolloverPending), summary.errors, balanceText, orderText)
 	log.Println(msg)
 	slackClient.PostMessage(msg, false)
 }

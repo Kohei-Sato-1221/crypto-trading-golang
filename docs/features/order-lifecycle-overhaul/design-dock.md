@@ -604,7 +604,8 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | `rolloverSellOrderJob` | キャンセル失敗 | エラー | `🚨【rolloverSellOrder】CancelOrder 失敗: OrderID={id} {product_code} price={p} size={s} err={err}` |
 | `rolloverSellOrderJob` | キャンセル後に COMPLETED を検出 | 通常 | `【rolloverSellOrder】キャンセル直前に約定: OrderID={id} → FILLED に更新（再発注せず）` |
 | `expireSweepJob` | ローリング失敗の末に売り注文が失効 | エラー | `🚨🚨【expireSweep】売り注文が失効しました: OrderID={id} ParentID={pid} {product_code} price={p} size={s}（[ROLLOVER_PENDING] 付き: ローリングの再発注に失敗したまま期限を過ぎました）。現物は保有されたままです。親買い注文は FILLED(SELL ORDER PLACED) のまま維持します。手動での対応をお願いします`<br>※ `[ROLLOVER_PENDING]` 付きレコードもローリングの窓を過ぎれば sweep の対象になるため、この通知は必ず発火する |
-| `reconcileJob` | 乖離検出 | エラー | `🚨【reconcile】DBのみ UNFILLED:{N}件 / 取引所のみ ACTIVE:{M}件 / 残高乖離 BTC:{d1} ETH:{d2}` ＋ 代表 order_id 10件 |
+| `reconcileJob` | 乖離検出 | エラー | `🚨【reconcile】注文の乖離を検出: DBのみ UNFILLED:{N}件 / 取引所のみ ACTIVE(BUY):{M}件` ＋ 代表 order_id 10件<br>※**「取引所のみ ACTIVE / SELL」はエラー通知の対象外**（F7）。`sell_orders` は取引所から同期する仕組みが無く、ユーザーが手動保有ポジションを売却するために置いた SELL 指値と区別できないため、日次サマリへの掲載に留める。ボットの売り注文の取りこぼしは `rolloverSellOrderJob` のオーファン検出と `[ROLLOVER_PENDING]` 残留通知で検知する |
+| `reconcileJob` | 取引所のみ ACTIVE / SELL | 通常（日次サマリ） | `注文突合(アラート対象外): 取引所のみ {product_code}/SELL {N}件(手動売却の可能性。アラート対象外): [order_id...]` |
 | `reconcileJob` | 発注ゼロ検知 | エラー | `🚨【reconcile】ボットの買い注文が {N}日間 0件です。最終発注: {ts}` |
 | `reconcileJob` | 正常 | 通常 | `【reconcile】OK 未約定buy:{n}/{max_buy} 未約定sell:{m}/{max_sell} 残高乖離なし（手動保有 BTC:{x} ETH:{y} を除く）` |
 | `placeBuyOrder` | buy 側スロット枯渇でスキップ | エラー | `🚨【buyingJob】発注スキップ: 未約定buy {n}/{max_buy}（上限到達）未約定sell {m}/{max_sell}` |
