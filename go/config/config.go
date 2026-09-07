@@ -53,6 +53,16 @@ const (
 	// スロット解放が済んだ状態のDBと取引所を突合できるようにしている。
 	DefaultTriggerTime07 = "06:15"
 
+	// DefaultTriggerTime08 は cancelBuyOrderJob のスケジュール既定値(JST)。
+	// 実行環境のRaspberry Piが停止する 01:30〜02:45 JST を避けている。
+	// 旧設定は23:45だったが、EC2稼働窓の外という誤った前提に基づいていたため22:45へ移した。
+	DefaultTriggerTime08 = "22:45"
+
+	// DefaultTriggerTime09 はグレースフルシャットダウンのスケジュール既定値(JST)。
+	// 実行環境のRaspberry Piが停止する 01:30 JST の直前に置き、
+	// 実行中のジョブを完了させてからアプリを終了させる。
+	DefaultTriggerTime09 = "01:20"
+
 	// DefaultNoOrderAlertDays は「ボットの買い注文が何日間0件ならアラートするか」の既定値。
 	DefaultNoOrderAlertDays = 3
 
@@ -167,11 +177,15 @@ func NewConfig() {
 		TriggerTime03: cfg.Section("tradeSetting").Key("trigger_time_03").String(),
 		TriggerTime04: cfg.Section("tradeSetting").Key("trigger_time_04").String(),
 		// rolloverSellOrderJob の実行時刻(JST)。未設定ならDefaultTriggerTime05(05:30)
-		TriggerTime05: cfg.Section("tradeSetting").Key("trigger_time_05").MustString(DefaultTriggerTime05),
+		TriggerTime05: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_05").String(), DefaultTriggerTime05),
 		// expireSweepJob の実行時刻(JST)。未設定ならDefaultTriggerTime06(06:05)
-		TriggerTime06: cfg.Section("tradeSetting").Key("trigger_time_06").MustString(DefaultTriggerTime06),
+		TriggerTime06: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_06").String(), DefaultTriggerTime06),
 		// reconcileJob の実行時刻(JST)。未設定ならDefaultTriggerTime07(06:15)
-		TriggerTime07: cfg.Section("tradeSetting").Key("trigger_time_07").MustString(DefaultTriggerTime07),
+		TriggerTime07: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_07").String(), DefaultTriggerTime07),
+		// cancelBuyOrderJob の実行時刻(JST)。未設定ならDefaultTriggerTime08(22:45)
+		TriggerTime08: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_08").String(), DefaultTriggerTime08),
+		// グレースフルシャットダウンの実行時刻(JST)。未設定ならDefaultTriggerTime09(01:20)
+		TriggerTime09: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_09").String(), DefaultTriggerTime09),
 
 		SlackAPIURL: pcfg.Section("slack").Key("api_url").String(),
 		SlackToken:  pcfg.Section("slack").Key("token").String(),
@@ -267,6 +281,8 @@ type ConfigList struct {
 	TriggerTime05 string // rolloverSellOrderJob の実行時刻(JST)
 	TriggerTime06 string // expireSweepJob の実行時刻(JST)
 	TriggerTime07 string // reconcileJob の実行時刻(JST)
+	TriggerTime08 string // cancelBuyOrderJob の実行時刻(JST)
+	TriggerTime09 string // グレースフルシャットダウンの実行時刻(JST)
 
 	SlackAPIURL string
 	SlackToken  string

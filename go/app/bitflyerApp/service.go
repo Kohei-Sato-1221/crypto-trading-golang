@@ -219,6 +219,8 @@ func StartBfService() {
 	triggerTime05 := config.Config.TriggerTime05
 	triggerTime06 := config.Config.TriggerTime06
 	triggerTime07 := config.Config.TriggerTime07
+	triggerTime08 := config.Config.TriggerTime08
+	triggerTime09 := config.Config.TriggerTime09
 
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobEveryDay))
@@ -268,13 +270,14 @@ func StartBfService() {
 		// 実行環境のRaspberry Piは毎日 01:30〜02:45 JST に停止するため、その時間帯は避けている
 		scheduler.Every().Day().At(triggerTime07).Run(wrapJob(reconcileJobFunc))
 
-		// 買い注文の能動キャンセル（22:45 JST）。
+		// 買い注文の能動キャンセル（trigger_time_08=22:45 JST）。
 		// 旧設定は23:45。移動時は「EC2稼働窓の外で発火しない」という前提だったが、実行環境はRaspberry Piの24時間稼働で
 		// 23:45でも発火していた。22:45もPi停止時間帯(01:30〜02:45 JST)を避けており支障がないため据え置いている
-		scheduler.Every().Day().At("22:45").Run(wrapJob(cancelBuyOrderJobFunc))
+		scheduler.Every().Day().At(triggerTime08).Run(wrapJob(cancelBuyOrderJobFunc))
 
-		// 01:20にアプリをグレースフルシャットダウン（実行中のジョブ完了を待機）
-		scheduler.Every().Day().At("01:20").Run(func() {
+		// アプリをグレースフルシャットダウン（trigger_time_09=01:20 JST。実行中のジョブ完了を待機）。
+		// Pi停止(01:30 JST)の直前に置いている
+		scheduler.Every().Day().At(triggerTime09).Run(func() {
 			gracefulShutdown(5) // 最大5分待機
 		})
 	} else {

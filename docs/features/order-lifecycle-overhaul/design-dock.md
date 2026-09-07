@@ -85,18 +85,19 @@ stateDiagram-v2
 
 | 時刻(JST) | ジョブ | 目的 |
 |---|---|---|
-| 05:30 | `rolloverSellOrderJob` | 期限が近い売り注文を巻き直す。失敗分にはマーカーを付ける |
+| 05:30 | `rolloverSellOrderJob`（`trigger_time_05`） | 期限が近い売り注文を巻き直す。失敗分にはマーカーを付ける |
 | 06:00 / 18:00 | `savePriceHistoryJob`（`trigger_time_04` / `trigger_time_03`・変更なし） | 価格記録 |
-| 06:05 | `expireSweepJob` | 幽霊レコードを `CANCELLED` に落としスロットを解放 |
-| 06:15 | `reconcileJob` | 取引所と DB の乖離・発注ゼロを検知して通知 |
+| 06:05 | `expireSweepJob`（`trigger_time_06`） | 幽霊レコードを `CANCELLED` に落としスロットを解放 |
+| 06:15 | `reconcileJob`（`trigger_time_07`） | 取引所と DB の乖離・発注ゼロを検知して通知 |
 | 06:30 | 買い注文ジョブ群（`trigger_time_01`） | 発注 |
 | 06:45 | `sendResultsJob`（`trigger_time_02`） | 日次損益レポート |
-| 22:45 | `cancelBuyOrderJob` | 長期未約定の買い注文をキャンセル（S3 で 23:45 から移動。移動時は EC2 稼働窓外という誤った前提に基づいていたが、実環境は Pi の24時間稼働で 23:45 でも発火していた。22:45 でも Pi 停止時間帯を避けており支障はないため据え置く） |
+| 22:45 | `cancelBuyOrderJob`（`trigger_time_08`） | 長期未約定の買い注文をキャンセル（S3 で 23:45 から移動。移動時は EC2 稼働窓外という誤った前提に基づいていたが、実環境は Pi の24時間稼働で 23:45 でも発火していた。22:45 でも Pi 停止時間帯を避けており支障はないため据え置く）。実効範囲は §4.4.1 を参照 |
+| 01:20 | `gracefulShutdown`（`trigger_time_09`） | Pi 停止(01:30 JST)の10分前に新規ジョブをブロックし、実行中ジョブの完了を待って終了 |
 
 **実行環境は Raspberry Pi 上の systemd サービス（`bfTradingApp.service` / `Restart=always`）で、原則24時間稼働する。**
 
 - **Pi は毎日 01:30 JST に停止し、02:45 JST に起動する**（ユーザー運用）。この時間帯にジョブを配置してはならない
-- アプリ内の `gracefulShutdown`(01:20 JST) は **Pi 停止の10分前に新規ジョブの実行をブロックするための意図した設計**であり、実行中ジョブを安全に終わらせる役割を持つ
+- アプリ内の `gracefulShutdown`(`trigger_time_09`=01:20 JST) は **Pi 停止の10分前に新規ジョブの実行をブロックするための意図した設計**であり、実行中ジョブを安全に終わらせる役割を持つ
 - `terraform/modules/scheduler/event_bridge.tf` の EC2 起動・停止スケジュールは **RDS(MySQL) 時代のインフラの名残であり、現在のアプリ実行環境とは無関係**
 
 上記のとおり、全ジョブが 01:20〜02:45 JST を避けて配置されている。
@@ -513,6 +514,8 @@ func ParseBitflyerTime(s string) (time.Time, error)
 
 すべて `MustInt` / `MustFloat64` / `MustBool` のデフォルト値付きで読み、**未設定でも既存挙動または安全側の値になる**ようにする。
 
+`trigger_time_05` 〜 `trigger_time_09` は `config.NormalizeTriggerTime(value, default)` を通す。`carlescere/scheduler` の `At()` は解釈できない時刻文字列を渡されても `Run()` が静かに失敗するだけで、`service.go` は戻り値を見ていない。つまり**設定ミスや本番 `config.ini` の更新漏れが「そのジョブが二度と発火しない」という無言のデグレになる**ため、`scheduler.parseTime` と同じ規則（`HH` / `HH:MM` / `HH:MM:SS`、`hour<=23` `min<=59` `sec<=59`）で先に検証し、空文字・不正値は既定値へ倒したうえでログに警告を残す。
+
 | セクション | キー | 値 | 導入 | 説明 |
 |---|---|---|---|---|
 | `[bitflyer]` | `max_buy_orders` | 15 → **28** | S5 | 未約定買い注文の上限。**超過時は発注をブロックする** |
@@ -528,6 +531,8 @@ func ParseBitflyerTime(s string) (time.Time, error)
 | `[tradeSetting]` | `trigger_time_05` | `05:30` | S4 | ローリングジョブ |
 | `[tradeSetting]` | `trigger_time_06` | `06:05` | S3 | 失効 sweep ジョブ |
 | `[tradeSetting]` | `trigger_time_07` | `06:15` | S7 | リコンサイルジョブ |
+| `[tradeSetting]` | `trigger_time_08` | `22:45` | F14 | `cancelBuyOrderJob`（旧: `service.go` にハードコード） |
+| `[tradeSetting]` | `trigger_time_09` | `01:20` | F14 | `gracefulShutdown`（旧: `service.go` にハードコード） |
 | `[app]` | `no_order_alert_days` | `3` | S7 | 何日発注が無ければアラートするか |
 | `[app]` | `balance_diff_threshold_btc` | `0.0005` | S7 | 残高乖離の通知閾値 |
 | `[app]` | `balance_diff_threshold_eth` | `0.005` | S7 | 同上 |
