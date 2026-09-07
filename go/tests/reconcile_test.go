@@ -104,20 +104,73 @@ func TestGetUnfilledOrderIDs(t *testing.T) {
 	insertReconcileBuyOrder(t, "B-3", "ETH_JPY", 400000, 0.01, "UNFILLED", enums.StrategyLTP99, nil, now)
 	insertTestSellOrder(t, "B-2", "S-1", "BTC_JPY", 5100000, 0.001, "UNFILLED")
 
-	buyIDs, err := models.GetUnfilledOrderIDs(models.TableBuyOrders, "BTC_JPY", 100)
+	buyIDs, truncated, err := models.GetUnfilledOrderIDs(models.TableBuyOrders, "BTC_JPY", 100)
 	if err != nil {
 		t.Fatalf("GetUnfilledOrderIDs(buy) failed: %v", err)
 	}
 	if len(buyIDs) != 1 || buyIDs[0] != "B-1" {
 		t.Errorf("buy unfilled ids: got %v, want [B-1]", buyIDs)
 	}
+	if truncated {
+		t.Errorf("上限に達していないため truncated=false の想定")
+	}
 
-	sellIDs, err := models.GetUnfilledOrderIDs(models.TableSellOrders, "BTC_JPY", 100)
+	sellIDs, truncated, err := models.GetUnfilledOrderIDs(models.TableSellOrders, "BTC_JPY", 100)
 	if err != nil {
 		t.Fatalf("GetUnfilledOrderIDs(sell) failed: %v", err)
 	}
 	if len(sellIDs) != 1 || sellIDs[0] != "S-1" {
 		t.Errorf("sell unfilled ids: got %v, want [S-1]", sellIDs)
+	}
+	if truncated {
+		t.Errorf("上限に達していないため truncated=false の想定")
+	}
+}
+
+/*
+F28 のテスト。
+
+limit による打ち切りは reconcileJob の突合前提が崩れている状態だが、以前は
+ローカルログに [ERROR] を出すだけで呼び出し元に伝わらず、突合結果が実態とずれたまま
+「乖離なし」と通知されうる状態だった。打ち切りを戻り値で伝えられることを検証する。
+*/
+func TestGetUnfilledOrderIDsReportsTruncation(t *testing.T) {
+	setupTestDB(t)
+	defer teardownTestDB(t)
+
+	now := time.Now().UTC()
+	for _, orderID := range []string{"T-1", "T-2", "T-3"} {
+		insertReconcileBuyOrder(t, orderID, "BTC_JPY", 5000000, 0.001, "UNFILLED", enums.StrategyLTP99, nil, now)
+	}
+
+	// 上限に達した場合は truncated=true（取りこぼしが発生している可能性がある）
+	ids, truncated, err := models.GetUnfilledOrderIDs(models.TableBuyOrders, "BTC_JPY", 2)
+	if err != nil {
+		t.Fatalf("GetUnfilledOrderIDs failed: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Errorf("取得件数: got %d, want 2", len(ids))
+	}
+	if !truncated {
+		t.Errorf("上限に達したため truncated=true の想定")
+	}
+
+	// 件数ちょうどでも「これ以上あるか分からない」ため truncated=true に倒す
+	_, truncated, err = models.GetUnfilledOrderIDs(models.TableBuyOrders, "BTC_JPY", 3)
+	if err != nil {
+		t.Fatalf("GetUnfilledOrderIDs failed: %v", err)
+	}
+	if !truncated {
+		t.Errorf("件数と上限が一致する場合も truncated=true の想定")
+	}
+
+	// 上限に余裕があれば truncated=false（リグレッション）
+	ids, truncated, err = models.GetUnfilledOrderIDs(models.TableBuyOrders, "BTC_JPY", 4)
+	if err != nil {
+		t.Fatalf("GetUnfilledOrderIDs failed: %v", err)
+	}
+	if len(ids) != 3 || truncated {
+		t.Errorf("全件取得できた場合: got %d件 truncated=%v, want 3件 truncated=false", len(ids), truncated)
 	}
 }
 

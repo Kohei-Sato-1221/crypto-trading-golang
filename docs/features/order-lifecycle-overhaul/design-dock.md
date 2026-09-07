@@ -421,7 +421,9 @@ func RolloverSellOrder(old SellOrderRecord, newOrderID string, newPrice float64,
 
 // GetUnfilledOrderIDs は突合用に UNFILLED の order_id 一覧を返す。
 // limit は全件取得を避けるための安全弁（他の models 関数と同じ流儀）。
-func GetUnfilledOrderIDs(table OrderTable, productCode string, limit int) ([]string, error)
+// 上限に達した場合は truncated=true を返す。打ち切りは突合の前提が崩れている状態なので、
+// reconcileJob は Slack へ通知する（ローカルログだけでは無言の停止に気づけない。F28）。
+func GetUnfilledOrderIDs(table OrderTable, productCode string, limit int) (orderIDs []string, truncated bool, err error)
 
 // OrderIDExists は指定した order_id のレコードがテーブルに存在するかを返す（status は問わない）。
 // 取引所にはあるが DB に紐づかない注文（オーファン注文）の判定に使う。
@@ -610,6 +612,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | `reconcileJob` | 取引所のみ ACTIVE / SELL | 通常（日次サマリ） | `注文突合(アラート対象外): 取引所のみ {product_code}/SELL {N}件(手動売却の可能性。アラート対象外): [order_id...]` |
 | `reconcileJob` | `[ROLLOVER_PENDING]` 残留 | エラー | `🚨【reconcile】ローリング再試行待ち([ROLLOVER_PENDING])のまま残っている売り注文が {N}件あります` ＋ 明細（OrderID / ParentID / product_code / price / size）<br>※`[ROLLOVER_PENDING]` 付きレコードは取引所側に注文が無いのが当然なので必ず「DBのみ UNFILLED」としても現れる。同じ事象で2通鳴るのを避けるため、**注文突合の `DBOnly` からは除外し、この専用通知に一本化する**（F16）。除外分は日次サマリに件数と代表 order_id を載せる |
 | `reconcileJob` | 発注ゼロ検知 | エラー | `🚨【reconcile】ボットの買い注文が {N}日間 0件です。最終発注: {ts}` |
+| `reconcileJob` | 未約定レコード取得の打ち切り | エラー | `🚨【reconcile】未約定レコードの取得が上限({N}件)で打ち切られました: table={t} product_code={pc}。突合結果が実態とずれている可能性があります`（F28） |
 | `reconcileJob` | 正常 | 通常 | `【reconcile】OK 未約定buy:{n}/{max_buy} 未約定sell:{m}/{max_sell} 残高乖離なし（手動保有 BTC:{x} ETH:{y} を除く）` |
 | `placeBuyOrder` | buy 側スロット枯渇でスキップ | エラー | `🚨【buyingJob】発注スキップ: 未約定buy {n}/{max_buy}（上限到達）未約定sell {m}/{max_sell}` |
 | `placeBuyOrder` | sell 側スロット超過（**発注は続行**） | エラー | `🚨【buyingJob】売り注文が上限超過: 未約定sell {m}/{max_sell}。発注は続行します。JPY残高の歯止め(budget_criteria)を確認してください`<br>※超過状態は解消まで数週間続きうる一方、買い注文ジョブは1日に最大12本走る。同一内容の警告が埋もれないよう **24時間に1回まで集約する**（`notificationThrottle`、F18）。通知は消さず、解消するまで `reconcileJob` も日次で1通通知する |

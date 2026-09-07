@@ -60,7 +60,7 @@ type reconcileTarget struct {
 
 const (
 	// reconcileMaxUnfilledRecords はDBから取得する未約定レコードの上限（1テーブル・1通貨ペアあたり）。
-	// 上限に達した場合は models 側がエラーログを出す。
+	// 上限に達した場合は models が truncated を返し、本ジョブがSlackへ通知する。
 	reconcileMaxUnfilledRecords = 500
 
 	// reconcileSampleSize はSlack通知に載せる代表 order_id の最大件数。
@@ -273,11 +273,17 @@ func reconcileOrdersForProduct(apiClient *bitflyer.APIClient, target reconcileTa
 	}
 
 	for _, s := range sides {
-		dbOrderIDs, err := models.GetUnfilledOrderIDs(s.table, target.ProductCode, reconcileMaxUnfilledRecords)
+		dbOrderIDs, truncated, err := models.GetUnfilledOrderIDs(s.table, target.ProductCode, reconcileMaxUnfilledRecords)
 		if err != nil {
 			notifyReconcileError(summary, "未約定レコードの取得に失敗: table=%s product_code=%s err=%v",
 				s.table, target.ProductCode, err)
 			continue
+		}
+		if truncated {
+			// 打ち切りが起きると突合の前提が崩れる。「乖離なし」と通知されるのが最も危険なので必ず鳴らす
+			notifyReconcileError(summary, "未約定レコードの取得が上限(%d件)で打ち切られました: table=%s product_code=%s。"+
+				"突合結果が実態とずれている可能性があります（DBのみ/取引所のみの件数を鵜呑みにしないでください）",
+				reconcileMaxUnfilledRecords, s.table, target.ProductCode)
 		}
 
 		diff := buildOrderDiff(target.ProductCode, s.side, s.table, dbOrderIDs, exchangeIDs[s.side], rolloverPendingIDs)

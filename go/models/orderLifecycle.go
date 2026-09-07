@@ -703,18 +703,19 @@ GetUnfilledOrderIDs は指定通貨ペアの未約定レコードの order_id �
 reconcileJob が取引所のACTIVE注文一覧とDBを突合するために使う。
 status = 'UNFILLED' かつ order_id が空でない行のみを対象にするため、
 手動保有へ移管した130レコード(CANCELLED / FILLED(SELL ORDER PLACED))は含まれない。
-limit は全件取得を避けるための安全弁で、超過した場合は呼び出し側が検知できるよう
-ログに残す（突合結果の件数が実態とずれるため）。
+limit は全件取得を避けるための安全弁。上限に達した場合は2番目の戻り値 truncated を
+true にして返す。打ち切りが起きると突合結果が実態とずれるため、呼び出し側は
+これをSlackへ通知すること（ローカルログだけでは無言の停止に気づけない）。
 */
-func GetUnfilledOrderIDs(table OrderTable, productCode string, limit int) ([]string, error) {
+func GetUnfilledOrderIDs(table OrderTable, productCode string, limit int) ([]string, bool, error) {
 	if !table.isValid() {
-		return nil, fmt.Errorf("GetUnfilledOrderIDs: invalid table: %s", table)
+		return nil, false, fmt.Errorf("GetUnfilledOrderIDs: invalid table: %s", table)
 	}
 	if productCode == "" {
-		return nil, errors.New("GetUnfilledOrderIDs: product_code is empty")
+		return nil, false, errors.New("GetUnfilledOrderIDs: product_code is empty")
 	}
 	if limit <= 0 {
-		return nil, fmt.Errorf("GetUnfilledOrderIDs: invalid limit: %d", limit)
+		return nil, false, fmt.Errorf("GetUnfilledOrderIDs: invalid limit: %d", limit)
 	}
 
 	var query string
@@ -731,27 +732,31 @@ func GetUnfilledOrderIDs(table OrderTable, productCode string, limit int) ([]str
 	rows, err := AppDB.Query(query, productCode, limit)
 	if err != nil {
 		log.Printf("[ERROR] GetUnfilledOrderIDs table:%s product_code:%s err:%v", table, productCode, err)
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 
 	orderIDs := make([]string, 0)
+	scanned := 0
 	for rows.Next() {
 		var orderID sql.NullString
 		if err := rows.Scan(&orderID); err != nil {
-			return nil, err
+			return nil, false, err
 		}
+		scanned++
 		if orderID.String != "" {
 			orderIDs = append(orderIDs, orderID.String)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if len(orderIDs) >= limit {
+	// 空文字の order_id は除外しているため、打ち切りの判定には取得行数(scanned)を使う
+	truncated := scanned >= limit
+	if truncated {
 		log.Printf("[ERROR] GetUnfilledOrderIDs reached the limit. table:%s product_code:%s limit:%d", table, productCode, limit)
 	}
-	return orderIDs, nil
+	return orderIDs, truncated, nil
 }
 
 /*
