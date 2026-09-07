@@ -587,7 +587,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 ### 6.1 原則
 
 - **ジョブ全体を止めない**: 複数レコードを処理するループでは `break` を使わず `continue` する。現行 `placeSellOrder` の `break`（4箇所）も `continue` に修正する。
-- **フェイルセーフの方向**: 判定不能なときは常に「発注しない／キャンセルしない／状態を変えない」側に倒す。発注価格の参照元（bitflyer `GetTicker` / bitbank `GetBBTicker`）の取得に失敗した場合も、error を握り潰さず `validateBuyPriceSources()` で検証したうえで発注を中止する。
+- **フェイルセーフの方向**: 判定不能なときは常に「発注しない／キャンセルしない／状態を変えない」側に倒す。DB から読んだ `timestamp` を解釈できなかった場合も、ゼロ値を「十分古い」と解釈せず `OrderRecord.TimestampValid=false` として呼び出し側へ伝え、`cancelBuyOrderJob` は判定を見送って件数を通知する。発注価格の参照元（bitflyer `GetTicker` / bitbank `GetBBTicker`）の取得に失敗した場合も、error を握り潰さず `validateBuyPriceSources()` で検証したうえで発注を中止する。
 - **必ず通知する**: エラーは `slackClient.PostMessage(msg, true)`（エラーチャンネル）。正常サマリは `PostMessage(msg, false)`。
 - **コンテキストを含める**: OrderID / ParentID / ProductCode / Side / Price / Size / Strategy / ExpireDate のうち該当するものを必ず本文に入れる（ルート `CLAUDE.md` の開発ルール）。
 
@@ -610,6 +610,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | `placeBuyOrder` | buy 側スロット枯渇でスキップ | エラー | `🚨【buyingJob】発注スキップ: 未約定buy {n}/{max_buy}（上限到達）未約定sell {m}/{max_sell}` |
 | `placeBuyOrder` | sell 側スロット超過（**発注は続行**） | エラー | `🚨【buyingJob】売り注文が上限超過: 未約定sell {m}/{max_sell}。発注は続行します。JPY残高の歯止め(budget_criteria)を確認してください` |
 | `placeSellOrder` | 個別失敗 | エラー | 既存の本文を維持しつつ `break` → `continue`。末尾に `成功:{M}/{N}` のサマリを追加 |
+| `cancelBuyOrderJob` | `timestamp` を解釈できず判定を見送り | エラー | `🚨【cancelBuyOrderJob】timestamp を解釈できず判定を見送った買い注文が {N}件あります: order_ids=[...]。キャンセルしない側に倒しています` |
 
 ### 6.3 リトライ方針
 

@@ -195,3 +195,54 @@ func TestNoUnfilledSellOrderFallsBetweenSweepAndRollover(t *testing.T) {
 		}
 	}
 }
+
+/*
+F10 の回帰テスト（DB側）。
+
+scanOrderRecords が toUTCTime の成否を握り潰していたため、変換できなかった timestamp が
+ゼロ値のまま呼び出し側へ渡り、cancelBuyOrderJob がそれを「十分古い」と解釈して
+キャンセル側へ倒していた。成否を OrderRecord.TimestampValid で伝えることを確認する。
+*/
+func TestOrderRecordTimestampValid(t *testing.T) {
+	setupTestDB(t)
+	defer teardownTestDB(t)
+
+	now := time.Now().UTC()
+	stamped := now.AddDate(0, 0, -10)
+	if _, err := models.AppDB.Exec(
+		`INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange, status, strategy, timestamp)
+		 VALUES ('B-TS', 'BTC_JPY', 'BUY', 5000000, 0.001, 'bitflyer', 'UNFILLED', 10001, $1)`, stamped); err != nil {
+		t.Fatalf("insert failed: %v", err)
+	}
+
+	records, err := models.GetUnfilledBuyOrderRecords(10)
+	if err != nil {
+		t.Fatalf("GetUnfilledBuyOrderRecords failed: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %d, want 1", len(records))
+	}
+	record := records[0]
+	if !record.TimestampValid {
+		t.Error("正常な timestamp が TimestampValid=false になった（全件が判定見送りになる）")
+	}
+	if record.Timestamp.IsZero() {
+		t.Error("timestamp がゼロ値になった")
+	}
+	if record.Timestamp.Location() != time.UTC {
+		t.Errorf("timestamp は UTC で扱うこと: %v", record.Timestamp.Location())
+	}
+	if diff := record.Timestamp.Sub(stamped); diff > time.Second || diff < -time.Second {
+		t.Errorf("timestamp = %v, want %v", record.Timestamp, stamped)
+	}
+
+	// 同じレコードは sell_orders 側のスキャン経路（parentid あり）でも同様に扱えること
+	insertRolloverSellOrder(t, "B-TS", "S-TS", "BTC_JPY", 5100000, 0.001, "UNFILLED", nil, nil, stamped)
+	sells, err := models.GetUnfilledOrdersWithoutExpireDate(models.TableSellOrders, "BTC_JPY", rolloverRetryAfter(now), 10)
+	if err != nil {
+		t.Fatalf("GetUnfilledOrdersWithoutExpireDate failed: %v", err)
+	}
+	if len(sells) != 1 || !sells[0].TimestampValid {
+		t.Errorf("sell_orders 側の TimestampValid が立たない: len=%d %+v", len(sells), sells)
+	}
+}

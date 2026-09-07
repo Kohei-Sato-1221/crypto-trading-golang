@@ -127,8 +127,19 @@ type OrderRecord struct {
 	Exchange    string
 	Status      string
 	Remarks     string
-	ExpireDate  *time.Time // UTC。DB上NULLならnil
-	Timestamp   time.Time  // UTC
+	ExpireDate  *time.Time // UTC。DB上NULL、または値を解釈できなかった場合はnil
+	Timestamp   time.Time  // UTC。TimestampValid が false のときはゼロ値
+
+	/*
+		TimestampValid は timestamp をUTCの time.Time へ変換できたかどうか。
+
+		false になるのはDB上NULLの場合か、文字列を解釈できなかった場合。
+		呼び出し側はゼロ値の Timestamp を「十分古い」と解釈してはならない
+		（cancelBuyOrderJob の order.Timestamp.After(threshold) は、ゼロ値だと
+		常に false になりキャンセル側へ倒れてしまう）。判定不能なレコードは
+		処理をスキップして通知すること。
+	*/
+	TimestampValid bool
 }
 
 // orderRecordColumns は OrderRecord を組み立てるためのSELECT句を返す。
@@ -145,7 +156,10 @@ toUTCTime はDBから取得した時刻値をUTCの time.Time に変換する。
 
 PostgreSQL(pgx)は timestamp を time.Time で返すが、MySQLドライバは
 DSNに parseTime=true が無い場合 []byte を返すため、両方を受け付ける。
-変換できない場合は ok=false を返し、呼び出し側でゼロ値として扱う。
+変換できない場合（NULL、または解釈できない文字列）は ok=false を返す。
+この ok は握り潰さず OrderRecord.TimestampValid として呼び出し側へ伝えること。
+ゼロ値のまま通すと、時刻比較で「十分古い」と誤解釈されてキャンセル等の
+破壊的な処理に倒れてしまう。
 */
 func toUTCTime(value any) (time.Time, bool) {
 	switch v := value.(type) {
@@ -213,9 +227,8 @@ func scanOrderRecords(table OrderTable, rows *sql.Rows) ([]OrderRecord, error) {
 		if expire, ok := toUTCTime(expireDate); ok {
 			record.ExpireDate = &expire
 		}
-		if ts, ok := toUTCTime(timestamp); ok {
-			record.Timestamp = ts
-		}
+		// 変換の成否は握り潰さず呼び出し側へ伝える（ゼロ値を有効な時刻として扱わせない）
+		record.Timestamp, record.TimestampValid = toUTCTime(timestamp)
 		records = append(records, record)
 	}
 	return records, rows.Err()
