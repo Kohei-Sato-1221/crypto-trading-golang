@@ -18,6 +18,17 @@ import (
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/utils"
 )
 
+/*
+httpClientTimeout は取引所APIへのHTTPリクエストのタイムアウト。
+
+タイムアウトが無いと、取引所側がハングした場合にジョブが無期限にブロックする。
+特にローリングは「キャンセル成功 → 再発注」の間にHTTP往復があるため、ここで止まると
+現物を保有したまま売り注文が無い「裸の保有」から復帰できない。さらに gracefulShutdown は
+実行中ジョブを最大5分待って os.Exit(0) するため、ハングしたジョブごとプロセスが落ちる。
+日次ジョブの実行間隔（最短90秒周期の同期ジョブ）に対して十分短い値を設定する。
+*/
+const httpClientTimeout = 30 * time.Second
+
 type APIClient struct {
 	apikey          string
 	apisecret       string
@@ -27,7 +38,8 @@ type APIClient struct {
 }
 
 func NewBitflyer(key, secret string, max_buy_orders, max_sell_orders int) *APIClient {
-	apiClient := &APIClient{key, secret, max_buy_orders, max_sell_orders, &http.Client{}}
+	apiClient := &APIClient{key, secret, max_buy_orders, max_sell_orders,
+		&http.Client{Timeout: httpClientTimeout}}
 	return apiClient
 }
 

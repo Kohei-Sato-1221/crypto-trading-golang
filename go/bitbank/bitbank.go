@@ -6,9 +6,23 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 const baseUrl = "https://public.bitbank.cc/"
+
+/*
+httpClientTimeout は bitbank の公開APIへのHTTPリクエストのタイムアウト。
+
+http.Get はタイムアウトを持たない http.DefaultClient を使うため、bitbank 側が
+ハングするとジョブが無期限にブロックする。GetBBTicker は買い注文の価格算出に
+使われるため、応答が返らないと発注ジョブごと止まる。さらに gracefulShutdown は
+実行中ジョブを最大5分待って os.Exit(0) するため、ハングしたジョブごとプロセスが落ちる。
+*/
+const httpClientTimeout = 30 * time.Second
+
+// httpClient はタイムアウト付きのHTTPクライアント。http.Get(= DefaultClient)は使わないこと。
+var httpClient = &http.Client{Timeout: httpClientTimeout}
 
 type Ticker01 struct {
 	Success int       `json:"success"`
@@ -44,7 +58,7 @@ resp.Body / ticker01.Data を nil のまま参照して panic していた。
 呼び出し側が「発注しない」側に倒せるようにする。
 */
 func GetBBTicker(pair string) (*ReturnTicker, error) {
-	resp, err := http.Get(baseUrl + pair + "/ticker")
+	resp, err := httpClient.Get(baseUrl + pair + "/ticker")
 	if err != nil {
 		return nil, fmt.Errorf("failed to call bitbank ticker API (pair=%s): %w", pair, err)
 	}

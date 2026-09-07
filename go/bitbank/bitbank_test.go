@@ -1,6 +1,10 @@
 package bitbank
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+	"time"
+)
 
 /*
 F6 の回帰テスト。
@@ -60,4 +64,63 @@ func TestParseBBTickerInvalidResponses(t *testing.T) {
 			}
 		})
 	}
+}
+
+/*
+F20 の回帰テスト。
+
+http.Get はタイムアウトを持たない http.DefaultClient を使うため、bitbank 側が
+ハングすると GetBBTicker が無期限にブロックし、買い注文ジョブごと止まる。
+タイムアウト付きの httpClient を経由していることを確認する。
+*/
+
+// パッケージのHTTPクライアントにタイムアウトが設定されていること。
+func TestHTTPClientHasTimeout(t *testing.T) {
+	if httpClient == nil {
+		t.Fatal("httpClient が nil")
+	}
+	if httpClient.Timeout == 0 {
+		t.Fatal("http.Client にタイムアウトが無い（bitbank がハングするとジョブが無限に待つ）")
+	}
+	if httpClient.Timeout != httpClientTimeout {
+		t.Errorf("Timeout = %v, want %v", httpClient.Timeout, httpClientTimeout)
+	}
+}
+
+/*
+応答が返らないサーバに対して、無限に待たずエラーで戻ること。
+
+GetBBTicker が httpClient を経由していることの確認も兼ねる
+（http.Get に戻すと、このテスト用クライアントの短いタイムアウトが効かず落ちる）。
+*/
+func TestGetBBTickerReturnsOnTimeout(t *testing.T) {
+	original := httpClient
+	httpClient = &http.Client{
+		Timeout:   200 * time.Millisecond,
+		Transport: hangingTransport{},
+	}
+	defer func() { httpClient = original }()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := GetBBTicker("btc_jpy")
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("ハングしたサーバに対して err=nil が返った")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("タイムアウトが効かずリクエストがブロックし続けている")
+	}
+}
+
+// hangingTransport は応答を返さず、リクエストのキャンセルだけを待つ RoundTripper。
+type hangingTransport struct{}
+
+func (hangingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	<-req.Context().Done()
+	return nil, req.Context().Err()
 }
