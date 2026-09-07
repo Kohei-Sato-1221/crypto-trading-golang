@@ -116,3 +116,92 @@ func TestClassifyOrderDiffsNoDiff(t *testing.T) {
 		t.Errorf("乖離なしでは空の想定: %+v", details)
 	}
 }
+
+/*
+F16 の回帰テスト。
+
+[ROLLOVER_PENDING] 付きレコードは「キャンセル成功・再発注失敗」の状態で、
+取引所側に注文が無いのは当然なので必ず「DBのみ UNFILLED」として現れる。
+reconcileRolloverPending の専用通知と合わせて同じ事象で毎日2通のエラーが飛んでいたため、
+注文突合側では DBOnly から外してサマリ掲載に落とす。
+*/
+
+// [ROLLOVER_PENDING] 付きは DBOnly ではなく RolloverPending に振り分けられること。
+func TestBuildOrderDiffSeparatesRolloverPending(t *testing.T) {
+	dbIDs := []string{"S-PENDING", "S-GHOST", "S-ACTIVE"}
+	exchangeIDs := map[string]bool{"S-ACTIVE": true, "S-ORPHAN": true}
+	pendingIDs := map[string]bool{"S-PENDING": true}
+
+	diff := buildOrderDiff("ETH_JPY", "SELL", models.TableSellOrders, dbIDs, exchangeIDs, pendingIDs)
+
+	if len(diff.DBOnly) != 1 || diff.DBOnly[0] != "S-GHOST" {
+		t.Errorf("DBOnly: got %v, want [S-GHOST]", diff.DBOnly)
+	}
+	if len(diff.RolloverPending) != 1 || diff.RolloverPending[0] != "S-PENDING" {
+		t.Errorf("RolloverPending: got %v, want [S-PENDING]", diff.RolloverPending)
+	}
+	if len(diff.ExchangeOnly) != 1 || diff.ExchangeOnly[0] != "S-ORPHAN" {
+		t.Errorf("ExchangeOnly: got %v, want [S-ORPHAN]", diff.ExchangeOnly)
+	}
+}
+
+// [ROLLOVER_PENDING] が無い場合は従来どおりの突合結果になること（リグレッション）。
+func TestBuildOrderDiffWithoutRolloverPending(t *testing.T) {
+	dbIDs := []string{"B-1", "B-2"}
+	exchangeIDs := map[string]bool{"B-2": true, "B-3": true}
+
+	diff := buildOrderDiff("BTC_JPY", "BUY", models.TableBuyOrders, dbIDs, exchangeIDs, map[string]bool{})
+
+	if len(diff.DBOnly) != 1 || diff.DBOnly[0] != "B-1" {
+		t.Errorf("DBOnly: got %v, want [B-1]", diff.DBOnly)
+	}
+	if len(diff.ExchangeOnly) != 1 || diff.ExchangeOnly[0] != "B-3" {
+		t.Errorf("ExchangeOnly: got %v, want [B-3]", diff.ExchangeOnly)
+	}
+	if len(diff.RolloverPending) != 0 {
+		t.Errorf("RolloverPending: got %v, want []", diff.RolloverPending)
+	}
+}
+
+// 取引所にも存在する [ROLLOVER_PENDING] 付きレコードは乖離として扱わないこと。
+func TestBuildOrderDiffRolloverPendingStillActiveIsNotDiff(t *testing.T) {
+	diff := buildOrderDiff("ETH_JPY", "SELL", models.TableSellOrders,
+		[]string{"S-PENDING"}, map[string]bool{"S-PENDING": true}, map[string]bool{"S-PENDING": true})
+
+	if len(diff.DBOnly) != 0 || len(diff.RolloverPending) != 0 || len(diff.ExchangeOnly) != 0 {
+		t.Errorf("乖離なしの想定: %+v", diff)
+	}
+}
+
+// [ROLLOVER_PENDING] はエラー通知ではなくサマリ掲載に一本化されること。
+func TestClassifyOrderDiffsRolloverPendingIsInfoOnly(t *testing.T) {
+	diff := sellDiff([]string{"S-GHOST"}, nil)
+	diff.RolloverPending = []string{"S-PENDING"}
+	details := classifyOrderDiffs([]orderDiff{diff})
+
+	if details.AlertCount != 1 {
+		t.Fatalf("AlertCount: got %d, want 1（DBのみ UNFILLED の1件だけ）", details.AlertCount)
+	}
+	if strings.Contains(strings.Join(details.Alerts, "\n"), "S-PENDING") {
+		t.Errorf("[ROLLOVER_PENDING] がエラー通知に混ざっている: %v", details.Alerts)
+	}
+	if details.InfoCount != 1 {
+		t.Fatalf("InfoCount: got %d, want 1", details.InfoCount)
+	}
+	joined := strings.Join(details.Info, "\n")
+	for _, want := range []string{"S-PENDING", models.RemarkRolloverPending, "専用通知に一本化"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("サマリ明細に %q が含まれていない: %s", want, joined)
+		}
+	}
+}
+
+// order_id 集合の生成（空文字は取り込まない）。
+func TestRolloverPendingOrderIDs(t *testing.T) {
+	ids := rolloverPendingOrderIDs([]models.OrderRecord{
+		{OrderID: "S-1"}, {OrderID: ""}, {OrderID: "S-2"},
+	})
+	if len(ids) != 2 || !ids["S-1"] || !ids["S-2"] {
+		t.Errorf("order_id 集合: got %v, want {S-1, S-2}", ids)
+	}
+}

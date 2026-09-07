@@ -81,6 +81,52 @@ type orderDiff struct {
 	Table        models.OrderTable
 	DBOnly       []string // DBは UNFILLED だが取引所のACTIVE一覧に無い（幽霊レコードの疑い）
 	ExchangeOnly []string // 取引所にACTIVEで存在するがDBに UNFILLED として無い（オーファン注文の疑い）
+	// RolloverPending は DBOnly のうち [ROLLOVER_PENDING] が付いているもの。
+	// 同じ事象が reconcileRolloverPending でも通知されるため、こちらでは重複してエラー通知しない
+	RolloverPending []string
+}
+
+/*
+buildOrderDiff は1通貨ペア・1売買方向ぶんの突合結果を作る（DB・APIに触れない純粋関数）。
+
+[ROLLOVER_PENDING] が付いたレコードは「キャンセル成功・再発注失敗」の状態であり、
+取引所側に注文が存在しないのは当然なので必ず「DBのみ UNFILLED」として現れる。
+これを DBOnly に含めると、reconcileRolloverPending の残留通知と合わせて
+同じ事象で毎日2通のエラー通知が飛ぶため、専用通知の側へ一本化する。
+*/
+func buildOrderDiff(productCode, side string, table models.OrderTable,
+	dbOrderIDs []string, exchangeIDs map[string]bool, rolloverPendingIDs map[string]bool) orderDiff {
+
+	diff := orderDiff{ProductCode: productCode, Side: side, Table: table}
+	dbIDs := make(map[string]bool, len(dbOrderIDs))
+	for _, orderID := range dbOrderIDs {
+		dbIDs[orderID] = true
+		if exchangeIDs[orderID] {
+			continue
+		}
+		if rolloverPendingIDs[orderID] {
+			diff.RolloverPending = append(diff.RolloverPending, orderID)
+			continue
+		}
+		diff.DBOnly = append(diff.DBOnly, orderID)
+	}
+	for orderID := range exchangeIDs {
+		if !dbIDs[orderID] {
+			diff.ExchangeOnly = append(diff.ExchangeOnly, orderID)
+		}
+	}
+	return diff
+}
+
+// rolloverPendingOrderIDs は [ROLLOVER_PENDING] 付きレコードの order_id 集合を返す。
+func rolloverPendingOrderIDs(records []models.OrderRecord) map[string]bool {
+	ids := make(map[string]bool, len(records))
+	for _, record := range records {
+		if record.OrderID != "" {
+			ids[record.OrderID] = true
+		}
+	}
+	return ids
 }
 
 /*
@@ -195,7 +241,8 @@ reconcileOrdersForProduct は1通貨ペアぶんの注文突合を行う。
 売買方向ごとに突合するのは、買い注文(buy_orders)と売り注文(sell_orders)で
 DB側のテーブルが分かれているためである。
 */
-func reconcileOrdersForProduct(apiClient *bitflyer.APIClient, target reconcileTarget, summary *reconcileSummary) {
+func reconcileOrdersForProduct(apiClient *bitflyer.APIClient, target reconcileTarget,
+	rolloverPendingIDs map[string]bool, summary *reconcileSummary) {
 	activeOrders, _, err := apiClient.GetChildOrdersAll(target.ProductCode, "ACTIVE")
 	if err != nil {
 		notifyReconcileError(summary, "ACTIVE注文一覧の取得に失敗したため注文突合をスキップします: product_code=%s err=%v",
@@ -233,21 +280,10 @@ func reconcileOrdersForProduct(apiClient *bitflyer.APIClient, target reconcileTa
 			continue
 		}
 
-		diff := orderDiff{ProductCode: target.ProductCode, Side: s.side, Table: s.table}
-		dbIDs := make(map[string]bool, len(dbOrderIDs))
-		for _, orderID := range dbOrderIDs {
-			dbIDs[orderID] = true
-			if !exchangeIDs[s.side][orderID] {
-				diff.DBOnly = append(diff.DBOnly, orderID)
-			}
-		}
-		for orderID := range exchangeIDs[s.side] {
-			if !dbIDs[orderID] {
-				diff.ExchangeOnly = append(diff.ExchangeOnly, orderID)
-			}
-		}
-		log.Printf("【reconcile】注文突合 product_code:%s side:%s 取引所ACTIVE:%d件 DB UNFILLED:%d件 DBのみ:%d件 取引所のみ:%d件",
-			target.ProductCode, s.side, len(exchangeIDs[s.side]), len(dbOrderIDs), len(diff.DBOnly), len(diff.ExchangeOnly))
+		diff := buildOrderDiff(target.ProductCode, s.side, s.table, dbOrderIDs, exchangeIDs[s.side], rolloverPendingIDs)
+		log.Printf("【reconcile】注文突合 product_code:%s side:%s 取引所ACTIVE:%d件 DB UNFILLED:%d件 DBのみ:%d件 取引所のみ:%d件 ローリング再試行待ち:%d件",
+			target.ProductCode, s.side, len(exchangeIDs[s.side]), len(dbOrderIDs),
+			len(diff.DBOnly), len(diff.ExchangeOnly), len(diff.RolloverPending))
 		summary.orderDiffs = append(summary.orderDiffs, diff)
 	}
 }
@@ -289,6 +325,13 @@ func classifyOrderDiffs(diffs []orderDiff) orderDiffDetails {
 			details.Alerts = append(details.Alerts, fmt.Sprintf("DBのみ %s/%s(%s) %d件: [%s]",
 				diff.ProductCode, diff.Side, diff.Table, len(diff.DBOnly), sampleOrderIDs(diff.DBOnly)))
 			details.AlertCount += len(diff.DBOnly)
+		}
+		if len(diff.RolloverPending) > 0 {
+			// [ROLLOVER_PENDING] は reconcileRolloverPending が専用通知を出すため、ここでは重複通知しない
+			details.Info = append(details.Info, fmt.Sprintf("DBのみ %s/%s(%s) %d件(%s。専用通知に一本化): [%s]",
+				diff.ProductCode, diff.Side, diff.Table, len(diff.RolloverPending),
+				models.RemarkRolloverPending, sampleOrderIDs(diff.RolloverPending)))
+			details.InfoCount += len(diff.RolloverPending)
 		}
 		if len(diff.ExchangeOnly) == 0 {
 			continue
@@ -563,14 +606,20 @@ func reconcileJob(apiClient *bitflyer.APIClient) {
 		}
 	}
 
+	// ローリング再試行待ちを先に取得する。[ROLLOVER_PENDING] 付きレコードは必ず
+	// 「DBのみ UNFILLED」として現れるため、注文突合から除外して通知を専用の1通へ一本化する。
+	// 取得は reconcileRolloverPendingMax 件で打ち切られるため、それを超えた分は
+	// 従来どおり「DBのみ UNFILLED」としてエラー通知される（見落とすより鳴らす側に倒す）
+	reconcileRolloverPending(summary)
+	pendingIDs := rolloverPendingOrderIDs(summary.rolloverPending)
+
 	for _, target := range reconcileTargets() {
-		reconcileOrdersForProduct(apiClient, target, summary)
+		reconcileOrdersForProduct(apiClient, target, pendingIDs, summary)
 	}
 	notifyOrderDiffs(summary)
 
 	reconcileBalances(apiClient, summary)
 	reconcileBotOrderActivity(now, summary)
-	reconcileRolloverPending(summary)
 
 	notifyReconcileResult(summary)
 	log.Println("【reconcile】end of job")

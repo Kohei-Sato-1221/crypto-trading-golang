@@ -606,6 +606,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | `expireSweepJob` | ローリング失敗の末に売り注文が失効 | エラー | `🚨🚨【expireSweep】売り注文が失効しました: OrderID={id} ParentID={pid} {product_code} price={p} size={s}（[ROLLOVER_PENDING] 付き: ローリングの再発注に失敗したまま期限を過ぎました）。現物は保有されたままです。親買い注文は FILLED(SELL ORDER PLACED) のまま維持します。手動での対応をお願いします`<br>※ `[ROLLOVER_PENDING]` 付きレコードもローリングの窓を過ぎれば sweep の対象になるため、この通知は必ず発火する |
 | `reconcileJob` | 乖離検出 | エラー | `🚨【reconcile】注文の乖離を検出: DBのみ UNFILLED:{N}件 / 取引所のみ ACTIVE(BUY):{M}件` ＋ 代表 order_id 10件<br>※**「取引所のみ ACTIVE / SELL」はエラー通知の対象外**（F7）。`sell_orders` は取引所から同期する仕組みが無く、ユーザーが手動保有ポジションを売却するために置いた SELL 指値と区別できないため、日次サマリへの掲載に留める。ボットの売り注文の取りこぼしは `rolloverSellOrderJob` のオーファン検出と `[ROLLOVER_PENDING]` 残留通知で検知する |
 | `reconcileJob` | 取引所のみ ACTIVE / SELL | 通常（日次サマリ） | `注文突合(アラート対象外): 取引所のみ {product_code}/SELL {N}件(手動売却の可能性。アラート対象外): [order_id...]` |
+| `reconcileJob` | `[ROLLOVER_PENDING]` 残留 | エラー | `🚨【reconcile】ローリング再試行待ち([ROLLOVER_PENDING])のまま残っている売り注文が {N}件あります` ＋ 明細（OrderID / ParentID / product_code / price / size）<br>※`[ROLLOVER_PENDING]` 付きレコードは取引所側に注文が無いのが当然なので必ず「DBのみ UNFILLED」としても現れる。同じ事象で2通鳴るのを避けるため、**注文突合の `DBOnly` からは除外し、この専用通知に一本化する**（F16）。除外分は日次サマリに件数と代表 order_id を載せる |
 | `reconcileJob` | 発注ゼロ検知 | エラー | `🚨【reconcile】ボットの買い注文が {N}日間 0件です。最終発注: {ts}` |
 | `reconcileJob` | 正常 | 通常 | `【reconcile】OK 未約定buy:{n}/{max_buy} 未約定sell:{m}/{max_sell} 残高乖離なし（手動保有 BTC:{x} ETH:{y} を除く）` |
 | `placeBuyOrder` | buy 側スロット枯渇でスキップ | エラー | `🚨【buyingJob】発注スキップ: 未約定buy {n}/{max_buy}（上限到達）未約定sell {m}/{max_sell}` |
