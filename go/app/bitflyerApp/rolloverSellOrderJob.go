@@ -502,6 +502,34 @@ adjustSizeForPartialFill は部分約定していた売り注文の数量を残�
 補正はキャンセルを実行する前にDBへ反映する。再発注に失敗して翌日へ持ち越された場合、
 キャンセル済みの注文はAPIから消えていて残数量を再取得できないためである。
 */
+/*
+partialFillSkipMessage は「部分約定で残数量が最小取引単位を下回るためローリングしない」通知文を作る。
+
+注文の現状は snapshot の状態で分岐させる。この関数は取引所側で ACTIVE な注文からも、
+既に CANCELED / EXPIRED / REJECTED になった注文からも呼ばれるためである。
+
+  - ACTIVE: キャンセルしなければ売り注文は生きている。「注文はそのまま残す」が実態
+  - それ以外: 取引所側に注文はもう存在せず、現物だけが手元に残る「裸の保有」が実態。
+    ここで「注文はそのまま残します」と通知すると、ユーザーが
+    「まだ売り注文が生きている」と誤認して対応が遅れる
+*/
+func partialFillSkipMessage(record models.SellOrderRecord, snapshot rolloverOrderSnapshot,
+	minSize, originalSize, remaining float64) string {
+
+	if snapshot.found && snapshot.state == "ACTIVE" {
+		return fmt.Sprintf("🚨【rolloverSellOrder】部分約定により残数量が最小取引単位(%v)未満のためローリングしません: "+
+			"%s 元size=%v executed=%v outstanding=%v 残数量=%v。"+
+			"キャンセルすると裸の保有になり再発注もできないため、注文はそのまま残します（手動での対応をお願いします）",
+			minSize, rolloverRecordContext(record), originalSize, snapshot.executedSize, snapshot.outstandingSize, remaining)
+	}
+	return fmt.Sprintf("🚨🚨【rolloverSellOrder】部分約定により残数量が最小取引単位(%v)未満のためローリングしません: "+
+		"%s 元size=%v executed=%v outstanding=%v 残数量=%v。"+
+		"取引所側の注文は既に存在しません(found=%v state=%q)。売り注文が無いまま現物だけが残る「裸の保有」の状態で、"+
+		"残数量が最小取引単位未満のため再発注もできません（手動での対応をお願いします）",
+		minSize, rolloverRecordContext(record), originalSize, snapshot.executedSize, snapshot.outstandingSize, remaining,
+		snapshot.found, snapshot.state)
+}
+
 func adjustSizeForPartialFill(record *models.SellOrderRecord, snapshot rolloverOrderSnapshot,
 	summary *rolloverSellOrderSummary) (proceed bool) {
 
@@ -515,10 +543,7 @@ func adjustSizeForPartialFill(record *models.SellOrderRecord, snapshot rolloverO
 
 	if remaining <= 0 || (hasMinSize && remaining < minSize) {
 		summary.skipped++
-		msg := fmt.Sprintf("🚨【rolloverSellOrder】部分約定により残数量が最小取引単位(%v)未満のためローリングしません: "+
-			"%s 元size=%v executed=%v outstanding=%v 残数量=%v。"+
-			"キャンセルすると裸の保有になり再発注もできないため、注文はそのまま残します（手動での対応をお願いします）",
-			minSize, rolloverRecordContext(*record), originalSize, snapshot.executedSize, snapshot.outstandingSize, remaining)
+		msg := partialFillSkipMessage(*record, snapshot, minSize, originalSize, remaining)
 		log.Println(msg)
 		slackClient.PostMessage(msg, true)
 		return false
