@@ -417,6 +417,20 @@ type rolloverOrderSnapshot struct {
 	size            float64 // 発注数量
 	executedSize    float64 // 約定済み数量
 	outstandingSize float64 // 未約定の残数量
+
+	/*
+		averagePrice は約定済み数量の平均約定価格（未約定なら0）。
+
+		部分約定した売り注文の損益を手動で正しく記録するには、
+		「いくらで売れたか」＝この平均約定価格が必須である。
+		ところが**キャンセルした注文は取引所APIから即座に消える**ため
+		（実測確認済み: キャンセル直後の個別照会は空配列 [] を返す）、
+		キャンセル後にこの値を再取得する手段は原理的に存在しない。
+		したがってキャンセル前のこの個別照会で必ず保持し、Slack通知に載せる。
+		手動対応の手順はルート CLAUDE.md の
+		「売り注文の部分約定が起きたときの対応」を参照。
+	*/
+	averagePrice float64
 }
 
 /*
@@ -453,12 +467,14 @@ func (s rolloverOrderSnapshot) remainingSize() float64 {
 }
 
 /*
-lookupRolloverOrder は個別照会で注文の現在の状態と数量を取得する。
+lookupRolloverOrder は個別照会で注文の現在の状態と数量、平均約定価格を取得する。
 
 数量まで取得するのは部分約定を検出するためである。
+平均約定価格(average_price)まで取得するのは、部分約定ぶんの損益を手動で
+記録し直すときに「いくらで売れたか」が必要になるためである。
 **この照会はキャンセルを実行する前に行わなければならない。**
 キャンセルした注文はAPIから即座に消えるため、キャンセル後に executed_size /
-outstanding_size を確認する手段は原理的に存在しない（実測確認済み）。
+outstanding_size / average_price を確認する手段は原理的に存在しない（実測確認済み）。
 */
 func lookupRolloverOrder(apiClient *bitflyer.APIClient, productCode, orderID string) (rolloverOrderSnapshot, error) {
 	order, err := apiClient.GetChildOrderByAcceptanceID(productCode, orderID)
@@ -474,6 +490,7 @@ func lookupRolloverOrder(apiClient *bitflyer.APIClient, productCode, orderID str
 		size:            order.Size,
 		executedSize:    order.ExecutedSize,
 		outstandingSize: order.OutstandingSize,
+		averagePrice:    order.AveragePrice,
 	}, nil
 }
 
