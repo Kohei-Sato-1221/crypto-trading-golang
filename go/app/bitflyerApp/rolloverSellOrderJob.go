@@ -402,17 +402,36 @@ type rolloverOrderSnapshot struct {
 }
 
 /*
+rolloverSizeScale は数量を丸める尺度（小数8桁）。
+
+Bitflyer の数量は最小取引単位 0.001 BTC / 0.01 ETH で、APIが扱う精度も8桁で十分足りる。
+float64 の減算で生じる表現誤差（例: 0.03 - 0.02 = 0.009999999999999998）が
+最小取引単位を僅差で下回り、正当なローリングが毎日スキップされ続けるのを防ぐために使う。
+*/
+const rolloverSizeScale = 1e8
+
+// roundRolloverSize は数量を小数8桁へ丸め、float64 の減算で生じる桁ノイズを落とす。
+func roundRolloverSize(size float64) float64 {
+	return math.Round(size*rolloverSizeScale) / rolloverSizeScale
+}
+
+/*
 remainingSize はまだ売りに出せる数量を返す。
 
 ACTIVE な注文では outstanding_size がそのまま残数量になるが、
 CANCELED の注文では outstanding_size が0になり残数量は cancel_size 側に移る。
 状態によらず正しい値を得るため、outstanding_size が0以下のときは size - executed_size で補う。
+
+戻り値は必ず小数8桁へ丸める。size - executed_size は float64 の減算なので
+0.03 - 0.02 = 0.009999999999999998 のような値になり、丸めないと
+ETH の最小取引単位 0.01 を僅差で下回って「残数量が最小取引単位未満」と誤判定される
+（実損は無いがローリングが永久にスキップされ、いずれ期限切れで裸の保有になる）。
 */
 func (s rolloverOrderSnapshot) remainingSize() float64 {
 	if s.outstandingSize > 0 {
-		return s.outstandingSize
+		return roundRolloverSize(s.outstandingSize)
 	}
-	return s.size - s.executedSize
+	return roundRolloverSize(s.size - s.executedSize)
 }
 
 /*
@@ -541,6 +560,11 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 		markRolloverOrderFilled(record, "処理前に約定を検出", summary)
 		return
 	}
+
+	// DBに桁ノイズ付きの数量（過去の部分約定補正の残り等）が入っていても、
+	// 最小取引単位の判定と再発注の数量が誤らないよう小数8桁へ丸めておく。
+	// record は値渡しなので、以降の再発注・INSERTにもこの値が使われる
+	record.Size = roundRolloverSize(record.Size)
 
 	// 最小取引単位を下回る注文は再発注が拒否される。キャンセルする前に弾いて裸の保有を作らない
 	if minSize, ok := rolloverMinOrderSize[record.ProductCode]; ok && record.Size < minSize {
