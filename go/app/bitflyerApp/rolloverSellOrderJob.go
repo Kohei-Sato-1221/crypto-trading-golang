@@ -23,24 +23,42 @@ Bitflyerの注文有効期限の上限は43200分(30日)で、無期限注文は
 そこで期限の sell_rollover_days_before_expire 日前(既定3日 = 発注から27日目)に
 キャンセル → 同条件で再発注し、売り注文を保持し続ける。
 
-処理順序（順序そのものが安全性の要）:
+処理順序（順序そのものが安全性の要。実装は rolloverOneSellOrder）:
   ① 事前に取得したCOMPLETED一覧と突合し、既に約定していればFILLEDに更新して対象から外す
      （約定済みの注文にキャンセルAPIを叩かない）
-  ② CancelOrder() を実行し、成功を確認する（スプリント1でレスポンス検証済み。エラーなら再発注しない）
-  ③ 個別照会で「消滅」または「CANCELED」を再確認する
+  ② size を小数8桁へ丸め、最小取引単位を下回るレコードは**キャンセルする前に**スキップして通知する
+     （キャンセルしてから再発注を拒否されると裸の保有になるため）
+  ③ キャンセル前の個別照会(lookupRolloverOrder)で state と数量
+     (size / executed_size / outstanding_size) を取得する。
+     **キャンセルした注文はAPIから即座に消えるため、部分約定の検出はここでしか行えない。**
+     照会自体に失敗した場合はキャンセルも再発注も行わず次回リトライする。
+     取得した state による分岐:
+     - 見つからない: 通常はスキップ（失効または取引所側での手動キャンセル。DBの後始末は
+       expireSweepJob に委ねる）。ただし models.RemarkRolloverPending 付きなら
+       「前回のキャンセルは成立済み」とみなしキャンセルを飛ばして⑥へ進む
+     - COMPLETED: 既に約定。キャンセルAPIを叩かずFILLEDに更新して終了
+     - ACTIVE: ④へ
+     - CANCELED / EXPIRED / REJECTED 等: ④を行ったうえでキャンセルを飛ばして⑥へ進む
+  ④ 部分約定の補正(adjustSizeForPartialFill): executed_size > 0 なら残数量を算出し、
+     models.UpdateOrderSizeWithRemark で**DBの size を残数量へ先に補正する**。
+     残数量が最小取引単位未満なら通知してスキップする（キャンセルすると再発注できず裸の保有になるため）。
+     以降の再発注・INSERTはこの補正後の数量を使う
+  ⑤ CancelOrder() を実行し、成功を確認する（スプリント1でレスポンス検証済み。エラーなら再発注しない）。
+     続けてキャンセル後の個別照会で「消滅」または「CANCELED」を再確認する
      - COMPLETED が返った場合は キャンセル直前に約定していたということなので
        再発注せず FILLED に更新する（二重売りの防止）
      - ACTIVE のままならキャンセル未成立。再発注せず次のレコードへ
-  ④ 同一 product_code / price / size で再発注する（価格の再計算は一切行わない）
-  ⑤ 旧レコードのCANCELLED化と新レコードのINSERTを単一トランザクションで実行する
+     - 照会自体に失敗した場合は状態不明のまま発注しない。RemarkRolloverPending を付けて次回リトライする
+  ⑥ models.RemarkRolloverPending 付きレコードの再試行のみ、再発注の前に取引所のACTIVE一覧から
+     「同一 product_code / price / size / side=SELL で、DBに紐づかない注文」を探す。
+     前回 PlaceOrder のリクエストは届いたがレスポンスを取りこぼした場合、取引所側にだけ
+     注文が存在する（オーファン注文）。これを確認せずに再発注すると売り注文が2本並び、
+     拘束されていない現物（手動保有分）まで売られる恐れがあるため、
+     見つかった場合は再発注せずその order_id をDBへ取り込む（二重売りの防止）
+  ⑦ 同一 product_code / price / size（部分約定時は④で補正した残数量）で再発注する
+     （価格の再計算は一切行わない）
+  ⑧ 旧レコードのCANCELLED化と新レコードのINSERTを単一トランザクションで実行する
      （新レコードは parentid を引き継ぐため損益計算の紐付けが維持される）
-
-  ※ models.RemarkRolloverPending 付きレコードの再試行では、④の前に取引所のACTIVE一覧から
-    「同一 product_code / price / size / side=SELL で、DBに紐づかない注文」を探す。
-    前回 PlaceOrder のリクエストは届いたがレスポンスを取りこぼした場合、取引所側にだけ
-    注文が存在する（オーファン注文）。これを確認せずに再発注すると売り注文が2本並び、
-    拘束されていない現物（手動保有分）まで売られる恐れがあるため、
-    見つかった場合は再発注せずその order_id をDBへ取り込む（二重売りの防止）。
 
 異常系:
   - キャンセル成功・再発注失敗は「現物を保有しているのに売り注文が無い（裸の保有）」状態になるため
@@ -591,7 +609,7 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 	// record は値渡しなので、以降の再発注・INSERTにもこの値が使われる
 	record.Size = roundRolloverSize(record.Size)
 
-	// 最小取引単位を下回る注文は再発注が拒否される。キャンセルする前に弾いて裸の保有を作らない
+	// ② 最小取引単位を下回る注文は再発注が拒否される。キャンセルする前に弾いて裸の保有を作らない
 	if minSize, ok := rolloverMinOrderSize[record.ProductCode]; ok && record.Size < minSize {
 		summary.skipped++
 		msg := fmt.Sprintf("🚨【rolloverSellOrder】最小取引単位(%v)未満のためローリングしません: %s",
@@ -601,7 +619,7 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 		return
 	}
 
-	// ②の前に個別照会を行い、状態と数量（executed_size / outstanding_size）を取得する。
+	// ③ キャンセル前の個別照会。状態と数量（executed_size / outstanding_size）を取得する。
 	// キャンセルした注文はAPIから即座に消えるため、部分約定の検出は「キャンセル前」でしか行えない
 	alreadyCancelled := strings.Contains(record.Remarks, models.RemarkRolloverPending)
 	snapshot, err := lookupRolloverOrder(apiClient, record.ProductCode, record.OrderID)
@@ -637,11 +655,12 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 		markRolloverOrderFilled(record, "キャンセル前の個別照会で約定を検出", summary)
 		return
 	case snapshot.state == "ACTIVE":
+		// ④ 部分約定していれば残数量を算出し、DBの size を先に補正する
 		if !adjustSizeForPartialFill(&record, snapshot, summary) {
 			return
 		}
 	default:
-		// CANCELED / EXPIRED / REJECTED 等。キャンセルは不要だが部分約定の可能性は確認する
+		// CANCELED / EXPIRED / REJECTED 等。キャンセルは不要だが④の部分約定の確認は行う
 		if !adjustSizeForPartialFill(&record, snapshot, summary) {
 			return
 		}
@@ -651,7 +670,7 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 	}
 
 	if !skipCancel {
-		// ② キャンセルを実行し、成功を確認する（CancelOrderはレスポンスを検証して成否をerrorで返す）
+		// ⑤ キャンセルを実行し、成功を確認する（CancelOrderはレスポンスを検証して成否をerrorで返す）
 		cancelParam := &bitflyer.Order{
 			ProductCode:            record.ProductCode,
 			ChildOrderAcceptanceID: record.OrderID,
@@ -665,7 +684,7 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 			return
 		}
 
-		// ③ 個別照会で消滅（またはCOMPLETED）を再確認する
+		// ⑤ キャンセル後の個別照会で消滅（またはCOMPLETED）を再確認する
 		afterCancel, err := lookupRolloverOrder(apiClient, record.ProductCode, record.OrderID)
 		if err != nil {
 			// キャンセルは成功しているため裸の保有になっている可能性がある。
@@ -699,7 +718,7 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 		}
 	}
 
-	// 再試行経路（前回キャンセル成功・再発注失敗）では、④の前に必ずオーファン注文を確認する。
+	// ⑥ 再試行経路（前回キャンセル成功・再発注失敗）では、再発注の前に必ずオーファン注文を確認する。
 	// 前回の PlaceOrder がレスポンスを取りこぼしただけで成立していた場合、
 	// 確認せずに再発注すると同一ポジションに売り注文が2本並ぶ（二重売り）
 	if alreadyCancelled {
@@ -714,7 +733,7 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 		}
 	}
 
-	// ④ 同一 product_code / price / size（部分約定時は残数量）で再発注する
+	// ⑦ 同一 product_code / price / size（部分約定時は④で補正した残数量）で再発注する
 	newOrderID, err := placeRolloverSellOrder(apiClient, record, minuteToExpire)
 	if err != nil {
 		// キャンセル成功・再発注失敗 = 現物を保有しているのに売り注文が無い「裸の保有」
@@ -728,7 +747,7 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 		return
 	}
 
-	// ⑤ 旧レコードのCANCELLED化と新レコードのINSERTを単一トランザクションで実行する
+	// ⑧ 旧レコードのCANCELLED化と新レコードのINSERTを単一トランザクションで実行する
 	newExpire := time.Now().UTC().Add(time.Duration(minuteToExpire) * time.Minute)
 	if err := models.RolloverSellOrder(record, newOrderID, record.Price, newExpire); err != nil {
 		summary.failed++
