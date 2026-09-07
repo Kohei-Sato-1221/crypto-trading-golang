@@ -49,8 +49,9 @@ placeBuyOrder は expire_date = timestamp + buy_minute_to_expire を記録する
 実行のたびに cancelBuyOrderConfigNote() で整合を点検し、どちらのモードで
 動いているかをログに残す。
 
-以前は utils.BfCancelCriteria(-3日固定)で判定し、かつローカル時刻とDBのUTC時刻を
-比較していたため9時間のずれが生じていた。本ジョブの比較はすべてUTCで行う。
+以前は固定日数(旧 utils.BfCancelCriteria = -3日。現在は撤去済み)で判定し、
+かつローカル時刻とDBのUTC時刻を比較していたため9時間のずれが生じていた。
+本ジョブの比較はすべてUTCで行う。
 
 キャンセルAPIが失敗した場合はDBを更新しない（キャンセルできていない注文を
 CANCELLED として扱うと、実在する注文がスロット計算から消えて二重発注の温床になるため）。

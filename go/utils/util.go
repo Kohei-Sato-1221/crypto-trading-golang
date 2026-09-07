@@ -8,8 +8,12 @@ import (
 )
 
 var (
-	Layout             = "2006-01-02 15:04:05"
-	BfCancelCriteria   = -3
+	Layout = "2006-01-02 15:04:05"
+
+	// OkexCancelCriteria / OkjCancelCriteria は各取引所のタスクが未約定注文を
+	// キャンセルするまでの経過日数（AddDate に渡す負値）。
+	// Bitflyer 向けの BfCancelCriteria は撤去済み。cancelBuyOrderJob は固定日数ではなく
+	// config.Config.BFBuyOrderCancelDays（config.ini の buy_order_cancel_days）を使う。
 	OkexCancelCriteria = -3
 	OkjCancelCriteria  = 0
 )

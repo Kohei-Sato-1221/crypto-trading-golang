@@ -508,7 +508,7 @@ func IsBotStrategy(strategy int) bool
 func ParseBitflyerTime(s string) (time.Time, error)
 ```
 
-`utils.BfCancelCriteria = -3` は削除せず残すが、`cancelBuyOrderJob` からは参照しなくなる（`config.Config.BFBuyOrderCancelDays` を使う）。OKEX 側 (`OkexCancelCriteria`) には影響しない。
+`utils.BfCancelCriteria = -3` は **削除する**（レビュー指摘 F26）。当初は「削除せず残す」方針だったが、`cancelBuyOrderJob` が `config.Config.BFBuyOrderCancelDays` を使うようになった時点で実コードからの参照が 0 件になり、固定日数と設定値のどちらが有効なのか紛らわしいため撤去した。`OkexCancelCriteria`（`go/app/okextasks.go`）と `OkjCancelCriteria`（`go/app/okjTasks.go`）は使用中のため残す。
 
 ### 4.4 設定項目（`go/config.ini` + `go/config/config.go`）
 

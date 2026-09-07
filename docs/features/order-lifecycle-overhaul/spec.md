@@ -125,7 +125,7 @@ Bitflyer 自動売買ボットの「注文ライフサイクル管理」を作�
   - [ ] 方式B（補助）: `expire_date` が NULL の `UNFILLED` レコードについて、ACTIVE 一覧にも COMPLETED 一覧にも存在しない `order_id` を失効とみなすこと。**COMPLETED 一覧で遡れた最古の `child_order_date` より古いレコードは判定保留とし、Slack に保留件数を通知する**（遡り不足による誤判定を防ぐフェイルセーフ）。
   - [ ] ローリング再試行待ちマーカー（`[ROLLOVER_PENDING]`）が付いたレコードを sweep の対象から除外すること（スプリント4との競合防止。マーカー文字列は定数化）。
   - [ ] `filledCheckJob` が500件取得に変更され、`log.Println` へのフォーマット引数渡し（`go vet` 指摘）が解消されていること。
-  - [ ] `cancelBuyOrderJob` が固定日数（`utils.BfCancelCriteria = -3`）ではなく `expire_date` と設定値 `buy_order_cancel_days` に基づいて判定していること。
+  - [ ] `cancelBuyOrderJob` が固定日数（旧 `utils.BfCancelCriteria = -3`。F26 で撤去済み）ではなく `expire_date` と設定値 `buy_order_cancel_days` に基づいて判定していること。
   - [ ] ジョブが `service.go` に 06:05 JST でスケジュール登録されていること。
   - [ ] `make build` / `make test` が通り、変更ファイルに `go vet` の新規指摘がないこと。
 
