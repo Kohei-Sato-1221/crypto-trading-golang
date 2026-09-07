@@ -605,15 +605,45 @@ func ParseBitflyerTime(s string) (time.Time, error)
 
 ### 5.2 スケジュール登録（`service.go`）
 
+登録はすべて `jobRegistry`（`go/app/bitflyerApp/jobRegistry.go`）経由で行う（F30-2）。
+
 ```go
-scheduler.Every().Day().At(config.Config.TriggerTime05).Run(wrapJob(rolloverSellOrderJobFunc)) // 05:30
-scheduler.Every().Day().At(config.Config.TriggerTime06).Run(wrapJob(expireSweepJobFunc))       // 06:05
-scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJobFunc))         // 06:15
+registry := &jobRegistry{}
+
+registry.daily("rolloverSellOrderJob", config.Config.TriggerTime05, rolloverSellOrderJobFunc) // 05:30
+registry.daily("expireSweepJob", config.Config.TriggerTime06, expireSweepJobFunc)             // 06:05
+registry.daily("reconcileJob", config.Config.TriggerTime07, reconcileJobFunc)                 // 06:15
+registry.interval("syncBTCBuyOrderJob", 90, syncBTCBuyOrderJob)                               // 90秒ごと
 // savePriceHistoryJob は既存のまま変更しない（trigger_time_03=18:00 / trigger_time_04=06:00 の1日2回）
+
+registry.reportRegistrationResult() // 失敗が1件でもあれば起動時に1通Slack通知
 ```
 
-- すべて `wrapJob()` でラップし、グレースフルシャットダウン中は実行されないようにする（既存の仕組みに乗る）。
+- すべて `wrapJob()` でラップし、グレースフルシャットダウン中は実行されないようにする（既存の仕組みに乗る）。例外は `gracefulShutdown` 自身で、`registry.dailyWithoutWrap()` を使う。`wrapJob()` を通すと自分が `runningJobs` に加算され、自分の完了を待ち続けてしまうため。
 - **Pi は毎日 01:30〜02:45 JST に停止するため、日次ジョブをこの時間帯に置いてはならない。** それ以外の時刻は24時間いつでも配置可能。
+
+#### 5.2.1 スケジュール登録の失敗を無言にしない（F30-2）
+
+`carlescere/scheduler` の登録は多段で無言化する。
+
+1. `Every().Day().At(v)` は `v` が解釈できないとき `Job.err` に格納するだけで、戻り値は `*Job` のみ
+2. `Run()` は `(*Job, error)` を返し `j.err` があれば `nil, err` を返すが、**従来の `service.go` は戻り値を捨てていた**
+3. ゴルーチンが起動されず、そのジョブは二度と発火しない
+4. ログにもSlackにも何も出ず、プロセスは正常に動き続ける
+
+登録は20本近くあり、1本欠けても気づけない。特に買い注文ジョブ12本はすべて同じ `trigger_time_01` を使うため、**1つの設定ミスで発注が全滅する**。
+
+そこで `jobRegistry` に `daily` / `dailyWithoutWrap` / `interval` の3ヘルパーを持たせ、**`Run()` の戻り値を必ず検査**して失敗を `jobRegistrationFailure{Name, Schedule, Err}` として集約する。集約ロジック（`record` / `hasFailures` / `total` / `failureReport`）は scheduler に触れない純粋な関数として切り出してあり、ゴルーチンを起動せずにテストできる。
+
+**登録失敗時にプロセスは落とさない。** 起動時に1通のSlackエラー通知（失敗したジョブ名・スケジュール指定・エラー内容・「二度と発火しない」旨・対処方法）とログを出し、登録できたジョブはそのまま動かす。理由:
+
+- 実行環境は systemd の `Restart=always` / `RestartSec=10`。設定ミスは再起動しても直らないため、落とすと**10秒間隔の再起動ループ**になり、そのたびにSlack通知が飛んで逆に埋もれる
+- **部分稼働のほうが安全側**。例えば `trigger_time_02`（損益レポート）だけが壊れた場合にプロセスを落とすと、`syncBuyOrders` / `filledCheck` / `placeSellOrder` まで止まり、既に取引所に出ている買い注文が約定しても売り注文が発注されない。「レポートが来ない」より「建玉が放置される」ほうが損害が大きい
+- F30-1 で `trigger_time_01`〜`09` はすべて `NormalizeTriggerTime()` を通って既定値へ倒れるため、**設定由来の `At()` 失敗はそもそも起きない**。ここに残る失敗要因は `Every(0)` やチェーン誤りといった実装バグで、ビルド・テストで捕捉すべきもの
+
+つまりこの仕掛けの目的は「止めること」ではなく「無言をやめること」にある。気づいた人間が `config.ini` を直して再起動する運用を前提にしている。
+
+なお `go/app/okextasks.go` / `go/app/okjTasks.go` にも同じ「`Run()` の戻り値を捨てる」パターンがあるが、こちらは時刻がすべてソース内のリテラルで設定ミスの経路が無く、bitflyer 定期売買アプリでも使っていないため**対象外とした**。
 
 ### 5.3 日跨ぎの扱い
 
