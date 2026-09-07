@@ -1,7 +1,9 @@
--- PostgreSQL schema for crypto_trading
--- This file is used by docker-compose for local development initialization
+-- ベースライン: PostgreSQL(Supabase) 移行時点のスキーマ。
+-- 本番DBは既にこの状態で存在するため、このファイルは --baseline 指定により
+-- 「適用済み」として記録されるだけで実行されない。
+-- ローカル/テストDBを空から構築する場合にのみ実行される。
+-- 内容は本番 Supabase の実スキーマ(pg_class/pg_trigger 直参照)と照合済み。
 
--- buy_orders (bitflyer)
 CREATE TABLE IF NOT EXISTS buy_orders (
     id SERIAL PRIMARY KEY,
     order_id VARCHAR(50) UNIQUE,
@@ -11,16 +13,12 @@ CREATE TABLE IF NOT EXISTS buy_orders (
     size DOUBLE PRECISION,
     exchange VARCHAR(50),
     status VARCHAR(100) DEFAULT 'UNFILLED',
-    -- 99:not recorded / 127:旧MySQL tinyint飽和により判別不能 / 10001-10004:LTP系 / 20001-20003:7日安値ブレンド系 / 90001:手動発注
-    strategy INTEGER NOT NULL DEFAULT 99,
+    strategy SMALLINT NOT NULL DEFAULT 99,
     remarks TEXT,
-    expire_date TIMESTAMP,  -- 注文の有効期限(UTC)
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_buy_orders_status_expire ON buy_orders (status, expire_date);
 
--- sell_orders (bitflyer)
 CREATE TABLE IF NOT EXISTS sell_orders (
     id SERIAL PRIMARY KEY,
     parentid VARCHAR(50),
@@ -32,13 +30,10 @@ CREATE TABLE IF NOT EXISTS sell_orders (
     exchange VARCHAR(50),
     status VARCHAR(100) DEFAULT 'UNFILLED',
     remarks TEXT,
-    expire_date TIMESTAMP,  -- 注文の有効期限(UTC)
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_sell_orders_status_expire ON sell_orders (status, expire_date);
 
--- price_histories
 CREATE TABLE IF NOT EXISTS price_histories (
     id SERIAL PRIMARY KEY,
     datetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -49,7 +44,6 @@ CREATE TABLE IF NOT EXISTS price_histories (
 );
 CREATE INDEX IF NOT EXISTS idx_product_code_datetime ON price_histories (product_code, datetime);
 
--- okj_buy_orders (OKJ)
 CREATE TABLE IF NOT EXISTS okj_buy_orders (
     id SERIAL PRIMARY KEY,
     order_id VARCHAR(50) UNIQUE,
@@ -66,7 +60,6 @@ CREATE TABLE IF NOT EXISTS okj_buy_orders (
     updatetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- updatetime自動更新トリガー（PostgreSQLにはON UPDATE CURRENT_TIMESTAMPがないため）
 CREATE OR REPLACE FUNCTION update_updatetime()
 RETURNS TRIGGER AS $$
 BEGIN

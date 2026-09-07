@@ -51,16 +51,24 @@ table "buy_orders" {
     comment = "UNFILLED / FILLED / FILLED(SELL ORDER PLACED) / CANCELLED"
   }
 
+  # tinyint(上限127)では戦略値10001-20003が飽和して判別不能になるためintに拡張する。
+  # 本番PostgreSQLは既にintegerのため飽和は発生しない。
   column "strategy" {
-    type = tinyint
+    type = int
     null = false
     default = 99
-    comment = "99:not recorded"
+    comment = "99:not recorded / 127:旧MySQL tinyint飽和により判別不能 / 10001-10004:LTP系 / 20001-20003:7日安値ブレンド系 / 90001:手動発注"
   }
 
   column "remarks" {
     type = text
     null = true
+  }
+
+  column "expire_date" {
+    type = timestamp
+    null = true
+    comment = "注文の有効期限(UTC)。取引所APIのexpire_dateまたは発注時刻+minute_to_expire"
   }
 
   column "timestamp" {
@@ -83,6 +91,11 @@ table "buy_orders" {
   index "orderId" {
     unique = true
     columns = [column.order_id]
+  }
+
+  # 失効検出(expireSweepJob)のクエリ用
+  index "idx_buy_orders_status_expire" {
+    columns = [column.status, column.expire_date]
   }
 }
 
@@ -144,6 +157,12 @@ table "sell_orders" {
     null = true
   }
 
+  column "expire_date" {
+    type = timestamp
+    null = true
+    comment = "注文の有効期限(UTC)。ローリング対象の判定に使用"
+  }
+
   column "timestamp" {
     type = timestamp
     null = false
@@ -164,6 +183,11 @@ table "sell_orders" {
   index "orderId" {
     unique = true
     columns = [column.order_id]
+  }
+
+  # ローリング(rolloverSellOrderJob)・失効検出のクエリ用
+  index "idx_sell_orders_status_expire" {
+    columns = [column.status, column.expire_date]
   }
 }
 

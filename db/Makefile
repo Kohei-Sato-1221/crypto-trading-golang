@@ -1,4 +1,6 @@
 include ./envs/.db.env
+# Supabase(PostgreSQL) の接続情報。存在しなくてもエラーにしない（MySQL側の操作は継続可能）
+-include ./envs/.pg.env
 
 # URL encode password (replace & with %26)
 ENCODED_PASSWORD = $(subst &,%26,$(DB_PASSWORD))
@@ -85,4 +87,34 @@ pg-apply: ## apply PostgreSQL migration ## pg-apply
 
 pg-init: ## initialize local PostgreSQL with init SQL ## pg-init
 	psql "$(PG_LOCAL_URL)" -f crypto-trading-db-postgres/init/001_init.sql
+
+# === Supabase (production PostgreSQL) commands ===
+# 接続情報は envs/.pg.env の PG_SUPABASE_URL（gitignore 済み）。
+# ★ 必ず 5432(session pooler) を使うこと。6543 は transaction pooling のため
+#   Atlas のアドバイザリロック / セッション状態が壊れる。
+# ★ 初回のみ baseline 指定が必要:
+#     make pg-remote-apply baseline=20260506000000
+PG_MIGRATIONS_DIR = crypto-trading-db-postgres/migrations
+
+pg-remote-check: ## verify PG_SUPABASE_URL is set ## pg-remote-check
+ifeq "$(PG_SUPABASE_URL)" ""
+	@echo "PG_SUPABASE_URL is not set. Create db/envs/.pg.env first."
+	@exit 1
+endif
+	@echo "PG_SUPABASE_URL is set."
+
+pg-remote-status: pg-remote-check ## check Supabase migration status ## pg-remote-status
+	@atlas migrate status \
+		--dir "file://$(PG_MIGRATIONS_DIR)" \
+		-u "$(PG_SUPABASE_URL)"
+
+pg-remote-dry-run: pg-remote-check ## dry-run migration against Supabase ## pg-remote-dry-run baseline={version}
+	@atlas migrate apply --dry-run $(if $(baseline),--baseline $(baseline)) \
+		--dir "file://$(PG_MIGRATIONS_DIR)" \
+		-u "$(PG_SUPABASE_URL)"
+
+pg-remote-apply: pg-remote-check ## apply migration to Supabase ## pg-remote-apply baseline={version}
+	@atlas migrate apply $(if $(baseline),--baseline $(baseline)) \
+		--dir "file://$(PG_MIGRATIONS_DIR)" \
+		-u "$(PG_SUPABASE_URL)"
 

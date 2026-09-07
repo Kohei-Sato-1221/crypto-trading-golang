@@ -1,7 +1,6 @@
 package bitflyerApp
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -94,8 +93,8 @@ func StartBfService() {
 	apiClient := bitflyer.NewBitflyer(
 		config.Config.ApiKey,
 		config.Config.ApiSecret,
-		config.Config.BFMaxSell,
 		config.Config.BFMaxBuy,
+		config.Config.BFMaxSell,
 	)
 
 	slackClient = slack.NewSlack(
@@ -112,11 +111,11 @@ func StartBfService() {
 		placeBuyOrder(enums.StrategyLTP99, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, nil)
 	}
 
-	buyingBTCJobLTP95Mon := func() {
-		placeBuyOrder(enums.StrategyLTP95, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
+	buyingBTCJobLTP97Mon := func() {
+		placeBuyOrder(enums.StrategyLTP97, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
 	}
-	buyingETHJobLTP95Mon := func() {
-		placeBuyOrder(enums.StrategyLTP95, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
+	buyingETHJobLTP97Mon := func() {
+		placeBuyOrder(enums.StrategyLTP97, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdayMonday))
 	}
 
 	buyingBTCJobLTP98Tue := func() {
@@ -140,11 +139,11 @@ func StartBfService() {
 		placeBuyOrder(enums.StrategyLTP98, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdaySaturday))
 	}
 
-	buyingBTCJobLTP5t5Sun := func() {
-		placeBuyOrder(enums.StrategyLtpLowestIn7days2t8, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdaySunday))
+	buyingBTCJobLTP7t3Sun := func() {
+		placeBuyOrder(enums.StrategyLtpLowestIn7days7t3, "BTC_JPY", config.Config.BFBTCBuyAmount01, apiClient, utils.ToP(enums.WeekdaySunday))
 	}
-	buyingETHJobLTP5t5Sun := func() {
-		placeBuyOrder(enums.StrategyLtpLowestIn7days2t8, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdaySunday))
+	buyingETHJobLTP7t3Sun := func() {
+		placeBuyOrder(enums.StrategyLtpLowestIn7days7t3, "ETH_JPY", config.Config.BFETHBuyAmount01, apiClient, utils.ToP(enums.WeekdaySunday))
 	}
 
 	buyingBTCJobLTP95TEST := func() {
@@ -193,51 +192,40 @@ func StartBfService() {
 		SendResultsJob(apiClient)
 	}
 
-	cancelBuyOrderJob := func() {
-		// 一定期間が経過した買い注文は削除するようにする
-		log.Println("【cancelBuyOrderJob】Start of job")
-		buyOrders, err := models.GetUnfilledBuyOrders()
-		if err != nil {
-			log.Printf("## failed to cancel order....")
-			goto ENDOFCENCELORDER
-		}
+	// 期限が近い売り注文をキャンセル→同条件で再発注して実質無期限化する（実装は rolloverSellOrderJob.go）
+	rolloverSellOrderJobFunc := func() {
+		rolloverSellOrderJob(apiClient)
+	}
 
-		for i, order := range buyOrders {
-			log.Printf("## %v %v", i, order.OrderID)
-			timestamp, err := time.Parse(utils.Layout, order.Timestamp)
-			if err != nil {
-				log.Printf("## failed to cancel order....")
-				goto ENDOFCENCELORDER
-			}
-			cancelCriteria := time.Now().AddDate(0, 0, utils.BfCancelCriteria)
+	// 失効した注文をCANCELLEDに落としてスロットを解放する（実装は expireSweepJob.go）
+	expireSweepJobFunc := func() {
+		expireSweepJob(apiClient)
+	}
 
-			if cancelCriteria.After(timestamp) {
-				cancelOrderParam := &bitflyer.Order{
-					ProductCode:            order.ProductCode,
-					ChildOrderAcceptanceID: order.OrderID,
-				}
-				apiClient.CancelOrder(cancelOrderParam)
-				models.UpdateCancelledBuyOrder(order.OrderID)
-				log.Printf("### %v is cancelled!!", order.OrderID)
-				slackClient.PostMessage(fmt.Sprintf("Cancelled BuyOrder: OrderId:%v", order.OrderID), true)
-			}
-		}
+	// 長期間約定しない買い注文を能動キャンセルする（実装は cancelBuyOrderJob.go）
+	cancelBuyOrderJobFunc := func() {
+		cancelBuyOrderJob(apiClient)
+	}
 
-	ENDOFCENCELORDER:
-		log.Println("【cancelBuyOrderJob】End of job")
+	// 取引所とDBを突合し、乖離・発注ゼロ・スロット逼迫をSlackへ通知する（実装は reconcileJob.go）
+	reconcileJobFunc := func() {
+		reconcileJob(apiClient)
 	}
 
 	triggerTime01 := config.Config.TriggerTime01
 	triggerTime02 := config.Config.TriggerTime02
 	triggerTime03 := config.Config.TriggerTime03
 	triggerTime04 := config.Config.TriggerTime04
+	triggerTime05 := config.Config.TriggerTime05
+	triggerTime06 := config.Config.TriggerTime06
+	triggerTime07 := config.Config.TriggerTime07
 
 	if !config.Config.IsTest {
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobEveryDay))
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobEveryDay))
 
-		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP95Mon))
-		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP95Mon))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP97Mon))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP97Mon))
 
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP98Tue))
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP98Tue))
@@ -248,8 +236,8 @@ func StartBfService() {
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP98Sat))
 		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP98Sat))
 
-		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP5t5Sun))
-		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP5t5Sun))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingBTCJobLTP7t3Sun))
+		scheduler.Every().Day().At(triggerTime01).Run(wrapJob(buyingETHJobLTP7t3Sun))
 
 		scheduler.Every(90).Seconds().Run(wrapJob(syncBTCBuyOrderJob))
 		scheduler.Every(90).Seconds().Run(wrapJob(syncETHBuyOrderJob))
@@ -265,7 +253,25 @@ func StartBfService() {
 		// 毎日朝9時に収益結果をSlackに送信
 		scheduler.Every().Day().At(triggerTime02).Run(wrapJob(sendResultsJobFunc))
 
-		scheduler.Every().Day().At("23:45").Run(wrapJob(cancelBuyOrderJob))
+		// 売り注文の27日ローリング（05:30 JST）。1日1回。
+		// 失効検出(06:05)より前に走らせ、巻き直せた注文がsweepの対象にならないようにする。
+		// 実行環境はRaspberry Pi上のsystemdサービスで原則24時間稼働。ただしPi自体が毎日01:30〜02:45 JSTに停止するため、その時間帯を避けている
+		scheduler.Every().Day().At(triggerTime05).Run(wrapJob(rolloverSellOrderJobFunc))
+
+		// 失効検出（06:05 JST）。買い注文ジョブ(trigger_time_01=06:30)より前に走らせ、
+		// スロットのカウントが正しい状態で発注判定させる
+		scheduler.Every().Day().At(triggerTime06).Run(wrapJob(expireSweepJobFunc))
+
+		// 日次リコンサイル（06:15 JST）。1日1回。
+		// 失効検出(06:05)の後・買い注文ジョブ(trigger_time_01=06:30)の前に走らせ、
+		// スロット解放が済んだ状態のDBと取引所を突合する。
+		// 実行環境のRaspberry Piは毎日 01:30〜02:45 JST に停止するため、その時間帯は避けている
+		scheduler.Every().Day().At(triggerTime07).Run(wrapJob(reconcileJobFunc))
+
+		// 買い注文の能動キャンセル（22:45 JST）。
+		// 旧設定は23:45。移動時は「EC2稼働窓の外で発火しない」という前提だったが、実行環境はRaspberry Piの24時間稼働で
+		// 23:45でも発火していた。22:45もPi停止時間帯(01:30〜02:45 JST)を避けており支障がないため据え置いている
+		scheduler.Every().Day().At("22:45").Run(wrapJob(cancelBuyOrderJobFunc))
 
 		// 01:20にアプリをグレースフルシャットダウン（実行中のジョブ完了を待機）
 		scheduler.Every().Day().At("01:20").Run(func() {

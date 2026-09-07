@@ -33,10 +33,14 @@ func CalculateBuyPrice(ltp, low float64, strategy int, lowestPriceInPast7DaysFro
 		return Round(ltp * 0.99)
 	case enums.StrategyLTP98:
 		return Round(ltp * 0.98)
+	case enums.StrategyLTP97:
+		return Round(ltp * 0.97)
 	case enums.StrategyLTP95:
 		return Round(ltp * 0.95)
 	case enums.StrategyLtpLowestIn7days5t5:
 		return Round(ltp*0.5 + lowestPriceInPast7Days*0.5)
+	case enums.StrategyLtpLowestIn7days7t3:
+		return Round(ltp*0.7 + lowestPriceInPast7Days*0.3)
 	case enums.StrategyLtpLowestIn7days2t8:
 		return Round(ltp*0.2 + lowestPriceInPast7Days*0.8)
 	}

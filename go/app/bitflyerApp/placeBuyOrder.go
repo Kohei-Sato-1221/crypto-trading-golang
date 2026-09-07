@@ -49,8 +49,10 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 	}
 	log.Printf("【buyingJob】JPY balance: %.2f (BudgetCriteria: %.2f)", jpyBalance, config.Config.BudgetCriteria)
 
-	// 最大注文数を超えている場合はスキップする
-	shouldSkip, err, msg := models.ShouldPlaceBuyOrder(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
+	// スロット状況を確認する
+	// - buy側が上限に達している場合は発注をスキップする
+	// - sell側が上限に達している場合はSlack警告のみ出し、発注は続行する
+	slotStatus, err := models.GetBuyOrderSlotStatus(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
 	if err != nil {
 		errMsg := fmt.Sprintf("【ERROR】placeBuyOrder error:%v", err.Error())
 		log.Printf("%s\n", errMsg)
@@ -58,11 +60,20 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		log.Println("【buyingJob】end of job as error")
 		return
 	}
-	if shouldSkip {
-		log.Printf("placeBuyOrder ShouldSkip :%v max:%v\n", shouldSkip, apiClient.Max_sell_orders)
+	if slotStatus.ShouldSkip {
+		// スキップ理由が他の通知に埋もれないよう絵文字を先頭に置き、件数と上限値の両方を本文に含める
+		msg := fmt.Sprintf("🚨【buyingJob】発注スキップ: 未約定の買い注文が上限に達しています %s (%s size:%v strategy:%v)",
+			slotStatus.Message, productCode, size, strategy)
+		log.Println(msg)
 		log.Println("【buyingJob】end of job as skip")
 		slackClient.PostMessage(msg, true)
 		return
+	}
+	if slotStatus.SellWarning {
+		// 売り注文の滞留では発注をブロックしない（現物積み上がりの歯止めはbudget_criteria）
+		warnMsg := fmt.Sprintf("🚨【buyingJob】売り注文が上限超過: %s （発注は続行します）", slotStatus.Message)
+		log.Println(warnMsg)
+		slackClient.PostMessage(warnMsg, true)
 	}
 
 	buyPrice := 0.0
@@ -124,6 +135,8 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 
 	utc, _ := time.LoadLocation("UTC")
 	utc_current_date := time.Now().In(utc)
+	// 注文の有効期限(UTC)を記録する。取引所側の厳密な期限は syncBuyOrders がAPIの expire_date で補正する
+	expireDate := utc_current_date.Add(time.Duration(minuteToExpire) * time.Minute)
 	event := models.OrderEvent{
 		OrderID:     res.OrderId,
 		Time:        utc_current_date,
@@ -133,6 +146,7 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		Size:        size,
 		Exchange:    "bitflyer",
 		Strategy:    strategy,
+		ExpireDate:  &expireDate,
 	}
 
 	err = event.BuyOrder()
@@ -146,7 +160,8 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)
 	}
 
-	slackClient.PostMessage(fmt.Sprintf("BuyOrder: %s(%.2f/%v) OrderId:%v", productCode, buyPrice, size, res.OrderId), true)
+	slackClient.PostMessage(fmt.Sprintf("BuyOrder: %s(%.2f/%v) OrderId:%v expire(UTC):%s",
+		productCode, buyPrice, size, res.OrderId, expireDate.Format(time.RFC3339)), true)
 
 	log.Println("【buyingJob】end of job")
 }

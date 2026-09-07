@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/config"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/utils"
 )
 
 type APIClient struct {
@@ -45,19 +46,22 @@ func (apiClient APIClient) header(method, endpoint string, body []byte) map[stri
 	}
 }
 
-func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]string, data []byte) (body []byte, err error) {
+// doRequest はBitflyer APIへリクエストを送り、レスポンスボディとHTTPステータスコードを返す。
+// キャンセル等の更新系APIでは成否の判定にステータスコードが必要なため、
+// ボディのみを返す doGETPOST から切り出している。
+func (apiClient *APIClient) doRequest(method, urlPath string, query map[string]string, data []byte) (body []byte, statusCode int, err error) {
 	baseURL, err := url.Parse(config.BaseURL)
 	if err != nil {
-		return
+		return nil, 0, err
 	}
 	apiURL, err := url.Parse(urlPath)
 	if err != nil {
-		return
+		return nil, 0, err
 	}
 	endpoint := baseURL.ResolveReference(apiURL).String()
 	req, err := http.NewRequest(method, endpoint, bytes.NewBuffer(data))
 	if err != nil {
-		return
+		return nil, 0, err
 	}
 	q := req.URL.Query()
 	for key, value := range query {
@@ -70,14 +74,20 @@ func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]s
 	}
 	resp, err := apiClient.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 	body, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, resp.StatusCode, err
 	}
-	return body, nil
+	return body, resp.StatusCode, nil
+}
+
+// doGETPOST は doRequest の薄いラッパ。HTTPステータスコードを必要としない既存の呼び出し元向け。
+func (apiClient *APIClient) doGETPOST(method, urlPath string, query map[string]string, data []byte) (body []byte, err error) {
+	body, _, err = apiClient.doRequest(method, urlPath, query, data)
+	return body, err
 }
 
 type Balance struct {
@@ -125,50 +135,168 @@ func (apiClient *APIClient) GetBalances() ([]Balance, error) {
 	return balances, nil
 }
 
-// func (apiClient *APIClient) GetOrderByOrderId(orderId, productCode string) (*Order, error) {
-// 	url := "me/getchildorders"
-// 	params := make(map[string]string)
-// 	params["child_order_acceptance_id"] = orderId
-// 	params["product_code"] = productCode
-// 	params["child_order_state"] = "COMPLETED"
-// 	resp, err := apiClient.doGETPOST("GET", url, params, nil)
-// 	log.Printf("url=%s resp=%s", url, string(resp))
-// 	if err != nil {
-// 		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
-// 		return nil, err
-// 	}
-// 	var orders []Order
-// 	err = json.Unmarshal(resp, &orders)
-// 	if err != nil {
-// 		log.Printf("action=GetOrderByOrderId err=%s, orderId:%s", err.Error(), orderId)
-// 		return nil, err
-// 	}
+const (
+	// MaxChildOrdersCount は getchildorders の count の実効上限。
+	// 公式ドキュメントに上限の記載がないため、実測値を定数化している。
+	// 501 / 1000 / 5000 / 10000 を指定しても黙って500件で頭打ちになることを実測で確認済み。
+	MaxChildOrdersCount = 500
 
-// 	if len(orders) == 0 {
-// 		log.Printf("action=GetOrderByOrderId No Order correspond to orderId:%s", orderId)
-// 		return nil, nil
-// 	}
-// 	return &orders[0], nil
-// }
+	// MaxChildOrdersPages は before ページングで遡る最大ページ数（無限ループ防止）。
+	MaxChildOrdersPages = 10
 
-func (apiClient *APIClient) GetActiveBuyOrders(product_code, order_status string) (*[]Order, error) {
-	url := "me/getchildorders"
+	// childOrdersPath は子注文一覧APIのパス。
+	childOrdersPath = "me/getchildorders"
+)
+
+// GetChildOrdersParams は /v1/me/getchildorders のクエリパラメータ。
+type GetChildOrdersParams struct {
+	ProductCode            string // 必須
+	ChildOrderState        string // "ACTIVE" / "COMPLETED" / "CANCELED" / "" (全状態)
+	Count                  int    // 0 なら設定値(child_orders_count)、それも未設定なら MaxChildOrdersCount
+	Before                 int    // 0 なら未指定（ページング用: 前ページの最小 ID）
+	After                  int    // 0 なら未指定
+	ChildOrderAcceptanceID string // 個別照会用
+}
+
+// resolveChildOrdersCount は実際に count へ指定する件数を決める。
+// 実効上限(MaxChildOrdersCount)を超える値は取引所側で黙って切り詰められるため、こちら側でも丸める。
+func resolveChildOrdersCount(requested int) int {
+	if requested <= 0 {
+		requested = config.Config.BFChildOrdersCount
+	}
+	if requested <= 0 || requested > MaxChildOrdersCount {
+		requested = MaxChildOrdersCount
+	}
+	return requested
+}
+
+// parseChildOrderDate は child_order_date / expire_date を UTC の time.Time としてパースする。
+// パースできない場合はゼロ値と error を返す。
+// 実装は utils.ParseBitflyerTime に委譲する（同期処理・DB保存側と同じ解釈を保証するため）。
+func parseChildOrderDate(value string) (time.Time, error) {
+	return utils.ParseBitflyerTime(value)
+}
+
+// GetChildOrders は子注文一覧を1ページぶん（最大 MaxChildOrdersCount 件）取得する。
+// 売買方向(side)ではフィルタしないため BUY / SELL の両方が返る点に注意すること。
+func (apiClient *APIClient) GetChildOrders(p GetChildOrdersParams) ([]Order, error) {
 	params := make(map[string]string)
-	params["product_code"] = product_code
-	params["child_order_state"] = order_status
-	resp, err := apiClient.doGETPOST("GET", url, params, nil)
-	log.Printf("url=%s resp=%s", url, string(resp))
+	if p.ProductCode != "" {
+		params["product_code"] = p.ProductCode
+	}
+	if p.ChildOrderState != "" {
+		params["child_order_state"] = p.ChildOrderState
+	}
+	params["count"] = strconv.Itoa(resolveChildOrdersCount(p.Count))
+	if p.Before > 0 {
+		params["before"] = strconv.Itoa(p.Before)
+	}
+	if p.After > 0 {
+		params["after"] = strconv.Itoa(p.After)
+	}
+	if p.ChildOrderAcceptanceID != "" {
+		params["child_order_acceptance_id"] = p.ChildOrderAcceptanceID
+	}
+
+	resp, statusCode, err := apiClient.doRequest("GET", childOrdersPath, params, nil)
 	if err != nil {
-		log.Printf("action=GetOrderByOrderId err=%s", err.Error())
+		log.Printf("action=GetChildOrders productCode=%s state=%s err=%s", p.ProductCode, p.ChildOrderState, err.Error())
+		return nil, err
+	}
+	if statusCode < 200 || statusCode >= 300 {
+		err = fmt.Errorf("action=GetChildOrders productCode=%s state=%s statusCode=%d body=%s",
+			p.ProductCode, p.ChildOrderState, statusCode, string(resp))
+		log.Println(err.Error())
 		return nil, err
 	}
 	var orders []Order
-	err = json.Unmarshal(resp, &orders)
-	if err != nil {
-		log.Printf("action=GetActiveBuyOrders err=%s", err.Error())
+	if err := json.Unmarshal(resp, &orders); err != nil {
+		log.Printf("action=GetChildOrders productCode=%s state=%s err=%s body=%s",
+			p.ProductCode, p.ChildOrderState, err.Error(), string(resp))
 		return nil, err
 	}
-	return &orders, nil
+	log.Printf("action=GetChildOrders productCode=%s state=%s before=%d fetched=%d",
+		p.ProductCode, p.ChildOrderState, p.Before, len(orders))
+	return orders, nil
+}
+
+// GetChildOrdersAll は before ページングで最大 MaxChildOrdersPages ページ遡って子注文を取得する。
+// before には前ページの最小 id を渡す（Bitflyerは id < before のレコードを返す）。
+// 2つ目の返り値は取得できた中で最も古い child_order_date（遡り限界の判定に使う。該当なしならゼロ値）。
+func (apiClient *APIClient) GetChildOrdersAll(productCode, state string) ([]Order, time.Time, error) {
+	var allOrders []Order
+	var oldest time.Time
+	count := resolveChildOrdersCount(0)
+	before := 0
+
+	for page := 0; page < MaxChildOrdersPages; page++ {
+		orders, err := apiClient.GetChildOrders(GetChildOrdersParams{
+			ProductCode:     productCode,
+			ChildOrderState: state,
+			Count:           count,
+			Before:          before,
+		})
+		if err != nil {
+			return nil, time.Time{}, err
+		}
+		if len(orders) == 0 {
+			break
+		}
+
+		minID := int64(0)
+		for _, order := range orders {
+			allOrders = append(allOrders, order)
+			if minID == 0 || order.ID < minID {
+				minID = order.ID
+			}
+			orderDate, parseErr := parseChildOrderDate(order.ChildOrderDate)
+			if parseErr != nil {
+				log.Printf("action=GetChildOrdersAll orderId=%s %s", order.ChildOrderAcceptanceID, parseErr.Error())
+				continue
+			}
+			if oldest.IsZero() || orderDate.Before(oldest) {
+				oldest = orderDate
+			}
+		}
+
+		// 1ページの上限に満たなければ最終ページ
+		if len(orders) < count {
+			break
+		}
+		// before を決められない場合は同じページを取り続けないよう打ち切る
+		if minID <= 0 {
+			log.Printf("action=GetChildOrdersAll productCode=%s state=%s no valid id for paging. stop paging", productCode, state)
+			break
+		}
+		before = int(minID)
+	}
+	log.Printf("action=GetChildOrdersAll productCode=%s state=%s total=%d oldestChildOrderDate=%s",
+		productCode, state, len(allOrders), oldest.Format(time.RFC3339))
+	return allOrders, oldest, nil
+}
+
+// GetChildOrderByAcceptanceID は child_order_acceptance_id を指定して子注文を1件照会する。
+// 該当が無い場合は (nil, nil) を返す。
+//
+// ⚠️ このメソッドの用途は「生きている注文（ACTIVE / COMPLETED / CANCELED）の存在確認」に限定すること。
+// 失効した注文は Bitflyer の API から完全に消える（実測確認済み: child_order_state=EXPIRED は常に0件、
+// 失効注文を child_order_acceptance_id で個別指定しても0件）。
+// したがって nil が返っても「失効した」とは断定できず、失効判定にこのメソッドを使ってはならない。
+// 失効判定にはDBに保持した expire_date を使うこと。
+func (apiClient *APIClient) GetChildOrderByAcceptanceID(productCode, acceptanceID string) (*Order, error) {
+	orders, err := apiClient.GetChildOrders(GetChildOrdersParams{
+		ProductCode:            productCode,
+		ChildOrderAcceptanceID: acceptanceID,
+		Count:                  1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(orders) == 0 {
+		log.Printf("action=GetChildOrderByAcceptanceID productCode=%s orderId=%s no order found", productCode, acceptanceID)
+		return nil, nil
+	}
+	return &orders[0], nil
 }
 
 // easy to convert json to struct with https://mholt.github.io/json-to-go/
@@ -291,16 +419,53 @@ type CancelOrderResponse struct {
 	OrderId string `json:"child_order_acceptance_id"`
 }
 
+// APIError は Bitflyer がエラー時に返す JSON。
+type APIError struct {
+	Status       int         `json:"status"`
+	ErrorMessage string      `json:"error_message"`
+	Data         interface{} `json:"data"`
+}
+
+// CancelOrder は注文をキャンセルする。
+//
+// 成功: HTTP 2xx かつ ボディが空 または {"status":0}
+// 失敗: HTTP 非2xx、または status != 0 / error_message != ""
+// パース不能なレスポンスは「失敗」として扱う（フェイルセーフ: 成否不明のまま再発注させないため）。
 func (apiClient *APIClient) CancelOrder(order *Order) error {
 	data, err := json.Marshal(order)
 	if err != nil {
+		log.Printf("action=CancelOrder productCode=%s orderId=%s err=%s",
+			order.ProductCode, order.ChildOrderAcceptanceID, err.Error())
 		return err
 	}
 	url := "me/cancelchildorder"
-	resp, err := apiClient.doGETPOST("POST", url, map[string]string{}, data)
+	resp, statusCode, err := apiClient.doRequest("POST", url, map[string]string{}, data)
 	if err != nil {
-		fmt.Printf("res:%s\n", resp)
-		return err
+		log.Printf("action=CancelOrder productCode=%s orderId=%s err=%s",
+			order.ProductCode, order.ChildOrderAcceptanceID, err.Error())
+		return fmt.Errorf("failed to cancel order. productCode=%s orderId=%s err=%w",
+			order.ProductCode, order.ChildOrderAcceptanceID, err)
+	}
+	if statusCode < 200 || statusCode >= 300 {
+		return fmt.Errorf("failed to cancel order. productCode=%s orderId=%s statusCode=%d body=%s",
+			order.ProductCode, order.ChildOrderAcceptanceID, statusCode, string(resp))
+	}
+
+	body := bytes.TrimSpace(resp)
+	if len(body) == 0 {
+		// 空ボディ + 2xx はキャンセル成功
+		return nil
+	}
+
+	var apiErr APIError
+	if err := json.Unmarshal(body, &apiErr); err != nil {
+		// パース不能なレスポンスは失敗側に倒す
+		return fmt.Errorf("failed to parse cancel order response. productCode=%s orderId=%s statusCode=%d body=%s err=%w",
+			order.ProductCode, order.ChildOrderAcceptanceID, statusCode, string(body), err)
+	}
+	if apiErr.Status != 0 || apiErr.ErrorMessage != "" {
+		return fmt.Errorf("failed to cancel order. productCode=%s orderId=%s status=%d errorMessage=%s",
+			order.ProductCode, order.ChildOrderAcceptanceID, apiErr.Status, apiErr.ErrorMessage)
 	}
 	return nil
 }

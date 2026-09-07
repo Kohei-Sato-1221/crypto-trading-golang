@@ -24,8 +24,8 @@ func main() {
 	apiClient := bitflyer.NewBitflyer(
 		config.Config.ApiKey,
 		config.Config.ApiSecret,
-		config.Config.BFMaxSell,
 		config.Config.BFMaxBuy,
+		config.Config.BFMaxSell,
 	)
 
 	// Slackクライアントの初期化

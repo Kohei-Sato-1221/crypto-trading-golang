@@ -1,47 +1,70 @@
 package bitflyerApp
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
 )
 
+/*
+filledCheckJob はDB上で未約定(UNFILLED)の注文が取引所側で約定していないかを確認し、
+約定していれば FILLED に更新するジョブ。
+
+取得件数は getchildorders の実効上限である bitflyer.MaxChildOrdersCount(500件)を明示指定する。
+本ジョブは90秒周期で動くため、直近の約定は必ず1ページ目に含まれる。
+*/
 func filledCheckJob(productCode string, apiClient *bitflyer.APIClient) {
-	log.Println("【filledCheckJob】start of job %v", productCode)
-	// Get list of unfilled buy orders in local Database(buy_orders & sell_orders)
-	ids, err1 := models.FilledCheck(productCode)
-	completed_orders, err2 := apiClient.GetActiveBuyOrders(productCode, "COMPLETED")
-	if err1 != nil || err2 != nil {
-		log.Println("error in filledCheckJob..... e1:%v  e2:%v", err1, err2)
-		goto ENDOFFILLEDCHECK
+	log.Printf("【filledCheckJob】start of job %v", productCode)
+
+	// DB上の未約定注文（buy_orders / sell_orders）を取得する
+	ids, err := models.FilledCheck(productCode)
+	if err != nil {
+		msg := fmt.Sprintf("🚨【filledCheckJob】未約定注文の取得に失敗: product_code=%s err=%v", productCode, err)
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
+		log.Printf("【filledCheckJob】end of job as error %v", productCode)
+		return
+	}
+	if len(ids) == 0 {
+		log.Printf("【filledCheckJob】end of job (no unfilled orders) %v", productCode)
+		return
 	}
 
-	if ids == nil {
-		goto ENDOFFILLEDCHECK
+	completedOrders, err := apiClient.GetChildOrders(bitflyer.GetChildOrdersParams{
+		ProductCode:     productCode,
+		ChildOrderState: "COMPLETED",
+		Count:           bitflyer.MaxChildOrdersCount,
+	})
+	if err != nil {
+		msg := fmt.Sprintf("🚨【filledCheckJob】約定済み注文一覧の取得に失敗: product_code=%s err=%v", productCode, err)
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
+		log.Printf("【filledCheckJob】end of job as error %v", productCode)
+		return
 	}
 
-	// check if an order is filled for each orders calling API
-	for i, orderId := range ids {
-		log.Printf("No%d Id:%v", i, orderId)
-		// order, err := apiClient.GetOrderByOrderId(orderId, productCode)
-		orderIdExist := false
-		for _, order := range *completed_orders {
-			if orderId == order.ChildOrderAcceptanceID {
-				orderIdExist = true
-				log.Printf("## filledCheckJob  orderid:%v has been filled!")
-				break
-			}
-		}
-		if orderIdExist {
-			err := models.UpdateFilledOrder(orderId)
-			if err != nil {
-				log.Println("Failure to update records.....")
-				break
-			}
-			log.Printf("Order updated successfully!! orderId:%s", orderId)
-		}
+	completedIDs := make(map[string]bool, len(completedOrders))
+	for _, order := range completedOrders {
+		completedIDs[order.ChildOrderAcceptanceID] = true
 	}
-ENDOFFILLEDCHECK:
-	log.Println("【filledCheckJob】end of job %v", productCode)
+
+	for i, orderID := range ids {
+		log.Printf("No%d Id:%v", i, orderID)
+		if !completedIDs[orderID] {
+			continue
+		}
+		log.Printf("## filledCheckJob orderid:%v has been filled!", orderID)
+		if err := models.UpdateFilledOrder(orderID); err != nil {
+			// 1件の失敗で以降の注文が処理されなくならないよう continue する
+			msg := fmt.Sprintf("🚨【filledCheckJob】約定ステータスの更新に失敗: OrderID=%s product_code=%s err=%v",
+				orderID, productCode, err)
+			log.Println(msg)
+			slackClient.PostMessage(msg, true)
+			continue
+		}
+		log.Printf("Order updated successfully!! orderId:%s", orderID)
+	}
+	log.Printf("【filledCheckJob】end of job %v", productCode)
 }

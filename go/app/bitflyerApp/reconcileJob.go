@@ -1,0 +1,524 @@
+package bitflyerApp
+
+import (
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/config"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/enums"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
+)
+
+/*
+reconcileJob は取引所とDBの状態を日次で突合し、乖離をSlackへ通知するジョブ。
+
+背景:
+2026-05 の障害は「取引所には存在しない注文がDB上 UNFILLED のまま残り、スロットを食い潰して
+買い注文が1本も出せなくなる」という状態が、5ヶ月間まったく気づかれずに続いたものだった。
+個々のジョブの修正（失効検出・ローリング）だけでは同種の「無言の停止」を防ぎきれないため、
+毎日1回だけ全体を突合して「気づける」ようにするのが本ジョブの目的である。
+
+突合する内容:
+ 1. 注文: 取引所のACTIVE注文（BTC_JPY / ETH_JPY、ページング取得）と
+    DBの UNFILLED（buy / sell）を売買方向ごとに突合し、「DBにのみ存在」「取引所にのみ存在」を検出する。
+    「取引所にのみ存在」は、発注APIのレスポンス消失などで生じるオーファン注文の検出も兼ねる。
+ 2. 残高: 取引所のBTC / ETH残高とDB上の想定保有量を突合する。
+ 3. 発注ゼロ: ボットの買い注文が設定日数(no_order_alert_days)以上発生していないことを検出する。
+ 4. ローリング再試行待ち: RemarkRolloverPending が残り続けているレコード
+    （＝現物を保有したまま売り注文が無い状態に近づいている）を検出する。
+ 5. スロット: 未約定 buy / sell の件数と上限値を毎回のサマリに含め、sell 側の超過を警告する。
+
+本ジョブは検知と通知に徹し、DBの更新も取引所への発注・キャンセルも一切行わない
+（誤検知が状態変更につながらないようにするため）。
+
+残高突合が「鳴りっぱなし」にならないための設計:
+  - 手動保有分(models.RemarkManualHold)は乖離判定から完全に除外する。ボットは一切関与せず
+    ユーザーが任意のタイミングで手動売却するため、判定に含めると売却した瞬間から
+    「不足」側の乖離が恒久的に残り、毎日アラートが鳴り続けてしまう。
+    サマリには内訳として表示するが、あくまで参考値であり判定には使わない。
+  - DBが追跡していない既知の保有量は設定値 untracked_holding_btc / untracked_holding_eth で
+    ベースラインとして与えられる。これを判定用の想定保有量に加算することで、過去の手動取引由来の
+    差分が毎日アラートになることを防ぐ。
+  - 乖離の向きで扱いを変える。「実残高 < 判定用の想定保有量」（不足）はボットが売るべき現物が
+    足りない＝売り注文が残高不足で失敗しうる危険な状態なのでエラー通知する。
+    「実残高 > 判定用の想定保有量」（余剰）は取引の安全性を損なわないため、
+    日次サマリに数値を載せるだけでエラー通知はしない。
+*/
+
+// reconcileTarget は突合対象の通貨ペアと、その残高判定に使うパラメータ。
+type reconcileTarget struct {
+	ProductCode string
+	Currency    string
+	Threshold   float64 // 乖離を通知する閾値
+	Untracked   float64 // DBが追跡していない既知の保有量（ベースライン）
+}
+
+const (
+	// reconcileMaxUnfilledRecords はDBから取得する未約定レコードの上限（1テーブル・1通貨ペアあたり）。
+	// 上限に達した場合は models 側がエラーログを出す。
+	reconcileMaxUnfilledRecords = 500
+
+	// reconcileSampleSize はSlack通知に載せる代表 order_id の最大件数。
+	reconcileSampleSize = 10
+
+	// reconcileRecentBuyOrderScan は発注ゼロ検知のために遡って走査する buy_orders の件数。
+	// 買い注文ジョブは1日最大12本のため、200件あれば no_order_alert_days(既定3日)の判定に十分な余裕がある。
+	reconcileRecentBuyOrderScan = 200
+
+	// reconcileRolloverPendingMax はローリング再試行待ちレコードの取得上限。
+	reconcileRolloverPendingMax = 50
+)
+
+// orderDiff は1通貨ペア・1売買方向ぶんの注文突合結果。
+type orderDiff struct {
+	ProductCode  string
+	Side         string
+	Table        models.OrderTable
+	DBOnly       []string // DBは UNFILLED だが取引所のACTIVE一覧に無い（幽霊レコードの疑い）
+	ExchangeOnly []string // 取引所にACTIVEで存在するがDBに UNFILLED として無い（オーファン注文の疑い）
+}
+
+/*
+balanceDiff は1通貨ぶんの残高突合結果。
+
+判定に使うのは AlertExpected（= Holding.AlertTarget() + Untracked）だけである。
+Holding.Manual（手動保有分）は AlertExpected に含めず、参考値としてサマリに表示するのみ。
+*/
+type balanceDiff struct {
+	Currency    string
+	ProductCode string
+	Exchange    float64                // 取引所の保有量（注文で拘束された分を含む総額）
+	Holding     models.ExpectedHolding // DB上の想定保有量の内訳（Manualは判定対象外）
+	Untracked   float64                // 設定値のベースライン（判定に含める）
+	// AlertExpected は乖離判定に使う想定保有量。Holding.AlertTarget()(=Bot+Naked) + Untracked。
+	// 手動保有分は含まない（ユーザーが売買しても判定結果が動かないようにするため）
+	AlertExpected float64
+	Diff          float64 // Exchange - AlertExpected（正なら余剰・負なら不足）
+	Threshold     float64
+}
+
+// isShortfall は「実残高が想定保有量より閾値を超えて少ない」状態かを返す（危険側の乖離）。
+func (d balanceDiff) isShortfall() bool {
+	return -d.Diff > d.Threshold
+}
+
+// isSurplus は「実残高が想定保有量より閾値を超えて多い」状態かを返す（安全側の乖離）。
+func (d balanceDiff) isSurplus() bool {
+	return d.Diff > d.Threshold
+}
+
+// reconcileSummary はジョブ全体の結果。
+type reconcileSummary struct {
+	slotStatus      *models.BuyOrderSlotStatus
+	orderDiffs      []orderDiff
+	balanceDiffs    []balanceDiff
+	lastBotOrder    *time.Time
+	botOrders24h    int
+	manualOrders24h int
+	rolloverPending []models.OrderRecord
+	errors          int
+}
+
+// dbOnlyCount はDBにのみ存在する注文の合計件数を返す。
+func (s *reconcileSummary) dbOnlyCount() int {
+	count := 0
+	for _, diff := range s.orderDiffs {
+		count += len(diff.DBOnly)
+	}
+	return count
+}
+
+// exchangeOnlyCount は取引所にのみ存在する注文の合計件数を返す。
+func (s *reconcileSummary) exchangeOnlyCount() int {
+	count := 0
+	for _, diff := range s.orderDiffs {
+		count += len(diff.ExchangeOnly)
+	}
+	return count
+}
+
+// reconcileTargets は設定値を反映した突合対象を返す。
+func reconcileTargets() []reconcileTarget {
+	btcThreshold := config.Config.BalanceDiffThresholdBTC
+	if btcThreshold <= 0 {
+		btcThreshold = config.DefaultBalanceDiffThresholdBTC
+	}
+	ethThreshold := config.Config.BalanceDiffThresholdETH
+	if ethThreshold <= 0 {
+		ethThreshold = config.DefaultBalanceDiffThresholdETH
+	}
+	return []reconcileTarget{
+		{ProductCode: "BTC_JPY", Currency: "BTC", Threshold: btcThreshold, Untracked: config.Config.UntrackedHoldingBTC},
+		{ProductCode: "ETH_JPY", Currency: "ETH", Threshold: ethThreshold, Untracked: config.Config.UntrackedHoldingETH},
+	}
+}
+
+// reconcileNoOrderAlertDays は発注ゼロを検知するまでの日数を返す。
+func reconcileNoOrderAlertDays() int {
+	days := config.Config.NoOrderAlertDays
+	if days <= 0 {
+		days = config.DefaultNoOrderAlertDays
+	}
+	return days
+}
+
+// notifyReconcileError はエラーをログとSlack（エラーチャンネル）へ通知し、件数を集計する。
+func notifyReconcileError(summary *reconcileSummary, format string, args ...any) {
+	summary.errors++
+	msg := fmt.Sprintf("🚨【reconcile】"+format, args...)
+	log.Println(msg)
+	slackClient.PostMessage(msg, true)
+}
+
+// sampleOrderIDs は通知用に order_id を最大 reconcileSampleSize 件へ切り詰める。
+func sampleOrderIDs(orderIDs []string) string {
+	ids := orderIDs
+	suffix := ""
+	if len(ids) > reconcileSampleSize {
+		ids = ids[:reconcileSampleSize]
+		suffix = fmt.Sprintf(" ...他%d件", len(orderIDs)-reconcileSampleSize)
+	}
+	return strings.Join(ids, ", ") + suffix
+}
+
+/*
+reconcileOrdersForProduct は1通貨ペアぶんの注文突合を行う。
+
+取引所のACTIVE一覧の取得に失敗した場合は、その通貨ペアの突合自体をスキップする
+（不完全な一覧で突合すると、実在する注文を「DBにのみ存在」と誤検知するため）。
+売買方向ごとに突合するのは、買い注文(buy_orders)と売り注文(sell_orders)で
+DB側のテーブルが分かれているためである。
+*/
+func reconcileOrdersForProduct(apiClient *bitflyer.APIClient, target reconcileTarget, summary *reconcileSummary) {
+	activeOrders, _, err := apiClient.GetChildOrdersAll(target.ProductCode, "ACTIVE")
+	if err != nil {
+		notifyReconcileError(summary, "ACTIVE注文一覧の取得に失敗したため注文突合をスキップします: product_code=%s err=%v",
+			target.ProductCode, err)
+		return
+	}
+
+	exchangeIDs := map[string]map[string]bool{
+		"BUY":  make(map[string]bool),
+		"SELL": make(map[string]bool),
+	}
+	for _, order := range activeOrders {
+		side := strings.ToUpper(order.Side)
+		if _, ok := exchangeIDs[side]; !ok {
+			log.Printf("【reconcile】想定外のsideの注文を無視します: product_code=%s OrderID=%s side=%s",
+				target.ProductCode, order.ChildOrderAcceptanceID, order.Side)
+			continue
+		}
+		exchangeIDs[side][order.ChildOrderAcceptanceID] = true
+	}
+
+	sides := []struct {
+		side  string
+		table models.OrderTable
+	}{
+		{"BUY", models.TableBuyOrders},
+		{"SELL", models.TableSellOrders},
+	}
+
+	for _, s := range sides {
+		dbOrderIDs, err := models.GetUnfilledOrderIDs(s.table, target.ProductCode, reconcileMaxUnfilledRecords)
+		if err != nil {
+			notifyReconcileError(summary, "未約定レコードの取得に失敗: table=%s product_code=%s err=%v",
+				s.table, target.ProductCode, err)
+			continue
+		}
+
+		diff := orderDiff{ProductCode: target.ProductCode, Side: s.side, Table: s.table}
+		dbIDs := make(map[string]bool, len(dbOrderIDs))
+		for _, orderID := range dbOrderIDs {
+			dbIDs[orderID] = true
+			if !exchangeIDs[s.side][orderID] {
+				diff.DBOnly = append(diff.DBOnly, orderID)
+			}
+		}
+		for orderID := range exchangeIDs[s.side] {
+			if !dbIDs[orderID] {
+				diff.ExchangeOnly = append(diff.ExchangeOnly, orderID)
+			}
+		}
+		log.Printf("【reconcile】注文突合 product_code:%s side:%s 取引所ACTIVE:%d件 DB UNFILLED:%d件 DBのみ:%d件 取引所のみ:%d件",
+			target.ProductCode, s.side, len(exchangeIDs[s.side]), len(dbOrderIDs), len(diff.DBOnly), len(diff.ExchangeOnly))
+		summary.orderDiffs = append(summary.orderDiffs, diff)
+	}
+}
+
+// notifyOrderDiffs は注文の乖離をSlackへ通知する（乖離が無ければ何もしない）。
+func notifyOrderDiffs(summary *reconcileSummary) {
+	dbOnly := summary.dbOnlyCount()
+	exchangeOnly := summary.exchangeOnlyCount()
+	if dbOnly == 0 && exchangeOnly == 0 {
+		return
+	}
+
+	details := make([]string, 0, len(summary.orderDiffs))
+	for _, diff := range summary.orderDiffs {
+		if len(diff.DBOnly) > 0 {
+			details = append(details, fmt.Sprintf("DBのみ %s/%s(%s) %d件: [%s]",
+				diff.ProductCode, diff.Side, diff.Table, len(diff.DBOnly), sampleOrderIDs(diff.DBOnly)))
+		}
+		if len(diff.ExchangeOnly) > 0 {
+			details = append(details, fmt.Sprintf("取引所のみ %s/%s %d件: [%s]",
+				diff.ProductCode, diff.Side, len(diff.ExchangeOnly), sampleOrderIDs(diff.ExchangeOnly)))
+		}
+	}
+
+	msg := fmt.Sprintf("🚨【reconcile】注文の乖離を検出: DBのみ UNFILLED:%d件 / 取引所のみ ACTIVE:%d件\n%s\n"+
+		"※DBのみ=失効の取りこぼし（翌日の expireSweep で解消するか確認）／取引所のみ=DBに記録されていない注文（オーファン注文の疑い）",
+		dbOnly, exchangeOnly, strings.Join(details, "\n"))
+	log.Println(msg)
+	slackClient.PostMessage(msg, true)
+}
+
+/*
+reconcileBalances は取引所の残高とDB上の想定保有量を突合する。
+
+取引所側は Amount（注文で拘束された分を含む総保有量）を使う。
+Available は未約定の売り注文に拘束された分が引かれており、
+「売り注文が生きている＝現物を保有している」ぶんを含むDB側の想定保有量とは意味が合わないため。
+
+乖離判定に使う想定保有量は Bot + Naked + Untracked であり、手動保有(Manual)は含めない。
+手動保有はユーザーが任意のタイミングで売却するため、判定に含めると売却後に
+「不足」側の乖離が恒久的に残り、アラートが鳴り続けてしまう。
+*/
+func reconcileBalances(apiClient *bitflyer.APIClient, summary *reconcileSummary) {
+	balances, err := apiClient.GetBalance()
+	if err != nil {
+		notifyReconcileError(summary, "残高の取得に失敗したため残高突合をスキップします: err=%v", err)
+		return
+	}
+	holdings, err := models.GetExpectedHoldings()
+	if err != nil {
+		notifyReconcileError(summary, "DB上の想定保有量の取得に失敗したため残高突合をスキップします: err=%v", err)
+		return
+	}
+
+	exchangeAmounts := make(map[string]float64, len(balances))
+	for _, balance := range balances {
+		exchangeAmounts[balance.CurrentCode] = balance.Amount
+	}
+
+	for _, target := range reconcileTargets() {
+		holding := holdings[target.ProductCode]
+		diff := balanceDiff{
+			Currency:    target.Currency,
+			ProductCode: target.ProductCode,
+			Exchange:    exchangeAmounts[target.Currency],
+			Holding:     holding,
+			Untracked:   target.Untracked,
+			Threshold:   target.Threshold,
+		}
+		// 判定に使うのは Bot + Naked + Untracked のみ。手動保有(Manual)は含めない
+		diff.AlertExpected = holding.AlertTarget() + target.Untracked
+		diff.Diff = diff.Exchange - diff.AlertExpected
+		summary.balanceDiffs = append(summary.balanceDiffs, diff)
+
+		log.Printf("【reconcile】残高突合 %s bot:%v naked:%v untracked:%v alertExpected:%v diff:%v threshold:%v "+
+			"(参考: manual:%v は判定対象外)",
+			target.Currency, holding.Bot, holding.Naked, target.Untracked,
+			diff.AlertExpected, diff.Diff, target.Threshold, holding.Manual)
+
+		if diff.isShortfall() {
+			// 実残高が判定用の想定保有量より少ない＝ボットが売るべき現物が足りず、
+			// 売り注文が残高不足で失敗しうる危険な状態
+			msg := fmt.Sprintf("🚨【reconcile】%s の残高がボットの想定保有量を下回っています: 取引所:%v 判定用DB想定:%v (差分:%v 閾値:%v)\n"+
+				"判定対象の内訳 bot:%v 裸の保有:%v 既知の未追跡分:%v / 参考(判定対象外) 手動保有:%v\n"+
+				"※売り注文が残高不足で失敗する可能性があります",
+				target.Currency, diff.Exchange, diff.AlertExpected, diff.Diff, diff.Threshold,
+				holding.Bot, holding.Naked, target.Untracked, holding.Manual)
+			log.Println(msg)
+			slackClient.PostMessage(msg, true)
+		}
+	}
+}
+
+/*
+reconcileBotOrderActivity はボットの買い注文の発注状況を集計する。
+
+直近 reconcileRecentBuyOrderScan 件の買い注文を新しい順に走査し、
+enums.IsBotStrategy() が真のレコードの最終発注時刻を求める。
+戦略値が StrategyManual(90001) / StrategyUnknown(99) / StrategySaturatedUnknown(127) の
+レコードはボット発注ではないため、発注ゼロの判定には数えない。
+
+あわせて直近24時間の「ボット発注件数」と「手動取り込み件数」を数え、日次サマリに載せる。
+ボット発注のDB INSERTに失敗した注文は、90秒周期の syncBuyOrders が手動注文(strategy=90001)として
+取り込むため、通常0件であるはずの手動取り込み件数が増えていれば記録の取りこぼしに気づける。
+*/
+func reconcileBotOrderActivity(now time.Time, summary *reconcileSummary) {
+	records, err := models.GetRecentBuyOrders(reconcileRecentBuyOrderScan)
+	if err != nil {
+		notifyReconcileError(summary, "直近の買い注文の取得に失敗したため発注ゼロ検知をスキップします: err=%v", err)
+		return
+	}
+
+	dayAgo := now.Add(-24 * time.Hour)
+	for _, record := range records {
+		isBot := enums.IsBotStrategy(record.Strategy)
+		if isBot && (summary.lastBotOrder == nil || record.Timestamp.After(*summary.lastBotOrder)) {
+			timestamp := record.Timestamp
+			summary.lastBotOrder = &timestamp
+		}
+		if !record.Timestamp.After(dayAgo) {
+			continue
+		}
+		if isBot {
+			summary.botOrders24h++
+		} else if record.Strategy == enums.StrategyManual {
+			summary.manualOrders24h++
+		}
+	}
+
+	alertDays := reconcileNoOrderAlertDays()
+	threshold := now.AddDate(0, 0, -alertDays)
+	if summary.lastBotOrder == nil {
+		msg := fmt.Sprintf("🚨【reconcile】ボットの買い注文が確認できません。最終発注: 直近%d件のbuy_ordersにボット発注なし（スキャン件数:%d）",
+			reconcileRecentBuyOrderScan, len(records))
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
+		return
+	}
+	if summary.lastBotOrder.Before(threshold) {
+		msg := fmt.Sprintf("🚨【reconcile】ボットの買い注文が %d日間 0件です。最終発注(UTC): %s",
+			alertDays, summary.lastBotOrder.Format(time.RFC3339))
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
+	}
+}
+
+/*
+reconcileRolloverPending はローリング再試行待ちのまま残っている売り注文を検出する。
+
+RemarkRolloverPending は「キャンセルは成功したが再発注に失敗した」ことを示すマーカーで、
+翌日のローリングで再試行されて解消されるのが正常な流れである。これが残り続けている場合は
+ローリングが繰り返し失敗しており、現物を保有したまま売り注文が存在しない
+（＝利確機会を失う）状態に近づいているため通知する。
+*/
+func reconcileRolloverPending(summary *reconcileSummary) {
+	records, err := models.GetUnfilledOrdersWithRemark(
+		models.TableSellOrders, models.RemarkRolloverPending, reconcileRolloverPendingMax)
+	if err != nil {
+		notifyReconcileError(summary, "ローリング再試行待ちレコードの取得に失敗: err=%v", err)
+		return
+	}
+	if len(records) == 0 {
+		return
+	}
+	summary.rolloverPending = records
+
+	details := make([]string, 0, len(records))
+	for i, record := range records {
+		if i >= reconcileSampleSize {
+			break
+		}
+		details = append(details, fmt.Sprintf("OrderID=%s ParentID=%s %s price=%.2f size=%v",
+			record.OrderID, record.ParentID, record.ProductCode, record.Price, record.Size))
+	}
+	msg := fmt.Sprintf("🚨【reconcile】ローリング再試行待ち(%s)のまま残っている売り注文が %d件あります。"+
+		"再発注が繰り返し失敗している可能性があります（現物を保有したまま売り注文が無い状態に近づいています）\n%s",
+		models.RemarkRolloverPending, len(records), strings.Join(details, "\n"))
+	log.Println(msg)
+	slackClient.PostMessage(msg, true)
+}
+
+// formatReconcileTime は通知用に時刻(UTC)を文字列化する。未取得は "なし"。
+func formatReconcileTime(t *time.Time) string {
+	if t == nil {
+		return "なし"
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+/*
+notifyReconcileResult は日次サマリを通常チャンネルへ通知する。
+
+乖離の有無にかかわらず毎日1通投稿する。「通知が来ていない＝ジョブが動いていない」ことを
+運用で判別できるようにするためであり、無言の停止を防ぐという本ジョブの目的そのものにあたる。
+残高は「余剰（実残高 > DB想定）」であればここに数値を載せるだけでエラー通知はしない。
+*/
+func notifyReconcileResult(summary *reconcileSummary) {
+	slotText := "スロット状況: 取得失敗"
+	if summary.slotStatus != nil {
+		slotText = summary.slotStatus.Message
+		if summary.slotStatus.ShouldSkip {
+			slotText += "（🚨買い注文が上限到達）"
+		}
+		if summary.slotStatus.SellWarning {
+			slotText += "（🚨売り注文が上限超過）"
+		}
+	}
+
+	balanceTexts := make([]string, 0, len(summary.balanceDiffs))
+	for _, diff := range summary.balanceDiffs {
+		state := "乖離なし"
+		if diff.isShortfall() {
+			state = "🚨不足"
+		} else if diff.isSurplus() {
+			state = "余剰(DB未追跡分。アラート対象外)"
+		}
+		balanceTexts = append(balanceTexts, fmt.Sprintf(
+			"%s %s 取引所:%v 判定用DB想定:%v 差分:%v（判定対象の内訳 bot:%v 裸の保有:%v 既知の未追跡分:%v / 閾値:%v）"+
+				"（参考・判定対象外 手動保有:%v）",
+			diff.Currency, state, diff.Exchange, diff.AlertExpected, diff.Diff,
+			diff.Holding.Bot, diff.Holding.Naked, diff.Untracked, diff.Threshold, diff.Holding.Manual))
+	}
+	balanceText := "残高突合: 実行できず"
+	if len(balanceTexts) > 0 {
+		balanceText = "残高突合:\n" + strings.Join(balanceTexts, "\n")
+	}
+
+	msg := fmt.Sprintf("【reconcile】%s / 注文突合 DBのみ:%d件 取引所のみ:%d件 / "+
+		"ボット発注 直近24h:%d件 手動取り込み:%d件 最終発注(UTC):%s / ローリング再試行待ち:%d件 / エラー:%d件\n%s",
+		slotText, summary.dbOnlyCount(), summary.exchangeOnlyCount(),
+		summary.botOrders24h, summary.manualOrders24h, formatReconcileTime(summary.lastBotOrder),
+		len(summary.rolloverPending), summary.errors, balanceText)
+	log.Println(msg)
+	slackClient.PostMessage(msg, false)
+}
+
+/*
+reconcileJob はスケジューラから呼ばれるエントリポイント。
+
+スケジューラの時刻指定はシステムTZ（本番はJST）に依存するため、
+TZの誤設定を運用で検知できるようジョブ冒頭でローカル時刻とUTCの双方をログ出力する。
+時刻の比較はすべてUTC同士で行う。
+*/
+func reconcileJob(apiClient *bitflyer.APIClient) {
+	now := time.Now().UTC()
+	log.Printf("【reconcile】start of job now(local):%s now(UTC):%s",
+		time.Now().Format(time.RFC3339), now.Format(time.RFC3339))
+
+	summary := &reconcileSummary{}
+
+	// スロット状況（上限値つき）。sell側の超過はここで警告するが買い注文はブロックしない
+	slotStatus, err := models.GetBuyOrderSlotStatus(apiClient.Max_buy_orders, apiClient.Max_sell_orders)
+	if err != nil {
+		notifyReconcileError(summary, "スロット状況の取得に失敗: err=%v", err)
+	} else {
+		summary.slotStatus = slotStatus
+		if slotStatus.ShouldSkip {
+			notifyReconcileError(summary, "買い注文スロットが上限に達しています: %s。買い注文はスキップされます", slotStatus.Message)
+		}
+		if slotStatus.SellWarning {
+			notifyReconcileError(summary, "売り注文が上限超過: %s。買い注文はブロックされませんが、"+
+				"現物の積み上がりとJPY残高の歯止め(budget_criteria)を確認してください", slotStatus.Message)
+		}
+	}
+
+	for _, target := range reconcileTargets() {
+		reconcileOrdersForProduct(apiClient, target, summary)
+	}
+	notifyOrderDiffs(summary)
+
+	reconcileBalances(apiClient, summary)
+	reconcileBotOrderActivity(now, summary)
+	reconcileRolloverPending(summary)
+
+	notifyReconcileResult(summary)
+	log.Println("【reconcile】end of job")
+}
