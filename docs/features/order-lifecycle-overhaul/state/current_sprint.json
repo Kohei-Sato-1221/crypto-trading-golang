@@ -1,14 +1,22 @@
 {
   "sprint_number": 8,
-  "phase": "Phase 3 追加対応（F30: スケジュール登録の無言失敗を防ぐ・ユーザー指示による追加）",
+  "phase": "Phase 3 バッチD（F11 / F12 / F13 / F15 / F19 / F20 / F22 + Evaluator 指摘 E1 / E2 / E3）",
   "status": "completed",
   "scope": [
     "go",
     "docs"
   ],
   "features_implemented": [
-    "F30-1: trigger_time_01〜04 に NormalizeTriggerTime() による既定値フォールバックを追加。DefaultTriggerTime01〜04（06:30 / 06:45 / 18:00 / 06:00）は現行 config.ini と同一値のため正常設定時の挙動は不変",
-    "F30-2: jobRegistry を追加し、service.go の全スケジュール登録（Every().Day().At() 系・Every(N).Seconds() 系の両方）で Run() の戻り値を検査。登録失敗を集約し起動時に1通のSlackエラー通知を出す"
+    "F11: models.ExchangeBitflyer を追加し、GetUnfilledBuyOrderRecords / GetSellOrdersToRollover の WHERE に exchange = 'bitflyer' を追加。buy_orders / sell_orders は OKEX サービスと共用のため、絞らないと OKEX 由来レコードに Bitflyer の CancelOrder を誤った product_code で叩く",
+    "F12: roundRolloverSize()（小数8桁への丸め）を追加し remainingSize() の戻り値と rolloverOneSellOrder 冒頭の record.Size を丸めた。0.03-0.02=0.009999999999999998 が ETH 最小単位 0.01 を割り、正当なローリングが永久にスキップされる問題を解消",
+    "F13: 通知文の生成を partialFillSkipMessage() に切り出し、snapshot.found / state で文言を分岐。取引所側で既に CANCELED の場合は「裸の保有」であることを 🚨🚨 で通知する",
+    "F15: lookupExchangeBalance() を追加し、残高レスポンスに対象通貨が無い場合は found=false として突合をスキップ・Slack通知。map のゼロ値0を実残高として扱う誤発報を解消。通知には通貨コードのみを載せ金額は含めない",
+    "F19: enums.StrategyZeroValue を定義し botStrategies から Stg0BtcLtp3low7(=0) を除外、IsBotStrategy に明示的ガードを追加。models.GetRecentBuyOrders は strategy NULL のとき enums.StrategyUnknown を入れる",
+    "F20: bitflyer / bitbank に httpClientTimeout = 30秒 を定義。bitflyer は NewBitflyer が生成する http.Client へ、bitbank は http.Get をタイムアウト付き httpClient へ置き換え（okex/ はスコープ外のため未変更）",
+    "F22: MarkOrderCancelledWithRemark が RowsAffected() のエラー時にエラーを返すよう変更（RolloverSellOrder / UpdateOrderSizeWithRemark と流儀を統一）。更新行数0は従来どおりエラーにしない",
+    "E1: orderDiffDetails に ExchangeOnlySellCount / RolloverPendingCount を追加し、日次サマリの「うちアラート対象外 SELL:N件」から [ROLLOVER_PENDING] 件数を除外",
+    "E2: TestResolveRolloverOrphanRequiresActiveList を resolveRolloverOrphan() 直呼びのテストへ書き換え。slackClient を httptest サーバ向けへ差し替えるヘルパーと、models.OrderIDExists の結果を制御するダミー sql ドライバをテスト内に用意",
+    "E3: expire_sweep_grace_minutes / DefaultExpireSweepGraceMinutes を 10 → 45 に変更。判定境界が 06:05-45分=05:20 となりローリング開始(05:30)より前になるため同日競合ウィンドウが消える。design-dock §4.4.2 を新設して理由を明記"
   ],
   "verify_commands": [
     "make build",
@@ -20,57 +28,97 @@
     "build": "OK",
     "vet": "OK（go vet ./... の指摘0件。ベースラインを維持）",
     "gofmt": "OK（gofmt -l . は okex/okex.go のみ。ベースラインで今回未変更）",
-    "existing_tests": "OK（make test: top-level 86 PASS / FAIL 0。バッチC終了時の79件をすべて維持し +7件を追加）",
-    "readonly_api_checks": "今回は参照系APIの新規実行なし。carlescere/scheduler v0.0.0-20170109141437 のソース（Job.At / Job.Run / parseTime）を直接読み、At() が Job.err に格納するだけであること・Run() が (*Job, error) を返すことをコードで確認した"
+    "existing_tests": "OK（make test: top-level 126 PASS / FAIL 0。バッチ開始時の86件をすべて維持し +40件を追加）",
+    "readonly_api_checks": "GET /v1/me/getbalance（参照系）を実行し、BTC / ETH を含む40件超の通貨エントリが返ることを確認（F15 の前提確認。通貨コードのみを成果物に記録し、残高の金額は残していない）。あわせて本番 Supabase に対する SELECT のみで buy_orders / sell_orders が全件 exchange='bitflyer'（NULLなし）であること、strategy=0 が5件で発注ゼロ検知が走査する直近200件には含まれないこと、buy_orders.strategy が NOT NULL DEFAULT 99 であることを確認した（書き込みは一切行っていない）"
   },
   "changes": {
     "files_created": [
-      "go/app/bitflyerApp/jobRegistry.go",
-      "go/app/bitflyerApp/jobRegistry_test.go"
+      "go/tests/exchange_filter_test.go",
+      "go/tests/mark_cancelled_test.go",
+      "go/enums/strategy_test.go",
+      "go/bitflyer/httpTimeout_test.go",
+      "go/app/bitflyerApp/rolloverSize_test.go",
+      "go/app/bitflyerApp/rolloverPartialFillMessage_test.go",
+      "go/app/bitflyerApp/rolloverOrphanResolve_test.go",
+      "go/app/bitflyerApp/reconcileBalanceLookup_test.go",
+      "go/app/bitflyerApp/expireSweepGrace_test.go"
     ],
     "files_modified": [
+      "go/models/orderLifecycle.go",
+      "go/enums/strategy.go",
+      "go/bitflyer/bitflyer.go",
+      "go/bitbank/bitbank.go",
+      "go/bitbank/bitbank_test.go",
       "go/config/config.go",
-      "go/config/triggerTime.go",
-      "go/config/triggerTime_test.go",
       "go/config.ini",
-      "go/app/bitflyerApp/service.go",
+      "go/app/bitflyerApp/rolloverSellOrderJob.go",
+      "go/app/bitflyerApp/reconcileJob.go",
+      "go/app/bitflyerApp/expireSweepJob.go",
+      "go/app/bitflyerApp/rolloverOrphan_test.go",
+      "go/app/bitflyerApp/reconcileOrderDiff_test.go",
+      "go/tests/reconcile_test.go",
       "docs/features/order-lifecycle-overhaul/design-dock.md"
     ]
   },
   "commits": [
-    "c391d99 fix: F30-1 trigger_time_01〜04 に既定値フォールバックを追加",
-    "67c5e9a fix: F30-2 スケジュール登録の失敗を検知して起動時にSlack通知する"
+    "6fdac19 fix: F11 Bitflyer 専用のSELECTが exchange で絞っていない問題を修正",
+    "f6c61fe fix: F12 remainingSize() の浮動小数誤差でローリングがスキップされる問題を修正",
+    "6d3513a fix: F13 CANCELED済み注文の最小単位未満通知が実態と食い違う問題を修正",
+    "63f9ccd fix: F15 残高レスポンスに対象通貨が無いとゼロ値を実残高と誤判定する問題を修正",
+    "9bd15e1 fix: F19 IsBotStrategy(0) が true になり発注ゼロ検知を取りこぼす問題を修正",
+    "327f8c5 fix: F20 取引所APIのHTTPクライアントにタイムアウトを設定する",
+    "d6f1388 fix: F22 MarkOrderCancelledWithRemark の RowsAffected エラーを失敗側へ倒す",
+    "469d473 fix: E1 日次サマリの「うちアラート対象外 SELL」に pending 件数が混ざる問題を修正",
+    "8df95c4 fix: E2 二重売り防止フェイルセーフを resolveRolloverOrphan 直呼びで検証する",
+    "fe02e9b fix: E3 expire_sweep_grace_minutes を 45 にしてローリングとの同日競合を解消する"
   ],
   "design_decisions": [
     {
-      "finding": "F30-2",
-      "question": "スケジュール登録に失敗したとき、プロセスを落とすか",
-      "adopted": "落とさない。起動時に1通のSlackエラー通知とログを出し、登録できたジョブはそのまま動かし続ける",
-      "rejected": "os.Exit(1) によるフェイルファスト",
+      "finding": "F19",
+      "question": "strategy=0 をボット戦略として残すか除外するか",
+      "adopted": "除外する。botStrategies から Stg0BtcLtp3low7 を外し、IsBotStrategy にも明示的なガードを置く",
+      "rejected": "0 を旧戦略として数え続け、呼び出し側でゼロ値かどうかを判別する",
       "rationale": [
-        "実行環境は systemd の Restart=always / RestartSec=10。設定ミスは再起動しても直らないため、落とすと10秒間隔の再起動ループになり、そのたびにSlack通知が飛んで逆に埋もれる",
-        "部分稼働のほうが安全側。trigger_time_02（損益レポート）だけが壊れた場合にプロセスを落とすと syncBuyOrders / filledCheck / placeSellOrder まで止まり、既に取引所に出ている買い注文が約定しても売り注文が発注されない。『レポートが来ない』より『建玉が放置される』ほうが損害が大きい",
-        "F30-1 で trigger_time_01〜09 はすべて NormalizeTriggerTime() を通って既定値へ倒れるため、設定由来の At() 失敗はそもそも起きない。残る失敗要因は Every(0) やチェーン誤りといった実装バグで、ビルド・テストで捕捉すべきもの",
-        "この仕掛けの目的は『止めること』ではなく『無言をやめること』にある"
+        "strategy カラムのゼロ値（未設定・NULL・スキャン失敗）と旧戦略 Stg0BtcLtp3low7 は値が同一で、DBから読んだ時点では原理的に区別できない",
+        "誤りの向きが非対称。0 をボット扱いすると『ボットが止まっているのに気づけない』（発注ゼロアラートの取りこぼし）方向へ倒れる。除外すれば最悪でも余分にアラートが鳴るだけ",
+        "本番データの strategy=0 は2021年頃の5件のみで、発注ゼロ検知が走査する直近200件（99/127/10001/10003）には含まれず、実運用上の判定結果は変わらない",
+        "SellProfitRate のマッピングには元から 0 が無く既定値へフォールバックするため、利確率への影響もない"
       ],
       "documented_in": [
-        "コミットメッセージ 67c5e9a（## 設計判断: 登録失敗時にプロセスを落とさない）",
-        "go/app/bitflyerApp/jobRegistry.go の jobRegistry 型コメント（# 登録失敗時にプロセスを落とさない理由）",
-        "docs/features/order-lifecycle-overhaul/design-dock.md §5.2.1"
+        "コミットメッセージ 9bd15e1",
+        "go/enums/strategy.go の IsBotStrategy / StrategyZeroValue コメント"
+      ]
+    },
+    {
+      "finding": "E3",
+      "question": "ローリングと sweep の同日競合をロジックで解くか設定値で解くか",
+      "adopted": "設定値で解く。expire_sweep_grace_minutes を 10 → 45 にして判定境界を 05:20 へ動かし、窓そのものを消す",
+      "rejected": "sweep 側にローリング実行中フラグやロック機構を持たせる",
+      "rationale": [
+        "判定境界（sweep 実行時刻 − 猶予）がローリング開始時刻より前になれば窓は構造的に存在しなくなる。状態を持つ仕組みより単純で壊れにくい",
+        "sweep は1日1回しか走らないため、猶予を35分伸ばしても後始末が遅れるのは最大でも当日の1回分。スロット解放は買い注文ジョブ(06:30)より前に完了する",
+        "現状でも decideSweepAction が『取引所で ACTIVE なら状態を変えない』に倒れるためDBは壊れず、実害は誤った失効通知に限られる。ロジック追加に見合わない",
+        "設定値だけで解消できる代わりに『片方の設定だけ変えると窓が復活する』脆さが残るため、不変条件そのものをテストで固定した"
+      ],
+      "documented_in": [
+        "コミットメッセージ fe02e9b",
+        "go/config/config.go の DefaultExpireSweepGraceMinutes コメント",
+        "go/app/bitflyerApp/expireSweepJob.go の expireSweepGrace() コメント",
+        "docs/features/order-lifecycle-overhaul/design-dock.md §4.4.2"
       ]
     }
   ],
   "self_evaluation": {
-    "acceptance_criteria": "OK（B-1 / B-2 の指示をすべて満たす。1修正=1コミットで2コミットに分割し、各コミットにユニットテストとリグレッションテストを同梱。各コミット前に make build / make test の通過を確認した）",
+    "acceptance_criteria": "OK（バッチD の10件をすべて対応。1修正=1コミットで10コミットに分割し、各コミットに関数レベルのユニットテストとリグレッションテストを同梱。各コミット前に make build / go vet / gofmt / go test の通過を確認した）",
     "build_vet": "OK（build 成功、go vet 0件、gofmt はベースラインの okex/okex.go のみ）",
-    "regression": "OK（バッチC終了時の top-level 79件をすべて維持し、追加7件を含め86件 PASS）",
-    "claude_md_compliance": "OK（ジョブ関数のファイル分離を維持／登録失敗は必ずSlack通知（ジョブ名・スケジュール指定・エラー内容を含む）／時刻の既定値は JST 前提を明記／機密情報の追加なし）",
-    "trading_safety": "OK（発注・キャンセルのロジックは一切変更していない。既定値は現行 config.ini と同一で、正常設定時の発注時刻・戦略・数量は不変。gracefulShutdown を wrapJob で包まない従来仕様も維持した）",
-    "code_quality": "OK（20本近い登録をヘルパー3種に集約して見通しを改善。集約ロジックは純粋関数として切り出しテスト可能。未使用 import（scheduler）を service.go から除去）"
+    "regression": "OK（バッチ開始時の top-level 86件をすべて維持し、追加40件を含め126件 PASS / FAIL 0）",
+    "claude_md_compliance": "OK（ジョブ関数のファイル分離を維持／新規の異常系はすべて Slack 通知し OrderID・ParentID・Price・Size・product_code のコンテキストを含む／時刻・期限の比較と保存は UTC のまま／機密情報の追加なし。F15 の通知では通貨コードのみを載せ残高の金額を含めない）",
+    "trading_safety": "OK（発注の価格・数量・売買方向を決めるロジックは変更していない。F12 の丸めは小数8桁で Bitflyer の最小単位 0.001 BTC / 0.01 ETH に対して十分細かく、数量が増える方向へは動かない。F11 の exchange 絞り込みは本番全件が bitflyer であることを SELECT で確認済み。E2 は二重売り防止フェイルセーフの検証を強化するのみで挙動を変えていない）",
+    "code_quality": "OK（通知文・残高参照・数量丸めをいずれも純粋関数に切り出してテスト可能にした。未使用コード・デバッグ出力・コメントアウトは残していない）"
   },
-  "verification_notes": "【F30-1】go/config/config.go に DefaultTriggerTime01〜04 を追加し、TriggerTime01〜04 の読み取りを NormalizeTriggerTime() 経由に変更（config.go:214付近）。既定値は 06:30 / 06:45 / 18:00 / 06:00 で現行 go/config.ini と同一。go/config/triggerTime_test.go の TestShippedConfigTriggerTimesArePassedThrough は実際の go/config.ini を ini.v1 で読み、trigger_time_01〜09 のすべてが NormalizeTriggerTime() を素通りする（値が変わらない）ことを検証しており、これが正常設定時のリグレッション担保になっている。TestTriggerTime01FallsBackWhenKeyMissing はキー欠落時に 06:30 へ倒れることを固定。【F30-2】go/app/bitflyerApp/jobRegistry.go の daily / dailyWithoutWrap / interval がいずれも scheduler.Run() の戻り値を record() に渡す。service.go の登録は全21本（本番20本 + IsTest 分岐2本）が registry 経由になっており、Every(N).Seconds() 系6本も interval() でカバーしている。registry.reportRegistrationResult() を runtime.Goexit() の直前で呼ぶ。集約ロジックのテストは jobRegistry_test.go の4件で、scheduler を起動する重いテストは作っていない（ユーザー指示に従う）。",
+  "verification_notes": "【F11】models/orderLifecycle.go の GetUnfilledBuyOrderRecords / GetSellOrdersToRollover の WHERE に exchange = ExchangeBitflyer をバインド変数で追加。tests/exchange_filter_test.go が OKEX 由来レコード混在時に Bitflyer 分だけが返ることを検証する。【F12】app/bitflyerApp/rolloverSellOrderJob.go の roundRolloverSize() と remainingSize()。TestRemainingSizeCancelledPathHasNoFloatingNoise が 0.03-0.02 の減算誤差が ETH 最小単位を割らないことを固定する。【F13】partialFillSkipMessage() が snapshot.found / state で分岐。【F15】lookupExchangeBalance() の found=false で reconcileBalances が continue する（reconcileJob.go の残高突合ループ冒頭）。【F19】enums/strategy.go:IsBotStrategy の StrategyZeroValue ガードと botStrategies からの除外、models/orderLifecycle.go:GetRecentBuyOrders の strategy.Valid 分岐。【F20】bitflyer.NewBitflyer と bitbank.httpClient。ハングするサーバに対してエラーで戻る挙動テスト付き。【F22】MarkOrderCancelledWithRemark の rowsErr 分岐。RowsAffected() が必ず失敗するダミー sql ドライバで検証。【E1】classifyOrderDiffs が ExchangeOnlySellCount を積み、notifyReconcileResult がそれをサマリに使う。【E2】resolveRolloverOrphan() を直接呼ぶテスト6件。フェイルセーフを `return nil, true` に書き換えるミューテーションでテストが落ちることを確認済み。【E3】TestExpireSweepGraceHasNoOverlapWithRollover が『sweep 実行時刻 − 猶予 < ローリング開始時刻』の不変条件を固定する。",
   "pending_user_approval": [],
   "issues": [],
-  "notes": "ユーザー指示による追加対応 F30（案B）。バッチCの F14 対応中に発見した『スケジュール登録が4段階で無言化する』問題を、設定層（B-1）と登録層（B-2）の両方から塞いだ。1修正=1コミットの指示に従い2コミットに分割している。副次的な変更が2点ある: (1) go/config.ini の trigger_time_01〜04 に 05〜09 と同じ流儀のインラインコメントを付けた（値は不変）。(2) service.go の IsTest 分岐にあったコメントアウト済みの旧登録コード3行を削除した。scheduler.Every(...).Run(...) の直書きパターンを示す死んだコメントで、registry 経由に統一した本コミット後は誤解を招くため。復活が必要なら registry.interval / registry.daily で書ける。対象外として残した点: go/app/okextasks.go:310-341 と go/app/okjTasks.go:138-144 にも同じ『Run() の戻り値を捨てる』パターンがあるが、時刻がすべてソース内のリテラルで設定ミスの経路が無く、bitflyer 定期売買アプリでも使っていないため手を付けず、design-dock.md §5.2.1 に記載するに留めた。",
-  "log_entry": "F30 完了: スケジュール登録の無言失敗を案Bで2コミットに分けて解消。F30-1 は trigger_time_01〜04 に既定値フォールバック（既定値は現行値と同一）、F30-2 は jobRegistry で全21本の登録の Run() 戻り値を検査し失敗を起動時に1通Slack通知（登録失敗でもプロセスは落とさない設計判断を採用）。build/vet OK、gofmt はベースラインのみ、make test は top-level 86 PASS / FAIL 0。"
+  "notes": "Phase 3 バッチD。ユーザーが「直す」と判断したレビュー指摘7件（F11 / F12 / F13 / F15 / F19 / F20 / F22）と、バッチA+B の回帰確認で Evaluator が挙げた3件（E1 / E2 / E3）を1修正=1コミットの10コミットで対応した。ユーザー確定事項に従い、E2E のような重いテストは作らず関数レベルのユニットテストとリグレッションテストのみを用意している。実機確認は参照系のみ（GET /v1/me/getbalance と本番 Supabase への SELECT）で、更新系APIの実行・本番DBへの書き込み・ボット全体の起動はいずれも行っていない。テストを書くにあたり2種類のスタブを新設した: (1) slackClient を httptest サーバ向けクライアントへ差し替えるヘルパー（app/bitflyerApp/rolloverOrphanResolve_test.go の setTestSlackClient）。これによりジョブ関数を直接呼べるようになったため、今後の Slack 通知を伴う分岐のテストにも使える。(2) database/sql の driver を実装したダミーDB（RowsAffected が必ず失敗するもの / OrderIDExists の結果を制御するもの）。実DBでは再現できない異常系の検証に使う。副次的な変更として、F12 では指摘された remainingSize() に加えて rolloverOneSellOrder 冒頭で DB から読んだ record.Size も丸めている（レビュー補足の「発注 size の桁ノイズも同時に解消すると良い」に対応）。バッチ外の指摘（F21 / F23 / F24 / F25 / F27）と、対応しないと決定済みの F1 / F29 には手を付けていない。okex/ と app/okjTasks.go も対象外として未変更（F20 のタイムアウトは bitflyer / bitbank のみ）。",
+  "log_entry": "Phase 3 バッチD 完了: レビュー指摘7件（F11 / F12 / F13 / F15 / F19 / F20 / F22）と Evaluator 追加指摘3件（E1 / E2 / E3）を1修正=1コミットの10コミットで対応。各コミットにユニットテストとリグレッションテストを同梱し、E2 ではミューテーションでテストが落ちることも確認した。build/vet OK、gofmt はベースラインの okex/okex.go のみ、make test は top-level 126 PASS / FAIL 0（開始時86件から+40件）。"
 }
