@@ -6,8 +6,18 @@ type BuyPriceStrategy int
 const (
 	StrategyLTP99 = 10001 // ltp * 0.99（-1%・毎日）
 	StrategyLTP98 = 10002 // ltp * 0.98（-2%・火/土）
-	// StrategyLTP95 は約定率が低く曜日割当から外したが、過去データに値が残っているため定数は残す
-	StrategyLTP95 = 10003 // ltp * 0.95（-5%・廃止）
+	/*
+		StrategyLTP95 は約定率が低いため本番の曜日割当（is_test=false のスケジュール）からは
+		外れているが、**廃止ではなく現役**である。
+
+		- config.ini の is_test=true のとき、service.go の buyingBTCJobLTP95TEST /
+		  buyingETHJobLTP95TEST がこの戦略で発注する（動作確認用。-5% の深指値になる点に注意）
+		- 過去データにも値が残る（本番DBに 2026-09-06 付の UNFILLED が2件。Pi 再起動時に
+		  旧バイナリが発注したもの）
+
+		したがって定数の削除も、集計からの除外もしない。
+	*/
+	StrategyLTP95 = 10003 // ltp * 0.95（-5%・本番の曜日割当からは外れ、is_test=true のテストジョブで使用）
 	StrategyLTP97 = 10004 // ltp * 0.97（-3%・月）
 
 	StrategyLtpLowestIn7days5t5 = 20001 // ltp*0.5 + 7日安値*0.5（水）
@@ -91,7 +101,7 @@ var sellProfitRates = map[int]float64{
 	StrategyLTP99:               1.02, // ltp*0.99（-1%）→ +2%
 	StrategyLTP98:               1.03, // ltp*0.98（-2%）→ +3%
 	StrategyLTP97:               1.05, // ltp*0.97（-3%）→ +5%
-	StrategyLTP95:               1.05, // ltp*0.95（-5%・廃止済みだが過去データに残る）→ +5%
+	StrategyLTP95:               1.05, // ltp*0.95（-5%・is_test時のテストジョブと過去データで現役）→ +5%
 	StrategyLtpLowestIn7days5t5: 1.05, // ltp*0.5 + 7日安値*0.5 → +5%
 	StrategyLtpLowestIn7days7t3: 1.05, // ltp*0.7 + 7日安値*0.3 → +5%
 	StrategyLtpLowestIn7days2t8: 1.05, // ltp*0.2 + 7日安値*0.8（廃止済みだが過去データに残る）→ +5%

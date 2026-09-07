@@ -26,7 +26,7 @@ func TestCalculateSellOrderPrice(t *testing.T) {
 		{"LTP99(-1%)は+2%", enums.StrategyLTP99, 1020000},
 		{"LTP98(-2%)は+3%", enums.StrategyLTP98, 1030000},
 		{"LTP97(-3%)は+5%", enums.StrategyLTP97, 1050000},
-		{"LTP95(-5%・廃止)は+5%", enums.StrategyLTP95, 1050000},
+		{"LTP95(-5%・is_test時のテストジョブで使用)は+5%", enums.StrategyLTP95, 1050000},
 		{"7日安値5:5は+5%", enums.StrategyLtpLowestIn7days5t5, 1050000},
 		{"7日安値7:3は+5%", enums.StrategyLtpLowestIn7days7t3, 1050000},
 		{"7日安値2:8(廃止)は+5%", enums.StrategyLtpLowestIn7days2t8, 1050000},

@@ -489,7 +489,7 @@ func GetExpectedHoldings() (map[string]ExpectedHolding, error)
 const (
     StrategyLTP99 = 10001 // -1%（毎日）
     StrategyLTP98 = 10002 // -2%（火・土）
-    StrategyLTP95 = 10003 // -5%（曜日割当から外すが、過去データのため定数は残す）
+    StrategyLTP95 = 10003 // -5%（本番の曜日割当からは外すが、is_test=true のテストジョブと過去データで現役）
     StrategyLTP97 = 10004 // -3%（新規・月曜）
 
     StrategyLtpLowestIn7days5t5 = 20001 // ltp*0.5 + low7*0.5（水曜・据え置き）
