@@ -1,0 +1,13 @@
+[Unit]
+Description=Restart bfTradingApp service on boot
+After=network.target mysql.service bfTradingApp.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/workspace/crypto-trading-golang/restart-bftradingapp.sh
+RemainAfterExit=yes
+User=root
+
+[Install]
+WantedBy=multi-user.target
+

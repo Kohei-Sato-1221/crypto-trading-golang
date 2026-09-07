@@ -1,0 +1,27 @@
+[Unit]
+Description=Crypto Trading Application (bfTradingApp)
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/workspace/crypto-trading-golang/go
+ExecStart=/home/pi/workspace/crypto-trading-golang/go/bfTradingApp
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/pi/workspace/crypto-trading-golang/go/trading.log
+StandardError=append:/home/pi/workspace/crypto-trading-golang/go/trading.log
+
+# 環境変数が必要な場合は以下に追加
+# Environment="KEY=value"
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+
+
+
+
+
