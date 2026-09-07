@@ -382,6 +382,49 @@ Available は未約定の売り注文に拘束された分が引かれており�
 手動保有はユーザーが任意のタイミングで売却するため、判定に含めると売却後に
 「不足」側の乖離が恒久的に残り、アラートが鳴り続けてしまう。
 */
+/*
+lookupExchangeBalance は残高レスポンス(/v1/me/getbalance)から対象通貨の保有量を取り出す。
+
+第2返り値の found は「レスポンスに対象通貨のエントリが存在したか」を表す。
+map のゼロ値をそのまま使うと、レスポンスに BTC / ETH が含まれていない場合に
+「実残高 0」として扱われ、必ず「不足」側の🚨アラートになってしまう
+（方向は安全側だが、原因の分からない誤アラートが毎日鳴り続ける）。
+呼び出し側は found=false のとき突合をスキップして通知すること。
+
+Amount（拘束分を含む総保有量）を返す。Available は未約定の売り注文に拘束された分が
+引かれており、DB側の想定保有量とは意味が合わないため使わない。
+*/
+func lookupExchangeBalance(balances []bitflyer.Balance, currency string) (float64, bool) {
+	for _, balance := range balances {
+		if balance.CurrentCode == currency {
+			return balance.Amount, true
+		}
+	}
+	return 0, false
+}
+
+/*
+balanceCurrencyList は残高レスポンスに含まれる通貨コードを通知用に連結する。
+
+対象通貨が見つからなかった原因（レスポンス形式の変更なのか、一時的な欠落なのか）を
+切り分けられるようにするための情報。金額は含めない（機密情報をログ・通知に残さないため）。
+件数が多いので reconcileSampleSize 件で切り詰める。
+*/
+func balanceCurrencyList(balances []bitflyer.Balance) string {
+	codes := make([]string, 0, len(balances))
+	for i, balance := range balances {
+		if i >= reconcileSampleSize {
+			break
+		}
+		codes = append(codes, balance.CurrentCode)
+	}
+	text := strings.Join(codes, ", ")
+	if len(balances) > reconcileSampleSize {
+		text += fmt.Sprintf(" ...他%d件", len(balances)-reconcileSampleSize)
+	}
+	return text
+}
+
 func reconcileBalances(apiClient *bitflyer.APIClient, summary *reconcileSummary) {
 	balances, err := apiClient.GetBalance()
 	if err != nil {
@@ -394,17 +437,23 @@ func reconcileBalances(apiClient *bitflyer.APIClient, summary *reconcileSummary)
 		return
 	}
 
-	exchangeAmounts := make(map[string]float64, len(balances))
-	for _, balance := range balances {
-		exchangeAmounts[balance.CurrentCode] = balance.Amount
-	}
-
 	for _, target := range reconcileTargets() {
+		// 対象通貨がレスポンスに含まれていない場合、ゼロ値0を「実残高0」として扱うと
+		// 必ず「不足」側の🚨アラートになる。原因不明の誤発報を避けるため突合自体を見送る
+		amount, found := lookupExchangeBalance(balances, target.Currency)
+		if !found {
+			notifyReconcileError(summary,
+				"取引所の残高レスポンスに %s が含まれていないため、%s の残高突合をスキップします "+
+					"（取得できた通貨:%d件 [%s]）。残高0とみなすと必ず不足アラートになるため判定しません",
+				target.Currency, target.ProductCode, len(balances), balanceCurrencyList(balances))
+			continue
+		}
+
 		holding := holdings[target.ProductCode]
 		diff := balanceDiff{
 			Currency:    target.Currency,
 			ProductCode: target.ProductCode,
-			Exchange:    exchangeAmounts[target.Currency],
+			Exchange:    amount,
 			Holding:     holding,
 			Untracked:   target.Untracked,
 			Threshold:   target.Threshold,
