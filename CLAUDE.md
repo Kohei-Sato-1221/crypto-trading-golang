@@ -99,6 +99,148 @@ make test-keep-db   # DBを起動したまま繰り返し実行
 ```
 
 **テスト方針**: ユニットテストは最低限に留める。カバレッジのために機械的にテストを増やしたり、テストのために本体の設計を歪めたりしない。壊れても気づきにくい箇所（DB入出力、損益計算、価格計算）に絞って追加する。テストが無いこと自体は不具合として扱わない。
+---
+
+## 売り注文の部分約定が起きたときの対応
+
+> Slack通知の「手順はルート CLAUDE.md の『売り注文の部分約定が起きたときの対応』を参照してください」から辿り着く先。
+> **この見出しは `go/app/bitflyerApp/rolloverSellOrderJob.go` の定数 `partialFillDocSection` と一致させること。** 片方だけ変えると通知から手順に辿り着けなくなる。
+
+### なぜシステムが対応していないのか
+
+損益レポートは `go/models/events.go` の `getResultsPostgres()` / `getResultsMySQL()` が集計している。中核は次の1行で、**1つの買い注文に売り注文が1本だけぶら下がる**ことを前提にしている。
+
+```sql
+sum((a.price * a.size) - (b.price * b.size))
+-- a = sell_orders (status='FILLED'), b = buy_orders, 結合条件 a.parentid = b.order_id
+```
+
+売り注文が部分約定するとこの前提が崩れる。ローリング（`rolloverSellOrderJob`）は残数量で再発注し、旧レコードを `CANCELLED` にするため、**既に約定した数量ぶんの売却額はどこにも残らない**。
+
+例: 買い 0.03 @ `P_b` → 売り注文が 0.01 だけ @ `P_s1` で部分約定 → 残り 0.02 が後日 @ `P_s2` で約定
+
+| | 計算式 |
+|---|---|
+| 真の損益 | `(P_s1 − P_b) × 0.01 + (P_s2 − P_b) × 0.02` |
+| 現在の記録 | `(P_s2 × 0.02) − (P_b × 0.03)` |
+| **不足額** | **`P_s1 × 0.01`**（＝部分約定ぶんの売却総額がまるごと欠落する） |
+
+ずれは常に**過小**方向（利益を過大に見せない安全側）で実損は無い。恒久対応（買い注文側の数量按分）は買い注文のデータモデルに手を入れる設計変更で規模が他と桁違いであり、部分約定の発生実績もまだ1件も無いため、**スコープ外と判断した**（レビュー指摘 F27）。発生したときは以下の手順で手作業で補う。
+
+### パターン①とパターン②
+
+`rolloverSellOrderJob` は部分約定を検出したとき、残数量が最小取引単位（BTC_JPY: 0.001 / ETH_JPY: 0.01）以上かどうかで分岐する。どちらもSlackに通知される。
+
+| | 残数量 | ボットの挙動 | 現物の行方 | 対応 |
+|---|---|---|---|---|
+| **パターン①** | 最小取引単位**以上** | DBの `size` を残数量へ補正 → キャンセル → 残数量で再発注 | 売り注文は継続する | 損益の補正のみ（下記手順） |
+| **パターン②** | 最小取引単位**未満** | キャンセルも再発注もせず中止（キャンセルすると再発注できず裸の保有になるため） | 取引所の注文をそのまま残す → **期限（最長30日）で失効** → 売り注文の無い「裸の保有」 | 損益の補正に加えて**取引所側の処理が必要**（後述） |
+
+### パターン①の手動対応手順
+
+#### 使う値（すべてSlack通知に載っている）
+
+| プレースホルダ | Slack通知の項目 | 例 |
+|---|---|---|
+| `:buy_order_id` | 親買い注文ID | `JRF20260801-101010-000001` |
+| `:sell_order_id` | 売り注文ID | `JRF20260907-010131-018801` |
+| `:product_code` | product_code | `ETH_JPY` |
+| `:avg_price` | 平均約定価格(average_price) | `511000` |
+| `:executed_size` | 約定数量 | `0.01` |
+| `:remaining_size` | 残数量 | `0.02` |
+
+`:avg_price` は**キャンセル後に取引所APIから二度と取得できない**（キャンセルした注文はAPIから即座に消える。実測確認済み）。Slack通知が唯一の記録なので、通知を消さずに残すこと。
+
+#### ⚠️ やってはいけないこと
+
+**「約定ぶんの売り注文を `sell_orders` に FILLED で1行 INSERT するだけ」では直らない。かえって悪化する。**
+同一 `parentid` に FILLED の売りが2行並ぶと、集計式の `b.price * b.size`（買いコスト**全量**）が行ごとに引かれ、買いコストが二重計上される。ローカル検証では対応前 `-4,747.87` が `-14,626.99` へ悪化した（正しい値は `+356.51`）。
+
+**買い注文側も同じ比率で分割する**必要がある。
+
+#### 手順（PostgreSQL）
+
+`buy_orders.order_id` / `sell_orders.order_id` には UNIQUE 制約（`orderId` インデックス）があるため、派生レコードには `-PARTIAL` を付けた別IDを使う。`varchar(50)` に対して Bitflyer の注文IDは25文字なので収まる。同じ注文で2回目の部分約定が起きた場合は `-PARTIAL2` のように連番にする。
+
+```sql
+BEGIN;
+
+-- 手順1: 既存の買い注文を「残数量ぶん」へ按分する（0.03 -> 0.02）
+UPDATE buy_orders
+   SET size    = :remaining_size,
+       remarks = COALESCE(remarks, '') || ' / partial fill manual fix: size -> ' || :remaining_size
+ WHERE order_id = :buy_order_id;
+
+-- 手順2: 部分約定ぶんに対応する買い注文を派生IDで作る（price は元の買値のまま。size だけ約定数量）
+--        product_code / side / price / exchange / status / strategy / timestamp は元レコードから引き継ぐ
+INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange, status, strategy, remarks, timestamp)
+SELECT :buy_order_id || '-PARTIAL',
+       product_code, side, price, :executed_size, exchange, status, strategy,
+       COALESCE(remarks, '') || ' / partial fill manual fix: split from ' || order_id,
+       timestamp
+  FROM buy_orders
+ WHERE order_id = :buy_order_id;
+
+-- 手順3: 部分約定ぶんの売り注文を、手順2で作った買い注文に紐づけて作る
+--        price は必ず「平均約定価格(average_price)」であって指値ではない
+--        updatetime が日次損益レポートの計上日になる（通知を受け取った日でよい）
+INSERT INTO sell_orders (parentid, order_id, product_code, side, price, size, exchange, status, remarks, updatetime)
+VALUES (:buy_order_id || '-PARTIAL',
+        :sell_order_id || '-PARTIAL',
+        :product_code, 'SELL', :avg_price, :executed_size, 'bitflyer', 'FILLED',
+        'partial fill manual fix', NOW() AT TIME ZONE 'UTC');
+
+-- ここで下記の検証クエリを流し、問題なければ COMMIT
+COMMIT;
+```
+
+- 手順2の `status` は元レコードから引き継ぐので `FILLED(SELL ORDER PLACED)` になる。この値であることが重要で、`FILLED` にすると `placeSellOrder` が新しい売り注文を出してしまう
+- 手順1・2で買い数量の**合計は変わらない**（0.02 + 0.01 = 0.03）。分割であって水増しではない
+- 手順3の売りは `FILLED` なので、`rolloverSellOrderJob` / `filledCheckJob` / `expireSweepJob`（いずれも `UNFILLED` のみを対象にする）には拾われない。取引所に存在しない `-PARTIAL` IDへAPIを叩きにいくことはない
+
+#### 検証（COMMIT 前に流す）
+
+```sql
+-- ① 買い数量の合計が元の数量と一致すること（分割であって水増しではない）
+SELECT SUM(size) FROM buy_orders WHERE order_id IN (:buy_order_id, :buy_order_id || '-PARTIAL');
+--    -> 元の size（例 0.03）と一致すること
+
+-- ② 1つの買い注文に FILLED の売りが2行以上ぶら下がっていないこと（買いコストの二重計上の検知）
+SELECT parentid, COUNT(*) FROM sell_orders WHERE status = 'FILLED' GROUP BY parentid HAVING COUNT(*) > 1;
+--    -> 0件であること
+
+-- ③ 当該ポジションの損益が期待値と一致すること
+SELECT SUM((a.price * a.size) - (b.price * b.size)) AS profit
+  FROM sell_orders a, buy_orders b
+ WHERE a.parentid = b.order_id AND a.status = 'FILLED'
+   AND b.order_id IN (:buy_order_id, :buy_order_id || '-PARTIAL');
+--    -> (P_s1 - P_b) * 約定数量 + (P_s2 - P_b) * 残数量 と一致すること
+--       （日次レポートの表示値はこれに手数料率 0.9989 を掛けたもの）
+```
+
+COMMIT 後は `make run-send-results` を使わず（ボットの起動系は不用意に叩かない）、上記③のクエリで確認すれば十分。
+
+残高照合（`GetExpectedHoldings`）への影響も無い。派生した買い注文は `FILLED(SELL ORDER PLACED)` かつ `FILLED` の売りが紐づくため、`bot` にも `naked`（裸の保有）にも計上されない。
+
+### パターン②の対応方針
+
+**DB操作だけでは解決しない。** 残数量が最小取引単位未満のため、その端数はボットからも取引所からも売れない。
+
+1. **取引所側**: 端数は他のポジションと合算するか、成行で処理するか、そのまま保有するかを人が判断する。ボットは以後この端数に触らない
+2. **DB側**: 約定した数量ぶんの損益は、上記パターン①と同じ手順1〜3で補正できる（`:remaining_size` には端数をそのまま入れる）
+3. パターン②で取引所の注文が失効した場合、`expireSweepJob` がDBの売り注文を後始末する。その後この買い注文は「裸の保有」として残高照合に計上される（想定どおりの挙動）
+
+### 検証状況
+
+この手順は `go/tests/partial_fill_manual_fix_test.go` でローカルの docker PostgreSQL に対して検証済み（`make test`）。買い 0.03 @500,000 / 部分約定 0.01 @511,000 / 残り 0.02 @512,345 のシナリオで:
+
+| | `GetResults()` の Total |
+|---|---|
+| 手動対応なし（現状） | `-4,747.87` |
+| 売り注文だけ INSERT（アンチパターン） | `-14,626.99` |
+| **上記手順で対応** | **`+356.51`**（真の損益と一致） |
+
+**手順を変更するときは `go/tests/partial_fill_manual_fix_test.go` も併せて更新すること。**
 
 ---
 
