@@ -34,6 +34,16 @@ const (
 
 	// StrategyManual は取引所で手動発注され、syncBuyOrders が取り込んだ注文を表す。
 	StrategyManual = 90001
+
+	/*
+		StrategyZeroValue は strategy カラムのゼロ値。
+
+		旧戦略 Stg0BtcLtp3low7 の値(iota = 0)と一致してしまうため、
+		「値が入っていない(NULL・スキャン失敗・DEFAULT未設定)」のか
+		「旧戦略で発注された」のかを区別できない。ボット発注と誤認すると
+		reconcileJob の発注ゼロ検知を取りこぼすため、ボット戦略としては扱わない。
+	*/
+	StrategyZeroValue = 0
 )
 
 // 以下は古い戦略2：0251213からはBuyPriceStrategyを利用
@@ -121,8 +131,9 @@ var botStrategies = map[int]bool{
 	StrategyLtpLowestIn7days2t8: true,
 	StrategyLtpLowestIn7days7t3: true,
 
-	// 旧戦略（BTCStrategy / ETHStrategy）。過去データにのみ存在する
-	Stg0BtcLtp3low7:  true,
+	// 旧戦略（BTCStrategy / ETHStrategy）。過去データにのみ存在する。
+	// Stg0BtcLtp3low7 は値が 0（iota）で strategy カラムのゼロ値と区別できないため
+	// 意図的に含めない（詳細は IsBotStrategy のコメントを参照）
 	Stg1BtcLtp997:    true,
 	Stg2BtcLtp98:     true,
 	Stg3BtcLtp90:     true,
@@ -138,7 +149,17 @@ IsBotStrategy はボットが発注した戦略値かどうかを返す。
 
 StrategyUnknown(99) / StrategySaturatedUnknown(127) / StrategyManual(90001) は
 いずれも「ボットの買い戦略として記録された値」ではないため false を返す。
+
+0(StrategyZeroValue) も false を返す。旧戦略 Stg0BtcLtp3low7 の値と一致するが、
+strategy カラムのゼロ値（未設定・NULL・スキャン失敗）とも区別がつかない。
+ゼロ値を「ボット発注」と数えると reconcileJob の発注ゼロ検知を取りこぼし、
+ボットが止まっていることに気づけなくなる。取りこぼすより鳴らす側へ倒す。
+本番データ上の strategy=0 は2021年頃の5件のみで、発注ゼロ検知が走査する
+直近200件には含まれないため、この除外による判定の変化はない。
 */
 func IsBotStrategy(strategy int) bool {
+	if strategy == StrategyZeroValue {
+		return false
+	}
 	return botStrategies[strategy]
 }

@@ -226,3 +226,70 @@ func TestGetRecentBuyOrders(t *testing.T) {
 		t.Errorf("strategy %d should be a bot strategy", records[1].Strategy)
 	}
 }
+
+/*
+F19 の回帰テスト（DB側）。
+
+GetRecentBuyOrders は strategy を sql.NullInt64 で読み、NULL のとき int(0) を
+入れていた。0 は旧戦略 Stg0BtcLtp3low7 の値でもあるため、呼び出し側が
+「ボット発注」と誤認して発注ゼロ検知を取りこぼす恐れがある。
+NULL のときは enums.StrategyUnknown を入れること。
+
+本番・ローカルとも buy_orders.strategy は NOT NULL DEFAULT 99 のため NULL は
+通常発生しないが、将来の制約変更やビュー越しの参照で壊れないように担保する。
+テスト中だけ NOT NULL を外し、必ず復旧させる。
+*/
+func TestGetRecentBuyOrdersNullStrategyIsNotBot(t *testing.T) {
+	setupTestDB(t)
+	defer teardownTestDB(t)
+
+	if _, err := models.AppDB.Exec(`ALTER TABLE buy_orders ALTER COLUMN strategy DROP NOT NULL`); err != nil {
+		t.Fatalf("failed to relax NOT NULL: %v", err)
+	}
+	defer func() {
+		if _, err := models.AppDB.Exec(
+			`UPDATE buy_orders SET strategy = 99 WHERE strategy IS NULL`); err != nil {
+			t.Fatalf("failed to backfill strategy: %v", err)
+		}
+		if _, err := models.AppDB.Exec(`ALTER TABLE buy_orders ALTER COLUMN strategy SET NOT NULL`); err != nil {
+			t.Fatalf("failed to restore NOT NULL: %v", err)
+		}
+	}()
+
+	now := time.Now().UTC()
+	if _, err := models.AppDB.Exec(
+		`INSERT INTO buy_orders (order_id, product_code, side, price, size, exchange, status, strategy, timestamp)
+		 VALUES ('B-NULLSTG', 'BTC_JPY', 'BUY', 5000000, 0.001, 'bitflyer', 'UNFILLED', NULL, $1)`,
+		now); err != nil {
+		t.Fatalf("insert failed: %v", err)
+	}
+	// リグレッション: 通常のボット戦略値は従来どおり保持されること
+	insertReconcileBuyOrder(t, "B-BOT", "BTC_JPY", 5000000, 0.001, "UNFILLED",
+		enums.StrategyLTP99, nil, now.AddDate(0, 0, -1))
+
+	records, err := models.GetRecentBuyOrders(50)
+	if err != nil {
+		t.Fatalf("GetRecentBuyOrders failed: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("record count: got %d, want 2", len(records))
+	}
+
+	byID := map[string]models.RecentBuyOrder{}
+	for _, record := range records {
+		byID[record.OrderID] = record
+	}
+	nullRecord, ok := byID["B-NULLSTG"]
+	if !ok {
+		t.Fatalf("B-NULLSTG not found: %+v", records)
+	}
+	if nullRecord.Strategy != enums.StrategyUnknown {
+		t.Errorf("strategy: got %d, want %d (StrategyUnknown)", nullRecord.Strategy, enums.StrategyUnknown)
+	}
+	if enums.IsBotStrategy(nullRecord.Strategy) {
+		t.Error("strategy が NULL のレコードがボット発注と数えられている（発注ゼロ検知を取りこぼす）")
+	}
+	if botRecord := byID["B-BOT"]; !enums.IsBotStrategy(botRecord.Strategy) {
+		t.Errorf("通常のボット戦略が保持されていない: %+v", botRecord)
+	}
+}

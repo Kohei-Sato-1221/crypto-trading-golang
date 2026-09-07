@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/database"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/enums"
 )
 
 /*
@@ -855,6 +856,8 @@ RecentBuyOrder は直近の買い注文の戦略値と発注時刻。
 
 reconcileJob が「N日間ボットの発注が0件」を検知するために使う。
 Strategy は enums.IsBotStrategy() でボット発注か手動取り込みかを判別する。
+DB上 strategy が NULL のレコードには enums.StrategyUnknown を入れる
+（int(0) を入れると旧戦略 Stg0BtcLtp3low7 と区別がつかなくなるため）。
 */
 type RecentBuyOrder struct {
 	OrderID   string
@@ -899,9 +902,15 @@ func GetRecentBuyOrders(limit int) ([]RecentBuyOrder, error) {
 		if err := rows.Scan(&orderID, &strategy, &timestamp); err != nil {
 			return nil, err
 		}
+		// strategy が NULL のレコードは int(0) ではなく StrategyUnknown を入れる。
+		// 0 は旧戦略 Stg0BtcLtp3low7 の値でもあるため、ゼロ値のまま渡すと
+		// 呼び出し側が「ボット発注」と誤認して発注ゼロ検知を取りこぼす恐れがある
 		record := RecentBuyOrder{
 			OrderID:  orderID.String,
-			Strategy: int(strategy.Int64),
+			Strategy: enums.StrategyUnknown,
+		}
+		if strategy.Valid {
+			record.Strategy = int(strategy.Int64)
 		}
 		if ts, ok := toUTCTime(timestamp); ok {
 			record.Timestamp = ts
