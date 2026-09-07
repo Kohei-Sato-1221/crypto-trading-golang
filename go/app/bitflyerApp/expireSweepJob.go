@@ -31,8 +31,9 @@ child_order_acceptance_id での個別照会でも取得できない）。その
   - 一覧の取得に失敗した通貨ペアは sweep 自体をスキップする
     （GetChildOrdersAll はページング途中でエラーが起きると取得済みページも破棄するため、
     不完全な一覧で「一覧に無い＝失効」と判定すると実在する注文をCANCELLEDにしてしまう）。
-  - 方式Bでは、COMPLETED一覧で遡れた最古の child_order_date より古いレコードを判定保留にし、
+  - 方式A・方式Bとも、COMPLETED一覧で遡れた最古の child_order_date より古いレコードを判定保留にし、
     件数と order_id をSlackへ通知する（遡り不足による誤判定を防ぐフェイルセーフ）。
+    判定は decideSweepAction() に共通化してある。
   - remarks に models.RemarkRolloverPending を含むレコードは、ローリングがまだ再試行しうる間だけ対象外
     （売り注文のローリング再試行待ちと競合させない）。ローリングの窓を過ぎたレコードは
     どのジョブにも拾われず恒久的に滞留してしまうため、除外を解いて本ジョブがCANCELLEDにする。
@@ -199,10 +200,86 @@ func formatSweepExpireDate(expireDate *time.Time) string {
 }
 
 /*
+sweepDecision は1レコードに対して sweep が取る処理。
+*/
+type sweepDecision int
+
+const (
+	// sweepDecisionCancel は失効とみなして CANCELLED に更新する。
+	sweepDecisionCancel sweepDecision = iota
+	// sweepDecisionFilled は約定済みと判明したため FILLED に更新する。
+	sweepDecisionFilled
+	// sweepDecisionSkipActive は取引所側でACTIVEのため状態を変えない。
+	sweepDecisionSkipActive
+	// sweepDecisionHold は遡り限界より古く判定できないため保留する。
+	sweepDecisionHold
+)
+
+/*
+decideSweepAction は1レコードに対する処理を決める（DB・API・Slackに触れない純粋関数）。
+
+方式A・方式Bで共通の判定を行う。優先順位は以下のとおりで、いずれもフェイルセーフ側に倒す。
+
+ 1. COMPLETED一覧にある → 約定済み。CANCELLEDにせずFILLEDへ
+ 2. ACTIVE一覧にある     → 取引所側で生存中。DBの期限判定より実データを優先し状態を変えない
+ 3. COMPLETED一覧の遡り限界(oldestCompleted)より古い → 判定保留
+    COMPLETED一覧は最大 500件×10ページ = 5000件で頭打ちのため、取引量が増えて
+    遡り範囲が短くなると、範囲外で約定した注文を「一覧に無い＝失効」と誤判定しうる。
+    誤 CANCELLED になった買い注文は placeSellOrder の対象から外れ、保有した現物が
+    DB上追跡不能（裸の保有）になるため、断定できないものは CANCELLED にしない。
+    record.Timestamp がゼロ値（DB値のパース失敗）の場合もこの分岐に落ちる。
+    oldestCompleted がゼロ値（COMPLETED一覧が空）のときは遡り限界を確定できないため
+    すべて保留になる。取引履歴のある口座では起こらないが、その場合は sweep が
+    何も CANCELLED にせず判定保留としてSlackに通知される（安全側の縮退）。
+ 4. 上記のいずれでもない → 失効とみなす
+*/
+func decideSweepAction(record models.OrderRecord, index *exchangeOrderIndex) sweepDecision {
+	switch {
+	case index.completedIDs[record.OrderID]:
+		return sweepDecisionFilled
+	case index.activeIDs[record.OrderID]:
+		return sweepDecisionSkipActive
+	case index.oldestCompleted.IsZero() || !record.Timestamp.After(index.oldestCompleted):
+		return sweepDecisionHold
+	}
+	return sweepDecisionCancel
+}
+
+/*
+applySweepDecision は decideSweepAction() の判定を実行し、集計とログ・通知を行う。
+
+方式A・方式Bの双方から呼ぶ。method は通知・ログに載せる判定方式のラベル("A" / "B")。
+*/
+func applySweepDecision(record models.OrderRecord, method string, now time.Time,
+	index *exchangeOrderIndex, summary *expireSweepSummary) {
+
+	switch decideSweepAction(record, index) {
+	case sweepDecisionFilled:
+		markSweptOrderFilled(record, summary)
+	case sweepDecisionSkipActive:
+		summary.skippedActive++
+		log.Printf("【expireSweep】取引所側でACTIVEのためCANCELLEDにしない: table=%s OrderID=%s %s method=%s expire_date(UTC):%s",
+			record.Table, record.OrderID, record.ProductCode, method, formatSweepExpireDate(record.ExpireDate))
+	case sweepDecisionHold:
+		summary.pending++
+		summary.pendingIDs = append(summary.pendingIDs,
+			fmt.Sprintf("%s(%s/%s/method=%s)", record.OrderID, record.ProductCode, record.Table, method))
+		log.Printf("【expireSweep】判定保留: table=%s OrderID=%s %s method=%s timestamp(UTC):%s oldestCompleted(UTC):%s",
+			record.Table, record.OrderID, record.ProductCode, method,
+			formatSweepTime(record.Timestamp), formatSweepTime(index.oldestCompleted))
+	default:
+		cancelSweptOrder(record, method, now, summary)
+	}
+}
+
+/*
 sweepExpiredOrders は方式A（expire_date の経過）で失効レコードを処理する。
 
+判定は方式Bと共通の decideSweepAction() に委ねる。
 CANCELLED に更新する前に必ずCOMPLETED一覧と突合し、約定済みなら FILLED に更新して対象から外す。
 取引所側でまだACTIVEな注文はDBの期限判定より実データを優先し、状態を変えない。
+COMPLETED一覧の遡り限界より古いレコードは、期限を過ぎていても判定保留にする
+（遡り範囲外で約定した注文を誤ってCANCELLEDにしないため）。
 */
 func sweepExpiredOrders(table models.OrderTable, now time.Time, grace time.Duration,
 	indexes map[string]*exchangeOrderIndex, summary *expireSweepSummary) {
@@ -225,18 +302,7 @@ func sweepExpiredOrders(table models.OrderTable, now time.Time, grace time.Durat
 				table, record.OrderID, record.ProductCode)
 			continue
 		}
-		if index.completedIDs[record.OrderID] {
-			markSweptOrderFilled(record, summary)
-			continue
-		}
-		if index.activeIDs[record.OrderID] {
-			// 取引所側でまだ生存している注文はDBの期限判定より実データを優先する
-			summary.skippedActive++
-			log.Printf("【expireSweep】取引所側でACTIVEのためCANCELLEDにしない: table=%s OrderID=%s %s expire_date(UTC):%s",
-				table, record.OrderID, record.ProductCode, formatSweepExpireDate(record.ExpireDate))
-			continue
-		}
-		cancelSweptOrder(record, "A", now, summary)
+		applySweepDecision(record, "A", now, index, summary)
 	}
 }
 
@@ -272,28 +338,7 @@ func sweepOrdersWithoutExpireDate(table models.OrderTable, now time.Time,
 			table, productCode, len(records), rolloverRetryAfter.Format(time.RFC3339))
 
 		for _, record := range records {
-			if index.completedIDs[record.OrderID] {
-				markSweptOrderFilled(record, summary)
-				continue
-			}
-			if index.activeIDs[record.OrderID] {
-				// 取引所側に生存している注文は失効ではない（手動発注の未約定注文はここで守られる）
-				summary.skippedActive++
-				log.Printf("【expireSweep】取引所側でACTIVEのため対象外: table=%s OrderID=%s %s",
-					table, record.OrderID, record.ProductCode)
-				continue
-			}
-			// COMPLETED一覧の遡り限界より古いレコードは、約定済みを失効と誤判定しうるため保留する
-			if index.oldestCompleted.IsZero() || !record.Timestamp.After(index.oldestCompleted) {
-				summary.pending++
-				summary.pendingIDs = append(summary.pendingIDs,
-					fmt.Sprintf("%s(%s/%s)", record.OrderID, record.ProductCode, table))
-				log.Printf("【expireSweep】判定保留: table=%s OrderID=%s %s timestamp(UTC):%s oldestCompleted(UTC):%s",
-					table, record.OrderID, record.ProductCode,
-					formatSweepTime(record.Timestamp), formatSweepTime(index.oldestCompleted))
-				continue
-			}
-			cancelSweptOrder(record, "B", now, summary)
+			applySweepDecision(record, "B", now, index, summary)
 		}
 	}
 }

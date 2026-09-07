@@ -596,7 +596,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | ジョブ | 契機 | 通知先 | 本文 |
 |---|---|---|---|
 | `expireSweepJob` | 正常終了 | 通常 | `【expireSweep】buy:{N}件 sell:{M}件 を CANCELLED / 約定判明:{K}件 / 判定保留:{P}件` |
-| `expireSweepJob` | 判定保留あり | エラー | `🚨【expireSweep】判定保留 {P}件: COMPLETED一覧の遡り限界({最古child_order_date})より古いレコード。手動確認が必要 order_ids=[...]` |
+| `expireSweepJob` | 判定保留あり | エラー | `🚨【expireSweep】判定保留 {P}件: COMPLETED一覧の遡り限界({最古child_order_date})より古いレコード。手動確認が必要 order_ids=[{id}({product_code}/{table}/method={A|B})...]`（方式A・方式Bの双方が対象） |
 | `expireSweepJob` | API / DB エラー | エラー | `🚨【expireSweep】{処理名} 失敗: {err} (product_code={pc})` |
 | `rolloverSellOrderJob` | 正常終了 | 通常 | `【rolloverSellOrder】対象:{N} 巻き直し成功:{M} 約定判明:{K} 部分約定(残数量で再発注):{P} オーファン取込:{A} スキップ:{S} 失敗:{F}` |
 | `rolloverSellOrderJob` | オーファン注文を検出しDBへ取り込み | エラー | `🚨【rolloverSellOrder】前回の再発注は実際には成立していました（レスポンスの取りこぼし）。二重売りを避けるため再発注せずDBへ取り込みます: OldOrderID={id} ... OrphanOrderID={new_id}` |
@@ -634,6 +634,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | **ローリング処理前の約定** | ループ前に `GetChildOrdersAll(productCode, "COMPLETED")` を product_code ごとに1回だけ取得してマップ化し、対象 order_id が含まれていれば `FILLED` に更新して skip する（キャンセル API を叩かない） |
 | **再発注レスポンスの取りこぼしによる2本目の発注** | ループ前に `GetChildOrdersAll(productCode, "ACTIVE")` も取得する。`[ROLLOVER_PENDING]` 付きレコードの再試行では、再発注の直前に ACTIVE 一覧から「同一 `product_code` / `price` / `size` / `side=SELL` かつ `sell_orders` に紐づかない注文（オーファン注文）」を探す。<br>・見つかった → **再発注しない**。その `order_id` を `RolloverSellOrder` で DB に取り込み、🚨 通知する<br>・ACTIVE 一覧が取得できなかった / DB 照合に失敗した → 判定不能なので**再発注せず**次回リトライ |
 | **sweep による誤 CANCELLED** | 期限切れ候補を `CANCELLED` にする前に、必ず COMPLETED 一覧と突合する。含まれていれば `FILLED` に更新して sweep 対象から外す |
+| **遡り不足による誤 CANCELLED** | 方式A・方式Bとも `decideSweepAction()` を通し、COMPLETED 一覧で遡れた最古の `child_order_date`（`oldestCompleted`）より古いレコードは `CANCELLED` にせず判定保留にして Slack 通知する。`timestamp` がゼロ値（DB値のパース失敗）や `oldestCompleted` がゼロ値の場合も保留に倒す |
 | **新レコードの重複 INSERT** | `sell_orders.order_id` の UNIQUE 制約 + 既存の duplicate key ハンドリング。取引所が返した `child_order_acceptance_id` は一意 |
 | **旧レコード CANCELLED と新レコード INSERT の不整合** | 単一トランザクションで実行。片方だけ成功する状態を作らない |
 | **買い注文の重複** | 変更なし（既存の曜日チェック + 1日1回のスケジュール + buy 側スロット上限28） |
