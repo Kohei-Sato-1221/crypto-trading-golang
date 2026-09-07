@@ -587,7 +587,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 ### 6.1 原則
 
 - **ジョブ全体を止めない**: 複数レコードを処理するループでは `break` を使わず `continue` する。現行 `placeSellOrder` の `break`（4箇所）も `continue` に修正する。
-- **フェイルセーフの方向**: 判定不能なときは常に「発注しない／キャンセルしない／状態を変えない」側に倒す。
+- **フェイルセーフの方向**: 判定不能なときは常に「発注しない／キャンセルしない／状態を変えない」側に倒す。発注価格の参照元（bitflyer `GetTicker` / bitbank `GetBBTicker`）の取得に失敗した場合も、error を握り潰さず `validateBuyPriceSources()` で検証したうえで発注を中止する。
 - **必ず通知する**: エラーは `slackClient.PostMessage(msg, true)`（エラーチャンネル）。正常サマリは `PostMessage(msg, false)`。
 - **コンテキストを含める**: OrderID / ParentID / ProductCode / Side / Price / Size / Strategy / ExpireDate のうち該当するものを必ず本文に入れる（ルート `CLAUDE.md` の開発ルール）。
 
@@ -710,7 +710,9 @@ Bitflyer の Private API は「5分あたり500回」、注文系は「5分あ�
 ```bash
 make build                      # go/bfTradingApp のビルドが通ること（全スプリント共通）
 cd go && go vet ./...           # 変更したファイルに新規指摘がないこと
-                                # ベースライン除外: go/bitbank/bitbank.go, go/okex/okex.go
+                                # ベースライン除外: go/okex/okex.go
+                                # ※ go/bitbank/bitbank.go の指摘（using resp before checking for errors）は
+                                #   Phase 3 の F6 対応で解消済み
                                 # ※ go/app/bitflyerApp/filledCheckJob.go はスプリント3で変更するため
                                 #   ベースライン指摘（log.Println へのフォーマット引数）を解消する
 cd go && gofmt -l .             # 変更ファイルが列挙されないこと

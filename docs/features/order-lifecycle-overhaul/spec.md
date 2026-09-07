@@ -197,6 +197,7 @@ Bitflyer 自動売買ボットの「注文ライフサイクル管理」を作�
 - **`make atlas-apply` および本番 PostgreSQL（Supabase）への DDL 適用の実行。** マイグレーション SQL の作成・提示までがスコープで、適用はユーザーが行う。
 - **MySQL(RDS) と PostgreSQL(Supabase) 間のデータ移行・切り戻し。**
 - **OKEX / OKJ / bitbank 側のロジック変更。** `go/app/okextasks.go` / `okjTasks.go` / `bitbank/` は触らない（bitbank は BTC 買値の参照元としてのみ現状維持）。
+  - ただし **Phase 3 のレビュー指摘 F6 の対応として、`bitbank.GetBBTicker()` の nil 参照 panic の修正のみ例外的に実施した**（`(*ReturnTicker, error)` を返す形に変更）。買値の算出ロジックそのものは変更していない。シグネチャ変更に伴い `okjTasks.go` の2箇所の呼び出しにも「取得失敗時は発注しない」ガードを追加している。
 - **ボット全体の起動（`make run` / `make run-binary`）による E2E 検証。** 自動発注が走るためエージェントは実行しない。
 - **ユニットテストの網羅的追加。** 既存の `go/tests/` 統合テストが壊れないことのみ担保する。
 - **UI・画面の追加。** 本プロジェクトにフロントエンドは存在しない。出力面は Slack 通知・ログ・DB レコードのみ。
