@@ -1,16 +1,18 @@
 {
   "sprint_number": 7,
+  "phase": "Phase 3 コードレビュー指摘の修正（バッチB: F9 / F7 / F16 / F17 / F18 / F28）",
   "status": "completed",
   "scope": [
     "go",
     "docs"
   ],
   "features_implemented": [
-    "F2: [ROLLOVER_PENDING] レコードの恒久滞留を解消（sweep と rollover の間の隙間を閉じた）",
-    "F3: 再発注レスポンス消失時のオーファン注文検出（二重売りの防止）",
-    "F6: GetTicker / GetBBTicker のエラー握り潰しによる nil 参照 panic の修正",
-    "F8: expireSweepJob 方式Aへの遡り限界ガード追加（判定を decideSweepAction に共通化）",
-    "F10: cancelBuyOrderJob の timestamp ゼロ値をキャンセル側に倒さない（TimestampValid の伝播）"
+    "F9: models 層のエラーを Slack へ通知（CheckFilledBuyOrders / SyncBuyOrders / UpdateOrderExpireDate の error 返却化）",
+    "F7: 手動売却の SELL 指値による reconcile の鳴りっぱなしを解消（取引所のみ ACTIVE / SELL をサマリ掲載に留める）",
+    "F16: [ROLLOVER_PENDING] の二重通知を専用通知へ一本化",
+    "F17: 残高サマリの余剰ラベルを実態（手動保有が主因）に合わせて修正",
+    "F18: sell 超過警告を24時間に1回へ集約（notificationThrottle）",
+    "F28: GetUnfilledOrderIDs の limit 打ち切りを truncated で返し Slack 通知"
   ],
   "verify_commands": [
     "make build",
@@ -20,46 +22,50 @@
   ],
   "verify_results": {
     "build": "OK",
-    "vet": "OK（go vet ./... の指摘0件。ベースラインだった go/bitbank/bitbank.go:40 は F6 対応で解消）",
+    "vet": "OK（go vet ./... の指摘0件。バッチA終了時の状態を維持）",
     "gofmt": "OK（gofmt -l . は okex/okex.go のみ。ベースラインで今回未変更）",
-    "existing_tests": "OK（make test: top-level 44 PASS / subtest 66 PASS / FAIL 0。修正前の27件はすべて維持し、+17件を追加）",
-    "readonly_api_checks": "今回は参照系APIの新規実行なし。判定ロジックはすべて純粋関数に切り出しユニットテストで検証した"
+    "existing_tests": "OK（make test: top-level 72 PASS / FAIL 0。バッチA終了時の44件をすべて維持し +28件を追加）",
+    "readonly_api_checks": "今回は参照系APIの新規実行なし。通知の振り分け・集約はすべて純粋関数に切り出しユニットテストで検証した"
   },
   "changes": {
     "files_created": [
-      "go/tests/expire_sweep_test.go",
-      "go/app/bitflyerApp/rolloverOrphan_test.go",
-      "go/app/bitflyerApp/expireSweepDecision_test.go",
-      "go/app/bitflyerApp/cancelBuyOrderDecision_test.go",
-      "go/app/bitflyerApp/placeBuyOrderValidation_test.go",
-      "go/bitbank/bitbank_test.go"
+      "go/app/bitflyerApp/notificationThrottle.go",
+      "go/app/bitflyerApp/syncBuyOrderFailure_test.go",
+      "go/app/bitflyerApp/reconcileOrderDiff_test.go",
+      "go/app/bitflyerApp/reconcileBalanceLabel_test.go",
+      "go/app/bitflyerApp/notificationThrottle_test.go",
+      "go/tests/models_error_test.go"
     ],
     "files_modified": [
+      "go/models/events.go",
       "go/models/orderLifecycle.go",
-      "go/app/bitflyerApp/expireSweepJob.go",
-      "go/app/bitflyerApp/rolloverSellOrderJob.go",
-      "go/app/bitflyerApp/cancelBuyOrderJob.go",
+      "go/app/bitflyerApp/placeSellOrder.go",
+      "go/app/bitflyerApp/syncBuyOrders.go",
+      "go/app/bitflyerApp/reconcileJob.go",
       "go/app/bitflyerApp/placeBuyOrder.go",
-      "go/app/okjTasks.go",
-      "go/bitbank/bitbank.go",
-      "go/tests/rollover_test.go",
-      "Makefile",
-      "docs/features/order-lifecycle-overhaul/design-dock.md",
-      "docs/features/order-lifecycle-overhaul/spec.md"
+      "go/tests/reconcile_test.go",
+      "docs/features/order-lifecycle-overhaul/design-dock.md"
     ]
   },
+  "commits": [
+    "317bed1 fix: F9 models 層のエラーを Slack に通知する",
+    "fceefdb fix: F7 手動売却の SELL 指値で reconcile が毎日鳴り続けるのを防ぐ",
+    "b72ff29 fix: F16 [ROLLOVER_PENDING] の二重通知を専用通知へ一本化する",
+    "41501a9 fix: F17 残高サマリの余剰ラベルを実態に合わせる",
+    "8327575 fix: F18 sell 超過警告を24時間に1回へ集約する",
+    "e45e11e fix: F28 GetUnfilledOrderIDs の打ち切りを Slack へ通知する"
+  ],
   "self_evaluation": {
-    "acceptance_criteria": "OK（F2/F3/F6/F8/F10 の5件すべて対応。バッチ外の指摘には手を付けていない）",
-    "build_vet": "OK",
-    "regression": "OK（既存27テストは全件維持してPASS）",
-    "claude_md_compliance": "OK（新規のエラー経路はすべて Slack 通知。OrderID/ParentID/ProductCode/Price/Size/Strategy を本文に含める。時刻比較はUTC。ジョブは1ファイル分離を維持）",
-    "trading_safety": "OK（すべて「発注しない／キャンセルしない」フェイルセーフ側への変更。F2 のみ CANCELLED 対象を広げるが、対象はローリングが二度と扱わない期限切れレコードに限定し、CANCELLED 前の COMPLETED/ACTIVE 突合と遡り限界ガードは維持）",
-    "code_quality": "OK（判定ロジックを純粋関数に切り出し、未使用コード・デバッグ出力なし）"
+    "acceptance_criteria": "OK（指摘6件すべてに対応。バッチ外の指摘には手を付けていない）",
+    "build_vet": "OK（build 成功、go vet 0件、gofmt はベースラインの okex/okex.go のみ）",
+    "regression": "OK（既存 top-level 44件をすべて維持。追加28件を含め72件 PASS）",
+    "claude_md_compliance": "OK（エラーは Slack 通知しコンテキストを含める／ジョブは1ファイル分離を維持／時刻比較は UTC／機密情報の追加なし）",
+    "trading_safety": "OK（発注・キャンセルのロジックは変更していない。placeSellOrder は取得失敗時に発注しない側へ倒す変更のみ）",
+    "code_quality": "OK（判定・整形ロジックを純粋関数に切り出しテスト可能にした。未使用コード・デバッグ出力なし）"
   },
-  "verification_notes": "【F2】models.GetExpiredUnfilledOrders から [ROLLOVER_PENDING] の除外を撤廃（go/models/orderLifecycle.go）。方式Aの窓(expire_date < now-grace)とローリングの窓(expire_date > now)は排他のため競合しない。expire_date が NULL の方式Bは GetUnfilledOrdersWithoutExpireDate に rolloverRetryAfter を追加し、除外を「ローリングがまだ再試行しうる間」に限定（go/app/bitflyerApp/expireSweepJob.go の expireSweepRolloverRetryAfter）。失効通知は cancelSweptOrder が sell_orders に対して無条件に出しており、[ROLLOVER_PENDING] 付きの場合は原因を本文に付記する。TestNoUnfilledSellOrderFallsBetweenSweepAndRollover で代表7状態が必ずどちらかの対象になることを検証。\n【F3】rolloverOneSellOrder の alreadyCancelled 経路で、再発注の直前に resolveRolloverOrphan() を実行。ACTIVE一覧（buildRolloverOrderIndex で product_code ごとに1回取得）から 同一 product_code / price / size / side=SELL かつ models.OrderIDExists が false の注文を探し、見つかれば再発注せず RolloverSellOrder で取り込む。ACTIVE一覧が無い / DB照合失敗時は再発注を見送る。\n【F6】placeBuyOrder の validateBuyPriceSources() が GetTicker / GetBBTicker の error と nil、価格が0以下でないかを検証し、不足があれば Slack 通知して return する。bitbank.GetBBTicker は (*ReturnTicker, error) に変更し、HTTPエラー・非200・data が null・価格が数値でない、をすべて error として返す。okjTasks.go の2箇所にも同様のガードを追加。\n【F8】decideSweepAction() に判定を共通化し、方式A・方式Bの双方で oldestCompleted より古い / timestamp ゼロ値 / oldestCompleted ゼロ値 を判定保留に倒す。判定保留の order_id には method=A|B のラベルを付与。\n【F10】models.OrderRecord に TimestampValid を追加し scanOrderRecords が toUTCTime の成否を伝播。decideCancelBuyOrder() が TimestampValid=false / Timestamp ゼロ値をキャンセル対象から除外し、件数と order_id（最大10件）を Slack 通知する。",
+  "verification_notes": "【F9】models/events.go の CheckFilledBuyOrders() を ([]BuyOrderInfo, error) に変更（Query / Scan / rows.Err の失敗をすべて返す）。app/bitflyerApp/placeSellOrder.go:18 で「0件」と「読み取り失敗」を区別し、失敗時は発注せず Slack 通知して return する。SyncBuyOrders() は []SyncBuyOrderFailure を返し（count / insert / expire_date の3経路。UpdateOrderExpireDate の失敗もここに含まれる）、app/bitflyerApp/syncBuyOrders.go の formatSyncBuyOrderFailures() が OrderID / ProductCode / Side / Price / Size / Strategy 付きの1通にまとめて通知する。\n【F7】app/bitflyerApp/reconcileJob.go の classifyOrderDiffs() が突合結果をエラー通知用(Alerts)とサマリ掲載用(Info)に振り分ける。「取引所のみ ACTIVE / SELL」だけを Info に落とし、「DBのみ UNFILLED」(buy/sell 両方)と「取引所のみ ACTIVE / BUY」は従来どおりエラー通知。Info は notifyReconcileResult() が日次サマリに件数と代表 order_id 付きで必ず出力する（通知を消していない）。\n【F16】reconcileJob() で reconcileRolloverPending() を注文突合より前に実行し、rolloverPendingOrderIDs() で得た order_id 集合を buildOrderDiff() に渡す。[ROLLOVER_PENDING] 付きは DBOnly ではなく RolloverPending に振り分けられ、classifyOrderDiffs() が Info に入れるためエラー通知は専用通知の1通のみになる。取得上限 reconcileRolloverPendingMax(50) を超えた分は従来どおり DBOnly としてエラー通知される。\n【F17】balanceStateLabel() に切り出し、余剰ラベルを『余剰(手動保有・未追跡分を含む。アラート対象外)』に修正。手動保有は AlertExpected から除外されているため、そのぶんは必ず余剰側に現れる。\n【F18】notificationThrottle（key 単位・mutex 保護・プロセス内メモリ）を追加し、placeBuyOrder.go の SellWarning 通知を sellOverLimitNotifyInterval(24h) に1回まで集約。ログは毎回出力し、reconcileJob も日次で1通通知するため通知経路は残る。システム時刻が巻き戻った場合は抑制せず通知する。\n【F28】models.GetUnfilledOrderIDs() が (orderIDs, truncated, error) を返すよう変更（空文字 order_id を除外しているため判定には取得行数を使用）。reconcileOrdersForProduct() が truncated を検知したら notifyReconcileError() で Slack 通知し、突合結果を鵜呑みにしないよう本文で促す。",
   "pending_user_approval": [],
   "issues": [],
-  "notes": "【Phase 3 バッチA（F2/F3/F6/F8/F10）の修正】1修正=1コミットで5コミット作成した。各コミットに修正コード・ユニットテスト・リグレッションテスト・コミットメッセージを含め、コミット前に make build と make test の通過を確認している。\n\n■ 判断が必要だった点\n(1) F2 の方式A: 除外条件を残す案（rolloverRetryAfter を渡す）ではなく、除外そのものを撤廃した。方式Aの抽出条件が expire_date < now - grace で、ローリングの下限 expire_date > now と構造的に排他だからである。条件を残すと『何のための除外か』が読めなくなるため、理由をコメントとして残した。\n(2) F3 のオーファン検出後の扱い: レビューは『DBに取り込む』『通知して skip』の両案を挙げていたが、取り込みを選んだ。skip だとレコードが [ROLLOVER_PENDING] のまま残り、F2 の修正により最終的に sweep が CANCELLED にするだけで、取引所に生きている売り注文がDBから見えない状態（裸の保有の裏返し）が残るため。ただし『同一価格・同一数量の手動発注をボットの注文として取り込む』誤検知の余地はゼロではないので、取り込み時は 🚨 通知に『この注文が手動で発注したものでないか取引所のコンソールでご確認ください』を明記した。\n(3) F6 で bitbank / okjTasks.go に手を入れた: spec.md はこれらをスコープ外としていたが、GetBBTicker が nil を返せるようにしないと呼び出し側で nil チェックができないため例外的に対応し、spec.md に理由を追記した。買値の算出ロジックそのものは変更していない。\n(4) F6 で bitbank の障害を『ETH・7日安値戦略の発注を止める理由』にはしなかった。bitbank の Ticker は strategy < 10（BTC）の買値算出にしか使われないため、それ以外で必須にすると他取引所の障害で自分の発注が止まる不要な結合になる。\n(5) Makefile の test / test-keep-db を go test ./tests/ から go test ./... に変更した。今回追加したパッケージ内ユニットテスト（bitflyerApp / bitbank）が実行対象に入らないため。\n\n■ 実行していないコマンド・操作\nmake run / make run-binary、更新系API（sendchildorder / cancelchildorder）、本番DBへの書き込み、make apply / atlas-apply / pg-remote-apply / reset-db はいずれも実行していない。DBを使うテストはローカル docker PostgreSQL（make test）のみ。\n\n■ 本バッチ外の指摘\nF4 / F5 / F7 / F9 / F11〜F28 には一切手を付けていない（後続バッチで対応予定）。\n\n---- 以下は Sprint 7 時点の notes（参考） ----\n【1. 残高突合が「鳴りっぱなし」にならないための方針（3層）】\n(a) 向きによる扱いの分離を主軸にした。危険なのは「実残高 < DB想定保有量」（不足）で、この場合だけ売り注文が残高不足で失敗しうるためエラーチャンネルへ通知する。逆向きの「実残高 > DB想定」（余剰）は取引の安全性を損なわないため、日次サマリ（通常チャンネル）に数値を載せるだけでエラー通知しない。現状の本番（DBが追跡していない過去の手動取引由来の余剰）は常に余剰側なので、設定を何も変えなくてもアラートは鳴らない。ドライランで BTC・ETH とも shortfall=false / surplus=true になることを実データで確認済み。\n(b) 手動保有分（[MANUAL_HOLD] 130レコード）は乖離判定から完全に除外する（判定式は AlertTarget()=Bot+Naked に Untracked を足したもの）。当初は想定保有量に加算していたが、それだとユーザーが手動保有を売却した瞬間から「実残高 < 想定保有量」となり不足アラートが恒久的に鳴り続けるため、Evaluator 指摘（Medium #1）を受けて判定から外した。ユーザーの当初方針「手動保有はシステムからは存在しないものとして無視する」および design-dock §7.3 とも整合する。サマリには参考値として表示し続けるため、保有量の把握はできる。\n(c) 既知の未追跡分をベースラインとして設定できるようにした（[app] untracked_holding_btc / untracked_holding_eth、既定0）。値を入れると想定保有量に加算され、余剰が0に近づく。将来ユーザーが手動売却して残高が減った場合に「不足」側へ転じるのを防ぐため、実値は設定ファイルに書かず既定0のままにしている（残高の実数値をリポジトリに残さない方針）。必要ならユーザーが環境側で設定する。\nなお閾値（balance_diff_threshold_btc=0.0005 / _eth=0.005）は最小取引単位の半分に置き、手数料・端数による微小なずれで鳴らないようにしている。\n\n【2. enums.IsBotStrategy() の判断: 追加した】\n発注ゼロ検知で「ボットの発注」と「手動発注の取り込み(strategy=90001)」「戦略未記録(99)」「旧MySQL飽和(127)」を区別する必要があるため追加した。区別しないと、取引所で手動発注した注文を syncBuyOrders が取り込むだけで「ボットは動いている」と誤判定してしまい、無言の停止を検知するという本ジョブの目的が果たせない。実装は go/enums/strategy.go の botStrategies マップ（現行7戦略＋旧戦略9種）参照で、reconcileJob.go の reconcileBotOrderActivity() から呼んでいる（未使用コードではない）。SQL側に戦略値のリストを二重に持たせないため、判定はGo側で行う設計にした。\n\n【3. 申し送り課題1〜5の対応可否】\n(1) BuyOrder() の INSERT 失敗で戦略値が失われる（稀）: 部分対応。検知のみ。直近24時間に strategy=90001（手動取り込み）で入ったレコード件数を日次サマリに出す。ボットが正常に記録できていれば通常0件のはずで、ここが増えていれば記録の取りこぼしに気づける。ただし「本当に手動発注した」場合と区別できないため、エラー通知ではなくサマリ表示に留めた。復旧（戦略値の事後補完）は実装していない。取引所側に戦略情報が存在せず、時刻の近さだけで推定すると誤ラベルが将来の戦略評価を汚染するため（design-dock §8 の代替案12と同じ理由）。\n(2) PlaceOrder のレスポンス消失によるオーファン注文: 対応済み。「取引所のみ ACTIVE」の突合で検知される。売買方向ごとに突合しているため、買い・売りのどちらで発生しても拾える。ドライランでは現在0件。\n(3) [ROLLOVER_PENDING] が残り続けるレコード: 対応済み。models.GetUnfilledOrdersWithRemark() で抽出し、件数と OrderID / ParentID / ProductCode / price / size をエラー通知する（reconcileRolloverPending()）。正常なら翌日のローリングで解消されるマーカーなので、残っていること自体が異常であり、鳴りっぱなしにはならない。現在0件。\n(4) エラー通知が件数分飛ぶ問題（placeSellOrder / rolloverSellOrderJob の continue 方式）: 見送り。理由は3点。(i) 対象がスプリント2・4・6で pass 済みのジョブの通知経路であり、集約機構を入れると各ジョブの制御フローに手を入れることになって回帰リスクが本スプリントの目的（検知の追加）に見合わない。(ii) spec.md のスプリント7の受け入れ条件に含まれていない。(iii) 恒常的失敗（残高不足等）は reconcileJob の残高不足アラート・裸の保有の可視化・発注ゼロ検知のいずれかで日次に1通で気づけるため、目的（無言の停止を防ぐ）は本スプリントの範囲で達成できている。恒久対応は別課題として残す。\n(5) 予期しない再起動の検知: 見送り（誤検知リスク）。「想定スケジュール外の時刻の発注」を機械判定するには、曜日別の12ジョブ×trigger_time_01 と実際の発注時刻の許容幅を定義する必要があり、デプロイ・時刻設定変更・遅延のたびに誤検知する。代わりに「直近24時間のボット発注件数」を日次サマリに出し、人が異常な件数に気づける形にした。\n\n【4. 「裸の保有」の扱い（設計判断）】\nGetExpectedHoldings に naked（約定済みだが対応する売り注文が生存していない分）の内訳を設けた。現物は手元にあるため想定保有量には含めるが、これ自体ではエラー通知しない（毎日鳴り続けるため）。日次サマリに数値として出し続けることで可視化する。本番のドライランで ETH_JPY に1件（order_id=JRF20260505-012050-073720、2026-05-05発注、sell_orders レコードが存在しない）が実在することを確認した。これは「売り注文は出たが sell_orders への INSERT が失われた」ケースと考えられ、スプリント6の申し送り（placeSellOrder の DB 更新失敗）と符合する。ユーザーの手動確認対象として報告する。\n\n【5. design-dock からの意図的な差異】\n・design-dock §4.2 の GetExpectedHoldings() は (bot, manual map[string]float64, err) を返す想定だったが、map[string]models.ExpectedHolding{Bot, Naked, Manual} を返す形にした。上記4の「裸の保有」を内訳として分離するため。\n・design-dock §4.2 の GetLastBotBuyOrderTime() は追加していない。代わりに models.GetRecentBuyOrders(limit) で直近の買い注文を1回だけ取得し、ジョブ側で enums.IsBotStrategy() を使って「最終ボット発注時刻」「直近24hのボット発注件数」「直近24hの手動取り込み件数」を同じ走査から求めている。同じ目的のクエリを2回投げないためと、未使用関数を作らないため。\n・design-dock §4.2 の GetUnfilledOrderIDs() には limit 引数を追加した。go/CLAUDE.md の「全件取得になるSELECTを新規追加しない」に従い、他の models 関数（GetUnfilledBuyOrderRecords 等）と同じく上限を明示するため。\n\n【6. 実行していないコマンド・操作】\nmake run / make run-binary、更新系API（sendchildorder / cancelchildorder）、本番DBへの書き込み、マイグレーションの作成・適用（make atlas-diff / atlas-apply / pg-remote-apply / reset-db）はいずれも実行していない。本スプリントにスキーマ変更はない。本番DBへのアクセスは SELECT のみ。検証に使った一時プログラム（go/tmpcheck）は削除済みで、残高の実数値はコード・ログ・成果物のいずれにも残していない。コミットは行っていない（ワーキングツリーに変更を残した状態）。\n\n【追記: Evaluator指摘への対応（修正モード）】\n(1) Medium #1（残高突合から手動保有を除外）: 対応済み。models.ExpectedHolding に AlertTarget()(=Bot+Naked) を追加し、reconcileJob の判定を diff.AlertExpected = holding.AlertTarget() + target.Untracked に変更した。Total()(=Bot+Naked+Manual) は表示・調査用として残したが、docコメントに「乖離判定に使ってはならない。判定には AlertTarget() を使うこと」と明記した。何が判定に使われ何が参考値かが読んで分かるよう、構造体フィールドを Expected → AlertExpected に改名し、Slack通知・日次サマリの文言も「判定用DB想定」「判定対象の内訳 bot/裸の保有/既知の未追跡分」「参考・判定対象外 手動保有」に整理した。パッケージコメント（reconcileJob.go 冒頭）と reconcileBalances() のdocコメントも実装に合わせて書き直した。\n(2) issues #6（design-dock に untracked_holding の記載が無い）: 対応済み。design-dock.md の §4.4 設定一覧に untracked_holding_btc / untracked_holding_eth を追記し、あわせて §4.2 の models インターフェース記述を実装に合わせて更新（GetUnfilledOrderIDs の limit 引数、GetUnfilledOrdersWithRemark / GetRecentBuyOrders の追加、GetLastBotBuyOrderTime を GetRecentBuyOrders + IsBotStrategy に置き換えた旨、ExpectedHolding の3内訳と Total/AlertTarget）、「残高の乖離判定の式（確定仕様）」を新設し、§7.3 に「判定用の想定保有量に手動保有を加算してはならない」理由とともに明記した。\n(3) 本番の「裸の保有」1件（buy_orders.id=612 / JRF20260505-012050-073720）はメイン会話が調査のうえ売り注文レコードを復元済みで、現在0件。naked の集計ロジック自体は正しいため変更していない。ローカルのテストデータは naked 経路を検証するために意図的に naked>0 のケースを作っており、本番の状態とは独立なので作り直していない（TestGetExpectedHoldings は naked=0.004 を検証し続ける）。",
-  "log_entry": "Phase 3 バッチA 完了: レビュー指摘 F2（[ROLLOVER_PENDING] の恒久滞留）/ F3（レスポンス消失時の2本目発注）/ F6（GetTicker のエラー握り潰しによる panic）/ F8（方式Aの遡り限界ガード欠落）/ F10（timestamp ゼロ値のキャンセル）を1修正=1コミットで修正。判定ロジックを純粋関数（decideSweepAction / decideCancelBuyOrder / validateBuyPriceSources / matchesRolloverOrder / parseBBTicker）に切り出し、ユニットテスト＋リグレッションテストを追加。make build OK、make test は top-level 44 PASS / FAIL 0（既存27件を維持し+17件）、go vet 指摘0件、gofmt はベースラインの okex/okex.go のみ。",
-  "phase": "Phase 3 コードレビュー指摘の修正（バッチA: F2 / F3 / F6 / F8 / F10）"
+  "notes": "【Phase 3 バッチB（F9/F7/F16/F17/F18/F28）の修正】1修正=1コミットで6コミット作成した。各コミットに修正コード・ユニットテスト・リグレッションテスト・コミットメッセージを含め、コミット前に make build と make test の通過を確認している。\n\n■ F7 で採用した方針とその理由\nレビューの選択肢のうち (a)「サマリ掲載に留める」を採用した。\n・ユーザーの方針「手動保有はシステムから存在しないものとして無視する」に従う。F3 でオーファン注文を取り込む判断をしたが、F7 の対象はユーザーが手動保有65ポジションを売却するために置いた SELL 指値であり、これをボットが自分の注文として取り込んではならない。したがって (c) sell 側の取り込みは採らない。\n・残高突合が Manual を判定から除外しているのと同じ考え方を、注文突合側にも適用した（設計の一貫性）。\n・(b) 許容件数の設定値は、手動売却の進捗で件数が日々変わり閾値の維持が運用負担になるため採らなかった。件数によらずサマリに全件（代表10件）を載せる方が気づきやすい。\n・ボットが発注した売り注文の取りこぼし（再発注レスポンスの消失によるオーファン）は、F3 で入れた rolloverSellOrderJob の再発注前オーファン検出と、[ROLLOVER_PENDING] 残留通知（F16 で専用通知に一本化）で引き続き検知できる。\n\n■ そのほか判断が必要だった点\n(1) F9 の SyncBuyOrders: error 1つに畳まず []SyncBuyOrderFailure を返す形にした。1件の失敗で全体を止めないという既存の挙動を維持しつつ、OrderID / Price / Size / Strategy を通知に載せる開発ルールを満たすため。\n(2) F16 の実行順序: reconcileRolloverPending() を注文突合より前へ移した。移動しないと突合時点で [ROLLOVER_PENDING] の一覧が無く除外できないため。取得上限(50件)を超えた分は DBOnly としてエラー通知される（見落とすより鳴らす側に倒した）。\n(3) F18 の抑制状態: DB や設定ファイルではなくプロセス内メモリに持たせた。再起動のたびに必ず1回鳴るが、鳴らしすぎるより鳴らさない方が危険なため。Pi の時計が巻き戻る（RTC 非搭載・NTP 同期）ケースでも抑制されないようにしている。\n(4) F18 の対象は placeBuyOrder の sell 超過警告に限定した。placeSellOrder / rollover のループ内通知の集約は指摘の別項目（今回のバッチ外）のため触っていない。\n(5) 本バッチでは okex/ および app/okjTasks.go に一切変更を加えていない（bitflyer 定期売買アプリの対象範囲外）。\n\n■ ドキュメントの更新\ndesign-dock.md §4（GetUnfilledOrderIDs のシグネチャ）と §5（残高突合の余剰ラベル）、§6.2（通知一覧: placeSellOrder の取得失敗 / syncBuyOrders の取り込み失敗 / reconcileJob の SELL 側の扱い・[ROLLOVER_PENDING] の一本化・打ち切り通知 / placeBuyOrder の集約）を実装に合わせて更新した。\n\n■ 実行していないコマンド・操作\nmake run / make run-binary、更新系API（sendchildorder / cancelchildorder）、本番DBへの書き込み、make apply / atlas-apply / pg-remote-apply / reset-db はいずれも実行していない。DBを使うテストはローカル docker PostgreSQL（make test）のみ。\n\n■ 本バッチ外の指摘\nF4 / F5 / F11 / F12 / F13 / F14 / F15 / F19〜F27 には一切手を付けていない（後続バッチで対応予定）。F1 / F29 は対応しない決定済み。",
+  "log_entry": "Phase 3 バッチB 完了: レビュー指摘 F9（models 層のエラーが Slack に届かない）/ F7（手動売却の SELL 指値で reconcile が鳴り続ける）/ F16（[ROLLOVER_PENDING] の二重通知）/ F17（余剰ラベルの食い違い）/ F18（sell 超過警告の未集約）/ F28（GetUnfilledOrderIDs の打ち切りが未通知）を1修正=1コミットで修正。F7 はユーザー方針（手動保有はシステムから無視する）に沿って (a) サマリ掲載に留める案を採用。make build OK、make test は top-level 72 PASS / FAIL 0（バッチA終了時の44件を維持し+28件）、go vet 指摘0件、gofmt はベースラインの okex/okex.go のみ。"
 }
