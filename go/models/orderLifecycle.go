@@ -23,6 +23,20 @@ const (
 	TableSellOrders OrderTable = "sell_orders"
 )
 
+/*
+ExchangeBitflyer は exchange カラムに入る Bitflyer の識別子。
+
+buy_orders / sell_orders は OKEX サービスと共用のテーブルである
+（cmds のエントリポイントで okex.TableName = "buy_orders" が設定される）。
+Bitflyer 用のジョブが取引所を絞らずに UNFILLED を拾うと、OKEX 由来のレコードに対して
+Bitflyer の CancelOrder を OKEX の product_code で叩くことになり、
+毎日のSlackエラーが恒常化する。Bitflyer 専用のSELECTは必ずこの値で絞ること。
+
+2026-09 時点の本番データは buy_orders / sell_orders とも全件 exchange='bitflyer' で
+NULL は存在しないため、この条件で既存レコードが取りこぼされることはない。
+*/
+const ExchangeBitflyer = "bitflyer"
+
 // isValid は定義済みのテーブル名かどうかを返す。
 func (t OrderTable) isValid() bool {
 	return t == TableBuyOrders || t == TableSellOrders
@@ -342,10 +356,14 @@ func GetUnfilledOrdersWithoutExpireDate(table OrderTable, productCode string,
 }
 
 /*
-GetUnfilledBuyOrderRecords は未約定の買い注文を expire_date 付きで返す。
+GetUnfilledBuyOrderRecords は未約定の Bitflyer の買い注文を expire_date 付きで返す。
 
 cancelBuyOrderJob が「有効期限」と「経過日数」の両方で能動キャンセルの要否を判定するために使う。
 GORMの GetUnfilledBuyOrders() は expire_date を保持しないため、こちらを使うこと。
+
+buy_orders は OKEX サービスと共用のテーブルなので exchange = ExchangeBitflyer で必ず絞る。
+絞らないと OKEX 由来の UNFILLED レコードに対して Bitflyer の CancelOrder を
+OKEX の product_code で叩き、毎日のSlackエラーが恒常化する。
 */
 func GetUnfilledBuyOrderRecords(limit int) ([]OrderRecord, error) {
 	if limit <= 0 {
@@ -355,15 +373,15 @@ func GetUnfilledBuyOrderRecords(limit int) ([]OrderRecord, error) {
 	var query string
 	if database.CurrentDriver() == "postgres" {
 		query = fmt.Sprintf(`SELECT %s FROM %s
-			WHERE status = 'UNFILLED' AND order_id <> ''
-			ORDER BY timestamp LIMIT $1`, orderRecordColumns(TableBuyOrders), TableBuyOrders)
+			WHERE status = 'UNFILLED' AND order_id <> '' AND exchange = $1
+			ORDER BY timestamp LIMIT $2`, orderRecordColumns(TableBuyOrders), TableBuyOrders)
 	} else {
 		query = fmt.Sprintf(`SELECT %s FROM %s
-			WHERE status = 'UNFILLED' AND order_id <> ''
+			WHERE status = 'UNFILLED' AND order_id <> '' AND exchange = ?
 			ORDER BY timestamp LIMIT ?`, orderRecordColumns(TableBuyOrders), TableBuyOrders)
 	}
 
-	rows, err := AppDB.Query(query, limit)
+	rows, err := AppDB.Query(query, ExchangeBitflyer, limit)
 	if err != nil {
 		log.Printf("[ERROR] GetUnfilledBuyOrderRecords err:%v", err)
 		return nil, err
@@ -476,6 +494,9 @@ Bitflyerの注文有効期限は最長30日（43200分）で、無期限注文�
 そのため期限の daysBefore 日前になった売り注文を巻き直して実質無期限化する。
 
 条件:
+  - exchange = ExchangeBitflyer
+    → sell_orders は OKEX サービスと共用のテーブルであり、絞らないと存在しない通貨ペアで
+    Bitflyer の一覧取得・キャンセルを試みて毎日のSlackエラーが恒常化する
   - status = 'UNFILLED' かつ order_id が空でない
     → 手動保有へ移管した65件(sell_orders.status='CANCELLED')は構造的に対象外になる。
     同様に約定済み(FILLED)・キャンセル済みのレコードも対象にならない
@@ -520,19 +541,19 @@ func GetSellOrdersToRollover(now time.Time, daysBefore, fallbackDays, limit int)
 	var query string
 	if database.CurrentDriver() == "postgres" {
 		query = fmt.Sprintf(`SELECT %s FROM %s
-			WHERE status = 'UNFILLED' AND order_id <> ''
-			  AND ((expire_date IS NOT NULL AND expire_date > $1 AND expire_date < $2)
-			    OR (expire_date IS NULL AND timestamp < $3 AND timestamp > $4))
-			ORDER BY timestamp LIMIT $5`, orderRecordColumns(TableSellOrders), TableSellOrders)
+			WHERE status = 'UNFILLED' AND order_id <> '' AND exchange = $1
+			  AND ((expire_date IS NOT NULL AND expire_date > $2 AND expire_date < $3)
+			    OR (expire_date IS NULL AND timestamp < $4 AND timestamp > $5))
+			ORDER BY timestamp LIMIT $6`, orderRecordColumns(TableSellOrders), TableSellOrders)
 	} else {
 		query = fmt.Sprintf(`SELECT %s FROM %s
-			WHERE status = 'UNFILLED' AND order_id <> ''
+			WHERE status = 'UNFILLED' AND order_id <> '' AND exchange = ?
 			  AND ((expire_date IS NOT NULL AND expire_date > ? AND expire_date < ?)
 			    OR (expire_date IS NULL AND timestamp < ? AND timestamp > ?))
 			ORDER BY timestamp LIMIT ?`, orderRecordColumns(TableSellOrders), TableSellOrders)
 	}
 
-	rows, err := AppDB.Query(query, expireLower, expireUpper, fallbackUpper, fallbackLower, limit)
+	rows, err := AppDB.Query(query, ExchangeBitflyer, expireLower, expireUpper, fallbackUpper, fallbackLower, limit)
 	if err != nil {
 		log.Printf("[ERROR] GetSellOrdersToRollover expire_date(UTC):%s〜%s timestamp(UTC):%s〜%s err:%v",
 			expireLower.Format(time.RFC3339), expireUpper.Format(time.RFC3339),
