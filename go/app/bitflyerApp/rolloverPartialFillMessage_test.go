@@ -82,3 +82,102 @@ func TestPartialFillSkipMessageNonActiveStates(t *testing.T) {
 		}
 	}
 }
+
+/*
+G2 のテスト。
+
+売り注文の部分約定はシステムが損益計算に対応していない（F27はスコープ外と決定）。
+発生時は手作業で記録を補うしかなく、その手作業には平均約定価格(average_price)が要る。
+ところが**キャンセルした注文は取引所APIから即座に消える**ため、
+この通知が average_price の唯一の記録になる。
+値が1つでも欠けると手動対応が不可能になるので、通知の中身を固定しておく。
+*/
+
+// 手動対応の案内に必要な実値がすべて含まれていること（パターン①・②共通の本文）。
+func TestPartialFillManualFixNoteContainsAllValues(t *testing.T) {
+	snapshot := rolloverOrderSnapshot{
+		found: true, state: "ACTIVE", size: 0.03, executedSize: 0.01, outstandingSize: 0.02,
+		averagePrice: 511000,
+	}
+	record := partialFillTestRecord()
+	record.Size = 0.02
+	note := partialFillManualFixNote(record, snapshot, 0.03, 0.02)
+
+	wants := []string{
+		"対応していません",            // システムが未対応であること
+		"過小に出ます",              // 損益レポートが実態より過小になること
+		"手動での記録補正が必要",         // 手動対応が必要であること
+		"BUY-PARENT",          // 親買い注文ID
+		"OLD-SELL",            // 売り注文ID
+		"ETH_JPY",             // product_code
+		"511000",              // 平均約定価格
+		"0.01",                // 約定数量
+		"0.03",                // 元size
+		"0.02",                // 残数量
+		partialFillDocSection, // CLAUDE.md のセクション名
+		"CLAUDE.md",
+	}
+	for _, want := range wants {
+		if !strings.Contains(note, want) {
+			t.Errorf("通知に %q が含まれていない: %s", want, note)
+		}
+	}
+}
+
+// パターン①（残数量が最小取引単位以上でローリング続行）の通知にも手動対応の案内が載ること。
+func TestPartialFillRolloverMessageAsksForManualFix(t *testing.T) {
+	snapshot := rolloverOrderSnapshot{
+		found: true, state: "ACTIVE", size: 0.03, executedSize: 0.01, outstandingSize: 0.02,
+		averagePrice: 511000,
+	}
+	record := partialFillTestRecord()
+	record.Size = 0.02 // adjustSizeForPartialFill が残数量へ補正した後の状態
+	msg := partialFillRolloverMessage(record, snapshot, 0.03, 0.02)
+
+	// 従来からの本文（リグレッション）
+	for _, want := range []string{"部分約定を検出", "残数量で再発注します", "OLD-SELL", "ETH_JPY"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("通知に %q が含まれていない: %s", want, msg)
+		}
+	}
+	// G2 で追加した本文
+	for _, want := range []string{"平均約定価格=511000", "手動での記録補正が必要", partialFillDocSection} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("通知に %q が含まれていない: %s", want, msg)
+		}
+	}
+}
+
+// パターン②（残数量が最小取引単位未満で中止）の通知にも平均約定価格と CLAUDE.md 参照が載ること。
+func TestPartialFillSkipMessageAsksForManualFix(t *testing.T) {
+	for _, state := range []string{"ACTIVE", "CANCELED"} {
+		snapshot := rolloverOrderSnapshot{
+			found: true, state: state, size: 0.015, executedSize: 0.008, outstandingSize: 0.007,
+			averagePrice: 511000,
+		}
+		msg := partialFillSkipMessage(partialFillTestRecord(), snapshot, 0.01, 0.015, 0.007)
+
+		for _, want := range []string{"平均約定価格=511000", "手動での記録補正が必要", partialFillDocSection, "CLAUDE.md"} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("state=%q: 通知に %q が含まれていない: %s", state, want, msg)
+			}
+		}
+		// 「注文をそのまま残す → 期限切れ → 裸の保有」という経過が伝わること
+		if !strings.Contains(msg, "裸の保有") {
+			t.Errorf("state=%q: 裸の保有になる旨が伝わらない: %s", state, msg)
+		}
+	}
+}
+
+// ACTIVE のまま残す場合、いずれ期限切れで裸の保有になることを伝えること。
+func TestPartialFillSkipMessageActiveWarnsAboutExpiry(t *testing.T) {
+	snapshot := rolloverOrderSnapshot{
+		found: true, state: "ACTIVE", size: 0.015, executedSize: 0.008, outstandingSize: 0.007,
+		averagePrice: 511000,
+	}
+	msg := partialFillSkipMessage(partialFillTestRecord(), snapshot, 0.01, 0.015, 0.007)
+
+	if !strings.Contains(msg, "失効") {
+		t.Errorf("期限切れで失効する旨が含まれていない: %s", msg)
+	}
+}

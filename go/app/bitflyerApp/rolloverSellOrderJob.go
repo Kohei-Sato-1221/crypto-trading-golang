@@ -538,6 +538,45 @@ adjustSizeForPartialFill は部分約定していた売り注文の数量を残�
 キャンセル済みの注文はAPIから消えていて残数量を再取得できないためである。
 */
 /*
+partialFillDocSection は手動対応の手順を書いたルート CLAUDE.md のセクション名。
+
+Slack通知からこの見出しを案内するため、**CLAUDE.md 側の見出しと必ず一致させること**。
+片方だけ変えると、通知を見た人が手順に辿り着けなくなる。
+*/
+const partialFillDocSection = "売り注文の部分約定が起きたときの対応"
+
+/*
+partialFillManualFixNote は「部分約定は損益計算が未対応なので手動対応が要る」旨の案内文を作る。
+
+損益は sum((a.price * a.size) - (b.price * b.size)) を
+a=sell(FILLED) / b=buy / a.parentid = b.order_id で結合して集計しており、
+1つの買い注文に売り注文が1本ぶら下がる前提になっている。
+部分約定するとその約定ぶんの売却額がどこにも残らないため、
+「約定ぶんの売却益が計上されないまま買いコストだけ全量引かれる」形で
+損益レポートが実態より過小に出る（利益を過大に見せないので安全側だが不正確）。
+恒久対応（買い注文側の数量按分）はスコープ外と判断されたため、発生時は手作業で補う。
+
+手作業に必要なのは「いくらで売れたか」＝ average_price だが、
+**キャンセルした注文は取引所APIから即座に消えるため後から取得できない**
+（実測確認済み）。したがってこの通知が average_price の唯一の記録になる。
+必要な実値をすべてここに載せ、手順は CLAUDE.md 側へ案内する。
+*/
+func partialFillManualFixNote(record models.SellOrderRecord, snapshot rolloverOrderSnapshot,
+	originalSize, remaining float64) string {
+
+	return fmt.Sprintf("⚠️ システムは売り注文の部分約定の損益計算に対応していません。"+
+		"このままでは約定ぶんの売却益が計上されないまま買いコストだけ全量引かれるため、"+
+		"損益レポートが実態より過小に出ます。正確な損益にするには手動での記録補正が必要です。"+
+		"【手動対応に必要な値】親買い注文ID=%s / 売り注文ID=%s / product_code=%s / "+
+		"平均約定価格(average_price)=%v / 約定数量=%v / 元size=%v / 残数量=%v。"+
+		"⚠️ 平均約定価格はキャンセル後に取引所APIから取得できないため、この通知が唯一の記録です。"+
+		"手順はルート CLAUDE.md の「%s」を参照してください。",
+		record.ParentID, record.OrderID, record.ProductCode,
+		snapshot.averagePrice, snapshot.executedSize, originalSize, remaining,
+		partialFillDocSection)
+}
+
+/*
 partialFillSkipMessage は「部分約定で残数量が最小取引単位を下回るためローリングしない」通知文を作る。
 
 注文の現状は snapshot の状態で分岐させる。この関数は取引所側で ACTIVE な注文からも、
@@ -551,18 +590,22 @@ partialFillSkipMessage は「部分約定で残数量が最小取引単位を下
 func partialFillSkipMessage(record models.SellOrderRecord, snapshot rolloverOrderSnapshot,
 	minSize, originalSize, remaining float64) string {
 
+	manualFix := partialFillManualFixNote(record, snapshot, originalSize, remaining)
+
 	if snapshot.found && snapshot.state == "ACTIVE" {
 		return fmt.Sprintf("🚨【rolloverSellOrder】部分約定により残数量が最小取引単位(%v)未満のためローリングしません: "+
-			"%s 元size=%v executed=%v outstanding=%v 残数量=%v。"+
-			"キャンセルすると裸の保有になり再発注もできないため、注文はそのまま残します（手動での対応をお願いします）",
-			minSize, rolloverRecordContext(record), originalSize, snapshot.executedSize, snapshot.outstandingSize, remaining)
+			"%s 元size=%v executed=%v outstanding=%v 平均約定価格=%v 残数量=%v。"+
+			"キャンセルすると裸の保有になり再発注もできないため、注文はそのまま残します（手動での対応をお願いします）。"+
+			"この注文は期限(最長30日)が来ると失効し、売り注文が無いまま現物だけが残る「裸の保有」になります。%s",
+			minSize, rolloverRecordContext(record), originalSize, snapshot.executedSize, snapshot.outstandingSize,
+			snapshot.averagePrice, remaining, manualFix)
 	}
 	return fmt.Sprintf("🚨🚨【rolloverSellOrder】部分約定により残数量が最小取引単位(%v)未満のためローリングしません: "+
-		"%s 元size=%v executed=%v outstanding=%v 残数量=%v。"+
+		"%s 元size=%v executed=%v outstanding=%v 平均約定価格=%v 残数量=%v。"+
 		"取引所側の注文は既に存在しません(found=%v state=%q)。売り注文が無いまま現物だけが残る「裸の保有」の状態で、"+
-		"残数量が最小取引単位未満のため再発注もできません（手動での対応をお願いします）",
-		minSize, rolloverRecordContext(record), originalSize, snapshot.executedSize, snapshot.outstandingSize, remaining,
-		snapshot.found, snapshot.state)
+		"残数量が最小取引単位未満のため再発注もできません（手動での対応をお願いします）。%s",
+		minSize, rolloverRecordContext(record), originalSize, snapshot.executedSize, snapshot.outstandingSize,
+		snapshot.averagePrice, remaining, snapshot.found, snapshot.state, manualFix)
 }
 
 func adjustSizeForPartialFill(record *models.SellOrderRecord, snapshot rolloverOrderSnapshot,
@@ -599,11 +642,26 @@ func adjustSizeForPartialFill(record *models.SellOrderRecord, snapshot rolloverO
 	record.Size = remaining
 
 	summary.partiallyFilled++
-	msg := fmt.Sprintf("🚨【rolloverSellOrder】部分約定を検出。残数量で再発注します: %s 元size=%v executed=%v outstanding=%v 再発注size=%v",
-		rolloverRecordContext(*record), originalSize, snapshot.executedSize, snapshot.outstandingSize, remaining)
+	msg := partialFillRolloverMessage(*record, snapshot, originalSize, remaining)
 	log.Println(msg)
 	slackClient.PostMessage(msg, true)
 	return true
+}
+
+/*
+partialFillRolloverMessage は「部分約定を検出したので残数量で再発注する」通知文を作る（パターン①）。
+
+ローリング自体は続行できるが、既に約定した数量ぶんの損益はシステムが記録できていない。
+この通知が average_price の唯一の記録になるため、手動対応に必要な実値を必ず載せる。
+*/
+func partialFillRolloverMessage(record models.SellOrderRecord, snapshot rolloverOrderSnapshot,
+	originalSize, remaining float64) string {
+
+	return fmt.Sprintf("🚨【rolloverSellOrder】部分約定を検出。残数量で再発注します: "+
+		"%s 元size=%v executed=%v outstanding=%v 平均約定価格=%v 再発注size=%v。%s",
+		rolloverRecordContext(record), originalSize, snapshot.executedSize, snapshot.outstandingSize,
+		snapshot.averagePrice, remaining,
+		partialFillManualFixNote(record, snapshot, originalSize, remaining))
 }
 
 /*
