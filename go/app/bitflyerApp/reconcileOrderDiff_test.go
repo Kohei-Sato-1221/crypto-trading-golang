@@ -205,3 +205,91 @@ func TestRolloverPendingOrderIDs(t *testing.T) {
 		t.Errorf("order_id 集合: got %v, want {S-1, S-2}", ids)
 	}
 }
+
+/*
+E1 の回帰テスト。
+
+日次サマリの「取引所のみ:N件(うちアラート対象外 SELL:M件)」は "取引所のみ" の内訳だが、
+F7（ExchangeOnly/SELL をサマリ掲載へ）と F16（[ROLLOVER_PENDING] を専用通知へ一本化）が
+重なった結果、M に InfoCount をそのまま使っており [ROLLOVER_PENDING]（＝DBのみ UNFILLED 側）
+の件数が混ざっていた。件数が "取引所のみ" を上回ることさえある。
+明細行のラベル自体は正しいので、集計だけを分離する。
+*/
+
+// 「取引所のみ SELL」の件数に [ROLLOVER_PENDING] を混ぜないこと。
+func TestClassifyOrderDiffsSeparatesExchangeOnlySellCount(t *testing.T) {
+	sell := sellDiff(nil, []string{"MANUAL-SELL-1", "MANUAL-SELL-2"})
+	sell.RolloverPending = []string{"S-PENDING-1", "S-PENDING-2", "S-PENDING-3"}
+
+	details := classifyOrderDiffs([]orderDiff{sell})
+
+	if details.ExchangeOnlySellCount != 2 {
+		t.Errorf("ExchangeOnlySellCount = %d, want 2（取引所のみ SELL の件数）", details.ExchangeOnlySellCount)
+	}
+	if details.RolloverPendingCount != 3 {
+		t.Errorf("RolloverPendingCount = %d, want 3", details.RolloverPendingCount)
+	}
+	// InfoCount は「サマリ掲載のみの明細」の総数なので従来どおり合算のまま
+	if details.InfoCount != 5 {
+		t.Errorf("InfoCount = %d, want 5", details.InfoCount)
+	}
+	if details.AlertCount != 0 {
+		t.Errorf("AlertCount = %d, want 0", details.AlertCount)
+	}
+}
+
+// [ROLLOVER_PENDING] だけがある場合、取引所のみ SELL の件数は0であること。
+func TestClassifyOrderDiffsRolloverPendingOnlyHasNoExchangeOnlySell(t *testing.T) {
+	sell := sellDiff(nil, nil)
+	sell.RolloverPending = []string{"S-PENDING-1"}
+
+	details := classifyOrderDiffs([]orderDiff{sell})
+
+	if details.ExchangeOnlySellCount != 0 {
+		t.Errorf("ExchangeOnlySellCount = %d, want 0（取引所のみ SELL は0件）", details.ExchangeOnlySellCount)
+	}
+	if details.RolloverPendingCount != 1 || details.InfoCount != 1 {
+		t.Errorf("RolloverPendingCount/InfoCount = %d/%d, want 1/1",
+			details.RolloverPendingCount, details.InfoCount)
+	}
+}
+
+// リグレッション: BUY の「取引所のみ」はアラート対象のままで、SELL の件数に混ざらないこと。
+func TestClassifyOrderDiffsBuyExchangeOnlyIsNotCountedAsSell(t *testing.T) {
+	details := classifyOrderDiffs([]orderDiff{
+		buyDiff(nil, []string{"ORPHAN-BUY-1", "ORPHAN-BUY-2"}),
+		sellDiff(nil, []string{"MANUAL-SELL"}),
+	})
+
+	if details.AlertCount != 2 {
+		t.Errorf("AlertCount = %d, want 2", details.AlertCount)
+	}
+	if details.ExchangeOnlySellCount != 1 {
+		t.Errorf("ExchangeOnlySellCount = %d, want 1（BUY を含めない）", details.ExchangeOnlySellCount)
+	}
+	if details.RolloverPendingCount != 0 {
+		t.Errorf("RolloverPendingCount = %d, want 0", details.RolloverPendingCount)
+	}
+}
+
+/*
+「取引所のみ:N件」と「うちアラート対象外 SELL:M件」の整合を確認する。
+
+M は N の内訳なので M <= N でなければならない。修正前は InfoCount を使っており、
+[ROLLOVER_PENDING] があると M > N になりえた。
+*/
+func TestExchangeOnlySellCountNeverExceedsExchangeOnlyCount(t *testing.T) {
+	sell := sellDiff(nil, []string{"MANUAL-SELL"})
+	sell.RolloverPending = []string{"S-PENDING-1", "S-PENDING-2", "S-PENDING-3"}
+	summary := &reconcileSummary{orderDiffs: []orderDiff{sell}}
+	summary.diffDetails = classifyOrderDiffs(summary.orderDiffs)
+
+	if summary.diffDetails.ExchangeOnlySellCount > summary.exchangeOnlyCount() {
+		t.Errorf("うちアラート対象外 SELL:%d件 が 取引所のみ:%d件 を上回っている",
+			summary.diffDetails.ExchangeOnlySellCount, summary.exchangeOnlyCount())
+	}
+	if summary.diffDetails.ExchangeOnlySellCount != summary.exchangeOnlyCount() {
+		t.Errorf("この構成では全件が SELL のためすべてアラート対象外の想定: %d / %d",
+			summary.diffDetails.ExchangeOnlySellCount, summary.exchangeOnlyCount())
+	}
+}

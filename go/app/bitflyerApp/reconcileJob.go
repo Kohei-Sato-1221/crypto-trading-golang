@@ -313,7 +313,20 @@ type orderDiffDetails struct {
 	Alerts     []string // エラー通知に載せる明細
 	Info       []string // 日次サマリにのみ載せる明細
 	AlertCount int      // エラー通知の対象件数
-	InfoCount  int      // サマリ掲載のみの件数
+	InfoCount  int      // サマリ掲載のみの件数（取引所のみSELL + ローリング再試行待ち）
+
+	/*
+		ExchangeOnlySellCount は InfoCount のうち「取引所のみ ACTIVE / SELL」の件数。
+
+		日次サマリの「取引所のみ:N件(うちアラート対象外 SELL:M件)」は、
+		"取引所のみ" の内訳を示す数字である。InfoCount には
+		[ROLLOVER_PENDING]（＝DBのみ UNFILLED）の件数も混ざるため、
+		そのまま使うと集計の粒度がずれ、取引所のみの件数を上回ることさえある。
+	*/
+	ExchangeOnlySellCount int
+
+	// RolloverPendingCount は InfoCount のうち [ROLLOVER_PENDING] の件数（DBのみ UNFILLED 側）。
+	RolloverPendingCount int
 }
 
 /*
@@ -338,6 +351,7 @@ func classifyOrderDiffs(diffs []orderDiff) orderDiffDetails {
 				diff.ProductCode, diff.Side, diff.Table, len(diff.RolloverPending),
 				models.RemarkRolloverPending, sampleOrderIDs(diff.RolloverPending)))
 			details.InfoCount += len(diff.RolloverPending)
+			details.RolloverPendingCount += len(diff.RolloverPending)
 		}
 		if len(diff.ExchangeOnly) == 0 {
 			continue
@@ -346,6 +360,7 @@ func classifyOrderDiffs(diffs []orderDiff) orderDiffDetails {
 			details.Info = append(details.Info, fmt.Sprintf("取引所のみ %s/SELL %d件(手動売却の可能性。アラート対象外): [%s]",
 				diff.ProductCode, len(diff.ExchangeOnly), sampleOrderIDs(diff.ExchangeOnly)))
 			details.InfoCount += len(diff.ExchangeOnly)
+			details.ExchangeOnlySellCount += len(diff.ExchangeOnly)
 			continue
 		}
 		details.Alerts = append(details.Alerts, fmt.Sprintf("取引所のみ %s/%s %d件: [%s]",
@@ -636,9 +651,11 @@ func notifyReconcileResult(summary *reconcileSummary) {
 		orderText = "\n注文突合(アラート対象外):\n" + strings.Join(summary.diffDetails.Info, "\n")
 	}
 
+	// 「うちアラート対象外 SELL」は "取引所のみ" の内訳なので ExchangeOnlySellCount を使う。
+	// InfoCount には [ROLLOVER_PENDING]（DBのみ UNFILLED 側）が混ざるため粒度がずれる
 	msg := fmt.Sprintf("【reconcile】%s / 注文突合 DBのみ:%d件 取引所のみ:%d件(うちアラート対象外 SELL:%d件) / "+
 		"ボット発注 直近24h:%d件 手動取り込み:%d件 最終発注(UTC):%s / ローリング再試行待ち:%d件 / エラー:%d件\n%s%s",
-		slotText, summary.dbOnlyCount(), summary.exchangeOnlyCount(), summary.diffDetails.InfoCount,
+		slotText, summary.dbOnlyCount(), summary.exchangeOnlyCount(), summary.diffDetails.ExchangeOnlySellCount,
 		summary.botOrders24h, summary.manualOrders24h, formatReconcileTime(summary.lastBotOrder),
 		len(summary.rolloverPending), summary.errors, balanceText, orderText)
 	log.Println(msg)
