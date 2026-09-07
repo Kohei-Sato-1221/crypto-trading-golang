@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 同じブランチで新しいpushがあったら古い実行を打ち切る
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: build / vet / gofmt / test
+    runs-on: ubuntu-latest
+    # make test の pg_isready 待ちが無限ループしうるため上限を設ける
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # go.mod の go ディレクティブ(1.25.0)からバージョンを決める。
+      # ここを固定値で書くと go.mod を上げたときに CI だけ古いままになる
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Show versions
+        run: |
+          go version
+          docker compose version
+
+      - name: Download dependencies
+        working-directory: go
+        run: go mod download
+
+      - name: Build
+        run: make build
+
+      - name: go vet
+        working-directory: go
+        # 現在の指摘は0件。新規の指摘が出たら落とす
+        run: go vet ./...
+
+      - name: gofmt
+        working-directory: go
+        # okex/okex.go は本機能のスコープ外で元から未整形のため除外する。
+        # okex/ に手を入れる際はこの除外を外すこと
+        run: |
+          set -euo pipefail
+          UNFORMATTED=$(gofmt -l . | grep -v '^okex/okex\.go$' || true)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::gofmt が未適用のファイルがあります"
+            echo "$UNFORMATTED"
+            echo "--- 差分 ---"
+            for f in $UNFORMATTED; do gofmt -d "$f"; done
+            exit 1
+          fi
+          echo "gofmt OK (除外: okex/okex.go)"
+
+      # make test が docker compose で PostgreSQL(5433) を起動し、
+      # db/crypto-trading-db-postgres/init/ を初期化SQLとしてマウントする。
+      # サービスコンテナではなく make test をそのまま使うことで、
+      # ローカルとCIで同一の手順・同一のスキーマを保証する
+      - name: Test
+        run: make test
+
+      - name: Dump PostgreSQL logs on failure
+        if: failure()
+        run: docker compose logs postgres || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true
