@@ -43,6 +43,26 @@ const (
 	// 1件あたり最大3リクエスト(照会/キャンセル/発注)のためレート制限の歯止めを兼ねる。
 	DefaultSellRolloverMaxPerRun = 20
 
+	// DefaultTriggerTime01 は買い注文ジョブ群のスケジュール既定値(JST)。
+	// 失効検出(06:05)・リコンサイル(06:15)の後に置き、スロットのカウントが
+	// 正しい状態で発注判定させる。値は移行前の config.ini と同一。
+	// このキーが壊れると買い注文が12本まとめて発火しなくなるため、
+	// 未設定・不正値では必ずこの既定値へ倒す。
+	DefaultTriggerTime01 = "06:30"
+
+	// DefaultTriggerTime02 は sendResultsJob（日次損益レポート）のスケジュール既定値(JST)。
+	// 買い注文(06:30)の直後。値は移行前の config.ini と同一。
+	DefaultTriggerTime02 = "06:45"
+
+	// DefaultTriggerTime03 は savePriceHistoryJob（夕方の記録）のスケジュール既定値(JST)。
+	// 値は移行前の config.ini と同一。
+	DefaultTriggerTime03 = "18:00"
+
+	// DefaultTriggerTime04 は savePriceHistoryJob（朝の記録）のスケジュール既定値(JST)。
+	// 7日安値を使うブレンド戦略の指値がここで記録した価格に依存するため、
+	// 買い注文(06:30)より前に置く。値は移行前の config.ini と同一。
+	DefaultTriggerTime04 = "06:00"
+
 	// DefaultTriggerTime05 は rolloverSellOrderJob のスケジュール既定値(JST)。
 	// EC2の稼働窓(3:00〜12:30 JST)の内側かつ、expireSweepJob(06:05)より前に置く。
 	DefaultTriggerTime05 = "05:30"
@@ -172,10 +192,14 @@ func NewConfig() {
 		Port:           cfg.Section("web").Key("port").MustInt(),
 		ParallelOrders: cfg.Section("tradeSetting").Key("parallel_orders").MustInt(),
 
-		TriggerTime01: cfg.Section("tradeSetting").Key("trigger_time_01").String(),
-		TriggerTime02: cfg.Section("tradeSetting").Key("trigger_time_02").String(),
-		TriggerTime03: cfg.Section("tradeSetting").Key("trigger_time_03").String(),
-		TriggerTime04: cfg.Section("tradeSetting").Key("trigger_time_04").String(),
+		// 買い注文ジョブ群の実行時刻(JST)。未設定ならDefaultTriggerTime01(06:30)
+		TriggerTime01: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_01").String(), DefaultTriggerTime01),
+		// sendResultsJob の実行時刻(JST)。未設定ならDefaultTriggerTime02(06:45)
+		TriggerTime02: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_02").String(), DefaultTriggerTime02),
+		// savePriceHistoryJob(夕)の実行時刻(JST)。未設定ならDefaultTriggerTime03(18:00)
+		TriggerTime03: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_03").String(), DefaultTriggerTime03),
+		// savePriceHistoryJob(朝)の実行時刻(JST)。未設定ならDefaultTriggerTime04(06:00)
+		TriggerTime04: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_04").String(), DefaultTriggerTime04),
 		// rolloverSellOrderJob の実行時刻(JST)。未設定ならDefaultTriggerTime05(05:30)
 		TriggerTime05: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_05").String(), DefaultTriggerTime05),
 		// expireSweepJob の実行時刻(JST)。未設定ならDefaultTriggerTime06(06:05)

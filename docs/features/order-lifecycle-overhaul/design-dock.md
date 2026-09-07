@@ -514,7 +514,7 @@ func ParseBitflyerTime(s string) (time.Time, error)
 
 すべて `MustInt` / `MustFloat64` / `MustBool` のデフォルト値付きで読み、**未設定でも既存挙動または安全側の値になる**ようにする。
 
-`trigger_time_05` 〜 `trigger_time_09` は `config.NormalizeTriggerTime(value, default)` を通す。`carlescere/scheduler` の `At()` は解釈できない時刻文字列を渡されても `Run()` が静かに失敗するだけで、`service.go` は戻り値を見ていない。つまり**設定ミスや本番 `config.ini` の更新漏れが「そのジョブが二度と発火しない」という無言のデグレになる**ため、`scheduler.parseTime` と同じ規則（`HH` / `HH:MM` / `HH:MM:SS`、`hour<=23` `min<=59` `sec<=59`）で先に検証し、空文字・不正値は既定値へ倒したうえでログに警告を残す。
+`trigger_time_01` 〜 `trigger_time_09` は `config.NormalizeTriggerTime(value, default)` を通す（`01`〜`04` は F30-1 で追加。既定値は現行 `config.ini` と同一のため正常設定時の挙動は変わらない）。`carlescere/scheduler` の `At()` は解釈できない時刻文字列を渡されても `Run()` が静かに失敗するだけで、`service.go` は戻り値を見ていない。つまり**設定ミスや本番 `config.ini` の更新漏れが「そのジョブが二度と発火しない」という無言のデグレになる**ため、`scheduler.parseTime` と同じ規則（`HH` / `HH:MM` / `HH:MM:SS`、`hour<=23` `min<=59` `sec<=59`）で先に検証し、空文字・不正値は既定値へ倒したうえでログに警告を残す。
 
 | セクション | キー | 値 | 導入 | 説明 |
 |---|---|---|---|---|
@@ -528,6 +528,10 @@ func ParseBitflyerTime(s string) (time.Time, error)
 | `[bitflyer]` | `sell_rollover_fallback_days` | `27` | S4 | `expire_date` が NULL の旧レコードのフォールバック日数 |
 | `[bitflyer]` | `sell_rollover_max_per_run` | `20` | S4 | 1回のジョブで処理する上限件数（レート制限とリスクの上限） |
 | `[bitflyer]` | `expire_sweep_grace_minutes` | `10` | S3 | 期限経過とみなすまでの猶予（時計ずれ吸収） |
+| `[tradeSetting]` | `trigger_time_01` | `06:30`（**変更しない**） | F30 | 買い注文ジョブ群(12本)。既定値フォールバックのみ追加 |
+| `[tradeSetting]` | `trigger_time_02` | `06:45`（**変更しない**） | F30 | `sendResultsJob`。既定値フォールバックのみ追加 |
+| `[tradeSetting]` | `trigger_time_03` | `18:00`（**変更しない**） | F30 | `savePriceHistoryJob`（夕）。既定値フォールバックのみ追加 |
+| `[tradeSetting]` | `trigger_time_04` | `06:00`（**変更しない**） | F30 | `savePriceHistoryJob`（朝）。既定値フォールバックのみ追加 |
 | `[tradeSetting]` | `trigger_time_05` | `05:30` | S4 | ローリングジョブ |
 | `[tradeSetting]` | `trigger_time_06` | `06:05` | S3 | 失効 sweep ジョブ |
 | `[tradeSetting]` | `trigger_time_07` | `06:15` | S7 | リコンサイルジョブ |
@@ -542,7 +546,9 @@ func ParseBitflyerTime(s string) (time.Time, error)
 
 `private_config.ini` への追加は**なし**。手動保有マーカーは設定ではなく Go の定数 `models.RemarkManualHold` として持つ（§4.2）。
 
-`trigger_time_03` / `trigger_time_04` および `config.go` の `TriggerTime03` / `TriggerTime04` は**変更しない**（価格履歴は1日2回記録のまま据え置き）。
+`trigger_time_01` 〜 `trigger_time_04` の**時刻そのものは変更しない**（買い注文 06:30 / 日次レポート 06:45 / 価格履歴は 06:00・18:00 の1日2回のまま据え置き）。F30-1 で追加したのは `NormalizeTriggerTime()` による既定値フォールバックだけで、既定値は現行値と同一のため正常設定時の挙動は一切変わらない。
+
+この4キーは既定値を持たず素の `.String()` で読まれていたため、**キーが無い・値が壊れていると空文字が入り、警告もエラーも出ないまま該当ジョブが二度と発火しない**状態になり得た。特に `trigger_time_01` は買い注文ジョブ12本を巻き添えにし、発注が完全に停止する。デプロイ時に Pi 上の `config.ini` を編集する運用があるため、編集ミスがこの形で無言化しないよう `05`〜`09` と同じ流儀に揃えた。
 
 #### 4.4.1 `buy_order_cancel_days` と `buy_minute_to_expire` の関係（F5・確定方針）
 

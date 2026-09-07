@@ -65,6 +65,10 @@ func TestNormalizeTriggerTime(t *testing.T) {
 */
 func TestDefaultTriggerTimesAreValid(t *testing.T) {
 	defaults := map[string]string{
+		"DefaultTriggerTime01": DefaultTriggerTime01,
+		"DefaultTriggerTime02": DefaultTriggerTime02,
+		"DefaultTriggerTime03": DefaultTriggerTime03,
+		"DefaultTriggerTime04": DefaultTriggerTime04,
 		"DefaultTriggerTime05": DefaultTriggerTime05,
 		"DefaultTriggerTime06": DefaultTriggerTime06,
 		"DefaultTriggerTime07": DefaultTriggerTime07,
@@ -123,5 +127,112 @@ trigger_time_09= # 値なし
 	got = NormalizeTriggerTime(section.Key("trigger_time_99").String(), DefaultTriggerTime08)
 	if got != DefaultTriggerTime08 {
 		t.Errorf("未定義キーは既定値になること: got=%q want=%q", got, DefaultTriggerTime08)
+	}
+}
+
+/*
+F30-1 のテスト。
+
+trigger_time_01〜04 は素の .String() で読まれており、キーが無い・値が壊れている場合に
+空文字が入っても、エラーにも警告にもならなかった。空文字は scheduler.At() で弾かれ、
+Run() は戻り値でしかエラーを返さないため、そのジョブが二度と発火しないまま
+プロセスは正常に動き続ける。特に trigger_time_01 は買い注文ジョブ12本を巻き添えにする。
+
+NormalizeTriggerTime() を 01〜04 にも通したことを、既定値の妥当性と
+「既定値が現行の config.ini と同一（＝挙動を変えない）」の2点で担保する。
+*/
+func TestDefaultTriggerTimes01To04MatchShippedConfig(t *testing.T) {
+	// 移行前の go/config.ini にあった値と一致していること（正常設定時の挙動を変えない）
+	want := map[string]string{
+		"DefaultTriggerTime01": "06:30",
+		"DefaultTriggerTime02": "06:45",
+		"DefaultTriggerTime03": "18:00",
+		"DefaultTriggerTime04": "06:00",
+	}
+	got := map[string]string{
+		"DefaultTriggerTime01": DefaultTriggerTime01,
+		"DefaultTriggerTime02": DefaultTriggerTime02,
+		"DefaultTriggerTime03": DefaultTriggerTime03,
+		"DefaultTriggerTime04": DefaultTriggerTime04,
+	}
+	for name, w := range want {
+		if got[name] != w {
+			t.Errorf("%s = %q, want %q（既定値は移行前の config.ini と同一でなければならない）", name, got[name], w)
+		}
+	}
+}
+
+/*
+リグレッション: 実際に出荷している go/config.ini を読み、
+NormalizeTriggerTime() を通しても値が一切変わらないことを確認する。
+
+「フォールバックを足したせいで正常設定の時刻がずれた」という事故を防ぐためのテスト。
+*/
+func TestShippedConfigTriggerTimesArePassedThrough(t *testing.T) {
+	cfg, err := ini.Load(filepath.Join("..", ConfigPath))
+	if err != nil {
+		t.Fatalf("failed to load go/config.ini: %v", err)
+	}
+	section := cfg.Section("tradeSetting")
+
+	cases := []struct {
+		key        string
+		defaultVal string
+	}{
+		{"trigger_time_01", DefaultTriggerTime01},
+		{"trigger_time_02", DefaultTriggerTime02},
+		{"trigger_time_03", DefaultTriggerTime03},
+		{"trigger_time_04", DefaultTriggerTime04},
+		{"trigger_time_05", DefaultTriggerTime05},
+		{"trigger_time_06", DefaultTriggerTime06},
+		{"trigger_time_07", DefaultTriggerTime07},
+		{"trigger_time_08", DefaultTriggerTime08},
+		{"trigger_time_09", DefaultTriggerTime09},
+	}
+	for _, c := range cases {
+		raw := section.Key(c.key).String()
+		if raw == "" {
+			t.Errorf("%s が go/config.ini に無い（既定値へ倒れてしまうため設定漏れ）", c.key)
+			continue
+		}
+		if got := NormalizeTriggerTime(raw, c.defaultVal); got != raw {
+			t.Errorf("%s: NormalizeTriggerTime(%q) = %q, want %q（正常設定は素通しでなければならない）", c.key, raw, got, raw)
+		}
+	}
+}
+
+/*
+リグレッション: trigger_time_01 のキーが欠けた config.ini でも、
+買い注文ジョブが既定値(06:30)で登録されること。デプロイ時の編集ミスで
+「買い注文が完全に停止する」状態にならないことを固定する。
+*/
+func TestTriggerTime01FallsBackWhenKeyMissing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+	content := `[tradeSetting]
+trigger_time_02=06:45
+trigger_time_03=18:00
+trigger_time_04=
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+	cfg, err := ini.Load(path)
+	if err != nil {
+		t.Fatalf("failed to load temp config: %v", err)
+	}
+	section := cfg.Section("tradeSetting")
+
+	// キー自体が存在しない → 既定値
+	if got := NormalizeTriggerTime(section.Key("trigger_time_01").String(), DefaultTriggerTime01); got != DefaultTriggerTime01 {
+		t.Errorf("trigger_time_01 未設定時は既定値になること: got=%q want=%q", got, DefaultTriggerTime01)
+	}
+	// 値が空 → 既定値
+	if got := NormalizeTriggerTime(section.Key("trigger_time_04").String(), DefaultTriggerTime04); got != DefaultTriggerTime04 {
+		t.Errorf("trigger_time_04 空値は既定値になること: got=%q want=%q", got, DefaultTriggerTime04)
+	}
+	// 有効値はそのまま
+	if got := NormalizeTriggerTime(section.Key("trigger_time_02").String(), DefaultTriggerTime02); got != "06:45" {
+		t.Errorf("trigger_time_02 有効値は素通しすること: got=%q want=%q", got, "06:45")
 	}
 }
