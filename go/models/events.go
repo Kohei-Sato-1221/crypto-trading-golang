@@ -304,11 +304,18 @@ func CalculateMinuteToExpire(strategy int) int {
 	return config.DefaultBuyMinuteToExpire // 10080min = 7days
 }
 
-// 約定済みかつ、売却の注文がない買い注文を取得する
-func CheckFilledBuyOrders() []BuyOrderInfo {
+/*
+CheckFilledBuyOrders は約定済みかつ売り注文がまだ無い買い注文を返す。
+
+以前は失敗時に nil を返すだけだったため、呼び出し元(placeSellOrder)が
+「売る対象なし」と解釈し、約定済み買い注文への売り注文発注が無言でスキップされていた。
+DBの読み取りに失敗したことと対象が0件であることを呼び出し元が区別できるよう、
+必ず error を返す（通知は app 層が行う）。
+*/
+func CheckFilledBuyOrders() ([]BuyOrderInfo, error) {
 	rows, err := AppDB.Query(`SELECT order_id, price, product_code, size, exchange, strategy FROM buy_orders WHERE status = 'FILLED' and order_id != ''`)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("CheckFilledBuyOrders: failed to query buy_orders: %w", err)
 	}
 	defer rows.Close()
 
@@ -322,14 +329,16 @@ func CheckFilledBuyOrders() []BuyOrderInfo {
 		var strategy int
 
 		if err := rows.Scan(&order_id, &price, &product_code, &size, &exchange, &strategy); err != nil {
-			log.Println("Failure to get records.....")
-			return nil
+			return nil, fmt.Errorf("CheckFilledBuyOrders: failed to scan buy_orders (scanned:%d): %w", len(buyOrderInfos), err)
 		}
 		// strategy はSELECTした値を必ず代入する（代入漏れがあると CalculateSellOrderPrice() の戦略分岐が働かない）
 		buyOrderInfo := BuyOrderInfo{OrderID: order_id, Price: price, ProductCode: product_code, Size: size, Exchange: exchange, Strategy: strategy}
 		buyOrderInfos = append(buyOrderInfos, buyOrderInfo)
 	}
-	return buyOrderInfos
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("CheckFilledBuyOrders: failed to iterate buy_orders (scanned:%d): %w", len(buyOrderInfos), err)
+	}
+	return buyOrderInfos, nil
 }
 
 func UpdateFilledOrder(order_id string) error {
@@ -380,7 +389,38 @@ func UpdateFilledOrderWithBuyOrder(order_id string) error {
 	return nil
 }
 
-func SyncBuyOrders(events *[]OrderEvent) {
+/*
+SyncBuyOrderFailure は SyncBuyOrders 内で発生した1件ぶんの失敗。
+
+以前はログ出力のみだったため、取引所で発注済みの注文がDBに記録されないまま
+（あるいは expire_date が入らないまま）無言で進んでいた。
+Slack通知に必要なコンテキストを持たせ、通知は app 層(syncBuyOrders)が行う。
+*/
+type SyncBuyOrderFailure struct {
+	Operation   string // "count" / "insert" / "expire_date"
+	OrderID     string
+	ProductCode string
+	Side        string
+	Price       float64
+	Size        float64
+	Strategy    int
+	Err         error
+}
+
+// Error は failure 1件ぶんの説明文を返す（Slack通知の本文にそのまま載せる）。
+func (f SyncBuyOrderFailure) Error() string {
+	return fmt.Sprintf("op:%s OrderID:%s ProductCode:%s Side:%s Price:%.2f Size:%v Strategy:%v err:%v",
+		f.Operation, f.OrderID, f.ProductCode, f.Side, f.Price, f.Size, f.Strategy, f.Err)
+}
+
+/*
+SyncBuyOrders は取引所から取得した注文をDBへ取り込む。
+
+1件の失敗で全体を止めないため、失敗しても後続のイベントの処理は継続し、
+発生した失敗をまとめて返す。呼び出し元は返り値が空でなければSlackへ通知すること。
+*/
+func SyncBuyOrders(events *[]OrderEvent) []SyncBuyOrderFailure {
+	var failures []SyncBuyOrderFailure
 	var countQuery, insertQuery string
 	if database.CurrentDriver() == "postgres" {
 		countQuery = `SELECT COUNT(*) FROM buy_orders WHERE order_id = $1`
@@ -395,6 +435,9 @@ func SyncBuyOrders(events *[]OrderEvent) {
 		err := AppDB.QueryRow(countQuery, e.OrderID).Scan(&cnt)
 		if err != nil {
 			log.Printf("[ERROR] SyncBuyOrders count query: %v", err)
+			failures = append(failures, SyncBuyOrderFailure{
+				Operation: "count", OrderID: e.OrderID, ProductCode: e.ProductCode, Side: e.Side,
+				Price: e.Price, Size: e.Size, Strategy: e.Strategy, Err: err})
 			continue
 		}
 		if cnt == 0 {
@@ -411,6 +454,9 @@ func SyncBuyOrders(events *[]OrderEvent) {
 			_, err := AppDB.Exec(insertQuery, e.OrderID, e.ProductCode, e.Side, e.Price, e.Size, e.Exchange, status, RemarkPlacedManually, strategy, e.expireDateValue())
 			if err != nil {
 				log.Printf("Failure to do SyncBuyOrders..... order_id:%v strategy:%v err:%v", e.OrderID, strategy, err)
+				failures = append(failures, SyncBuyOrderFailure{
+					Operation: "insert", OrderID: e.OrderID, ProductCode: e.ProductCode, Side: e.Side,
+					Price: e.Price, Size: e.Size, Strategy: strategy, Err: err})
 			} else {
 				log.Printf("order_id %v has been newly inserted! strategy:%v expire_date(UTC):%s",
 					e.OrderID, strategy, formatExpireDate(e.ExpireDate))
@@ -421,9 +467,13 @@ func SyncBuyOrders(events *[]OrderEvent) {
 		if e.ExpireDate != nil {
 			if err := UpdateOrderExpireDate(TableBuyOrders, e.OrderID, *e.ExpireDate); err != nil {
 				log.Printf("[ERROR] SyncBuyOrders failed to update expire_date. order_id:%v err:%v", e.OrderID, err)
+				failures = append(failures, SyncBuyOrderFailure{
+					Operation: "expire_date", OrderID: e.OrderID, ProductCode: e.ProductCode, Side: e.Side,
+					Price: e.Price, Size: e.Size, Strategy: e.Strategy, Err: err})
 			}
 		}
 	}
+	return failures
 }
 
 // 過去3日分の利益を取得する関数

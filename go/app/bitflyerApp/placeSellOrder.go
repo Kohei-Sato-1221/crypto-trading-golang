@@ -12,8 +12,17 @@ import (
 
 func placeSellOrder(apiClient *bitflyer.APIClient) {
 	log.Println("【sellOrderjob】start of job")
-	buyOrderInfos := models.CheckFilledBuyOrders()
-	if buyOrderInfos == nil {
+	// DBの読み取り失敗と「対象が0件」を区別する。
+	// 以前は失敗時も nil が返るため「売る対象なし」と解釈され、
+	// 約定済み買い注文への売り注文発注が無言でスキップされていた
+	buyOrderInfos, err := models.CheckFilledBuyOrders()
+	if err != nil {
+		errMsg := fmt.Sprintf("🚨【sellOrderjob】約定済み買い注文の取得に失敗したため売り注文を発注しません: %v", err)
+		log.Println(errMsg)
+		slackClient.PostMessage(errMsg, true)
+		return
+	}
+	if len(buyOrderInfos) == 0 {
 		log.Println("【sellOrderjob】 : No order ids ")
 		return
 	}

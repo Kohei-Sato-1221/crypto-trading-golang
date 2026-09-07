@@ -1,13 +1,18 @@
 package bitflyerApp
 
 import (
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/utils"
 )
+
+// syncFailureSampleSize は取り込み失敗のSlack通知に載せる明細の最大件数。
+const syncFailureSampleSize = 10
 
 /*
 parseOrderExpireDate は取引所APIが返す expire_date をUTCのtime.Timeにパースして返す。
@@ -39,6 +44,35 @@ func logSyncedOrder(event models.OrderEvent) {
 	}
 	log.Printf("【order】order_id:%s product_code:%s side:%s price:%10.2f size:%v status:%s expire_date(UTC):%s",
 		event.OrderID, event.ProductCode, event.Side, event.Price, event.Size, event.Status, expire)
+}
+
+/*
+formatSyncBuyOrderFailures は SyncBuyOrders の失敗をSlack通知用の1通にまとめる。
+
+失敗が無ければ空文字を返す（通知しない）。
+INSERT失敗はボットが発注した注文の記録が落ちたまま進むこと、expire_date の更新失敗は
+失効検出が効かなくなることを意味するため、OrderID / Price / Size / Strategy を必ず本文に含める。
+恒常的に失敗している場合に通知が件数ぶん飛ばないよう、1通へ集約したうえで
+先頭 syncFailureSampleSize 件のみ明細を載せる。
+*/
+func formatSyncBuyOrderFailures(productCode string, failures []models.SyncBuyOrderFailure) string {
+	if len(failures) == 0 {
+		return ""
+	}
+	details := make([]string, 0, len(failures))
+	for i, failure := range failures {
+		if i >= syncFailureSampleSize {
+			break
+		}
+		details = append(details, failure.Error())
+	}
+	suffix := ""
+	if len(failures) > syncFailureSampleSize {
+		suffix = fmt.Sprintf("\n...他%d件", len(failures)-syncFailureSampleSize)
+	}
+	return fmt.Sprintf("🚨【syncBuyOrders】注文の取り込みに失敗しました product_code:%s %d件\n%s%s\n"+
+		"※取引所には注文が存在するがDBに記録されていない可能性があります（要手動確認）",
+		productCode, len(failures), strings.Join(details, "\n"), suffix)
 }
 
 func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
@@ -106,5 +140,9 @@ func syncBuyOrders(product_code string, apiClient *bitflyer.APIClient) {
 			logSyncedOrder(event)
 		}
 	}
-	models.SyncBuyOrders(&orderEvents)
+	failures := models.SyncBuyOrders(&orderEvents)
+	if msg := formatSyncBuyOrderFailures(product_code, failures); msg != "" {
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
+	}
 }

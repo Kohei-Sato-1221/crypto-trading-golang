@@ -610,6 +610,8 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | `placeBuyOrder` | buy 側スロット枯渇でスキップ | エラー | `🚨【buyingJob】発注スキップ: 未約定buy {n}/{max_buy}（上限到達）未約定sell {m}/{max_sell}` |
 | `placeBuyOrder` | sell 側スロット超過（**発注は続行**） | エラー | `🚨【buyingJob】売り注文が上限超過: 未約定sell {m}/{max_sell}。発注は続行します。JPY残高の歯止め(budget_criteria)を確認してください` |
 | `placeSellOrder` | 個別失敗 | エラー | 既存の本文を維持しつつ `break` → `continue`。末尾に `成功:{M}/{N}` のサマリを追加 |
+| `placeSellOrder` | 約定済み買い注文の取得失敗 | エラー | `🚨【sellOrderjob】約定済み買い注文の取得に失敗したため売り注文を発注しません: {err}`<br>※`CheckFilledBuyOrders()` は「0件」と「読み取り失敗」を区別できるよう `([]BuyOrderInfo, error)` を返す。以前は失敗時も nil を返し、売り注文の発注が無言でスキップされていた（F9） |
+| `syncBuyOrders` | 取り込み失敗（count / insert / expire_date） | エラー | `🚨【syncBuyOrders】注文の取り込みに失敗しました product_code:{pc} {N}件` ＋ 明細（`op` / OrderID / ProductCode / Side / Price / Size / Strategy / err）を先頭10件<br>※`models.SyncBuyOrders()` は失敗を `[]SyncBuyOrderFailure` で返し、通知は app 層で行う（F9） |
 | `cancelBuyOrderJob` | `timestamp` を解釈できず判定を見送り | エラー | `🚨【cancelBuyOrderJob】timestamp を解釈できず判定を見送った買い注文が {N}件あります: order_ids=[...]。キャンセルしない側に倒しています` |
 
 ### 6.3 リトライ方針
