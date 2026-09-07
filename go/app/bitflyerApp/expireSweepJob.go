@@ -33,8 +33,9 @@ child_order_acceptance_id での個別照会でも取得できない）。その
     不完全な一覧で「一覧に無い＝失効」と判定すると実在する注文をCANCELLEDにしてしまう）。
   - 方式Bでは、COMPLETED一覧で遡れた最古の child_order_date より古いレコードを判定保留にし、
     件数と order_id をSlackへ通知する（遡り不足による誤判定を防ぐフェイルセーフ）。
-  - remarks に models.RemarkRolloverPending を含むレコードは対象外
-    （売り注文のローリング再試行待ちと競合させない）。
+  - remarks に models.RemarkRolloverPending を含むレコードは、ローリングがまだ再試行しうる間だけ対象外
+    （売り注文のローリング再試行待ちと競合させない）。ローリングの窓を過ぎたレコードは
+    どのジョブにも拾われず恒久的に滞留してしまうため、除外を解いて本ジョブがCANCELLEDにする。
   - 売り注文が失効した場合も親の買い注文のステータスは戻さない（自動再発注は行わない）。
     現物は保有されたままになるため、Slack通知のうえユーザーが手動で対応する。
 */
@@ -72,6 +73,18 @@ type expireSweepSummary struct {
 	pendingIDs    []string
 	skippedActive int
 	errors        int
+}
+
+/*
+expireSweepRolloverRetryAfter は「ローリングがまだ再試行しうる」timestamp の下限(UTC)を返す。
+
+expire_date が NULL の旧レコードに対する models.GetSellOrdersToRollover の抽出下限
+（timestamp > now - (fallbackDays + daysBefore) 日）と同じ値を使い、
+sweep(方式B)が再発注待ちレコードを横取りしないようにする。
+この境界より古いレコードはローリングが二度と対象にしないため、sweep の担当に移す。
+*/
+func expireSweepRolloverRetryAfter(now time.Time) time.Time {
+	return now.UTC().AddDate(0, 0, -(rolloverFallbackDays() + rolloverDaysBeforeExpire()))
 }
 
 // expireSweepGrace は失効とみなすまでの猶予時間を返す。
@@ -161,9 +174,14 @@ func cancelSweptOrder(record models.OrderRecord, method string, now time.Time, s
 
 	if record.Table == models.TableSellOrders {
 		summary.cancelledSell++
-		msg := fmt.Sprintf("🚨🚨【expireSweep】売り注文が失効しました: OrderID=%s ParentID=%s %s price=%.2f size=%v。"+
+		// ローリングの再発注に失敗し続けた末の失効は、原因が分かるよう本文に明示する
+		cause := ""
+		if strings.Contains(record.Remarks, models.RemarkRolloverPending) {
+			cause = fmt.Sprintf("（%s 付き: ローリングの再発注に失敗したまま期限を過ぎました）", models.RemarkRolloverPending)
+		}
+		msg := fmt.Sprintf("🚨🚨【expireSweep】売り注文が失効しました: OrderID=%s ParentID=%s %s price=%.2f size=%v%s。"+
 			"現物は保有されたままです。親買い注文は %s のまま維持します。手動での対応をお願いします",
-			record.OrderID, record.ParentID, record.ProductCode, record.Price, record.Size,
+			record.OrderID, record.ParentID, record.ProductCode, record.Price, record.Size, cause,
 			models.OrderStatusFilledSellOrderPlaced)
 		log.Println(msg)
 		slackClient.PostMessage(msg, true)
@@ -228,16 +246,20 @@ sweepOrdersWithoutExpireDate は方式B（一覧からの消滅）で失効レ�
 expire_date が未設定の旧レコードのみを対象とし、ACTIVE / COMPLETED のどちらの一覧にも
 存在しない場合に失効とみなす。ただしCOMPLETED一覧で遡れた最古の child_order_date より
 古いレコードは、遡り範囲外にある約定済み注文を誤って失効と判定しうるため判定保留にする。
+
+models.RemarkRolloverPending 付きのレコードは、ローリングがまだ再試行しうる間
+（timestamp が rolloverRetryAfter より新しい間）だけ抽出対象から外れる。
 */
 func sweepOrdersWithoutExpireDate(table models.OrderTable, now time.Time,
 	indexes map[string]*exchangeOrderIndex, summary *expireSweepSummary) {
 
+	rolloverRetryAfter := expireSweepRolloverRetryAfter(now)
 	for _, productCode := range expireSweepProductCodes {
 		index, ok := indexes[productCode]
 		if !ok {
 			continue
 		}
-		records, err := models.GetUnfilledOrdersWithoutExpireDate(table, productCode, expireSweepMaxRecords)
+		records, err := models.GetUnfilledOrdersWithoutExpireDate(table, productCode, rolloverRetryAfter, expireSweepMaxRecords)
 		if err != nil {
 			summary.errors++
 			msg := fmt.Sprintf("🚨【expireSweep】expire_date未設定レコードの取得に失敗: table=%s product_code=%s err=%v",
@@ -246,7 +268,8 @@ func sweepOrdersWithoutExpireDate(table models.OrderTable, now time.Time,
 			slackClient.PostMessage(msg, true)
 			continue
 		}
-		log.Printf("【expireSweep】方式B table:%s product_code:%s 対象候補:%d件", table, productCode, len(records))
+		log.Printf("【expireSweep】方式B table:%s product_code:%s 対象候補:%d件 rolloverRetryAfter(UTC):%s",
+			table, productCode, len(records), rolloverRetryAfter.Format(time.RFC3339))
 
 		for _, record := range records {
 			if index.completedIDs[record.OrderID] {

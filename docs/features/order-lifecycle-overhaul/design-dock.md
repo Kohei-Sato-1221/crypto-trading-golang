@@ -390,11 +390,16 @@ const (
 func UpdateOrderExpireDate(table OrderTable, orderID string, expireDate time.Time) error
 
 // GetExpiredUnfilledOrders は expire_date が (now - grace) を過ぎた UNFILLED レコードを返す。
-// remarks に RemarkRolloverPending を含むレコードは除外する（ローリング再試行との競合防止）。
+// RemarkRolloverPending は除外しない。ローリングの窓（expire_date > now）とこのクエリの窓
+// （expire_date < now - grace）は排他であり、除外すると「キャンセル成功・再発注失敗のまま
+// 期限を過ぎたレコード」がどのジョブにも拾われず恒久的に滞留するため。
 func GetExpiredUnfilledOrders(table OrderTable, now time.Time, grace time.Duration, limit int) ([]OrderRecord, error)
 
 // GetUnfilledOrdersWithoutExpireDate は expire_date が NULL の UNFILLED レコードを返す（方式B用）。
-func GetUnfilledOrdersWithoutExpireDate(table OrderTable, productCode string, limit int) ([]OrderRecord, error)
+// rolloverRetryAfter は「ローリングがまだ再試行しうる」timestamp の下限（= now - (fallbackDays + daysBefore) 日）。
+// RemarkRolloverPending 付きレコードはこの境界より新しい間だけ除外し、
+// 境界より古くなれば除外を解いて sweep の担当に移す（恒久滞留の防止）。
+func GetUnfilledOrdersWithoutExpireDate(table OrderTable, productCode string, rolloverRetryAfter time.Time, limit int) ([]OrderRecord, error)
 
 // MarkOrderCancelledWithRemark は status を CANCELLED にし、remarks に追記する。
 func MarkOrderCancelledWithRemark(table OrderTable, orderID, remark string) error
@@ -593,7 +598,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | `rolloverSellOrderJob` | **キャンセル成功・再発注失敗** | エラー | `🚨🚨【rolloverSellOrder】裸の保有が発生: OldOrderID={id} ParentID={pid} {product_code} price={p} size={s} err={err} → DBは変更せず次回リトライします` |
 | `rolloverSellOrderJob` | キャンセル失敗 | エラー | `🚨【rolloverSellOrder】CancelOrder 失敗: OrderID={id} {product_code} price={p} size={s} err={err}` |
 | `rolloverSellOrderJob` | キャンセル後に COMPLETED を検出 | 通常 | `【rolloverSellOrder】キャンセル直前に約定: OrderID={id} → FILLED に更新（再発注せず）` |
-| `expireSweepJob` | ローリング失敗の末に売り注文が失効 | エラー | `🚨🚨【expireSweep】売り注文が失効しました: OrderID={id} ParentID={pid} {product_code} price={p} size={s}。現物は保有されたままです。親買い注文は FILLED(SELL ORDER PLACED) のまま維持します。手動での対応をお願いします` |
+| `expireSweepJob` | ローリング失敗の末に売り注文が失効 | エラー | `🚨🚨【expireSweep】売り注文が失効しました: OrderID={id} ParentID={pid} {product_code} price={p} size={s}（[ROLLOVER_PENDING] 付き: ローリングの再発注に失敗したまま期限を過ぎました）。現物は保有されたままです。親買い注文は FILLED(SELL ORDER PLACED) のまま維持します。手動での対応をお願いします`<br>※ `[ROLLOVER_PENDING]` 付きレコードもローリングの窓を過ぎれば sweep の対象になるため、この通知は必ず発火する |
 | `reconcileJob` | 乖離検出 | エラー | `🚨【reconcile】DBのみ UNFILLED:{N}件 / 取引所のみ ACTIVE:{M}件 / 残高乖離 BTC:{d1} ETH:{d2}` ＋ 代表 order_id 10件 |
 | `reconcileJob` | 発注ゼロ検知 | エラー | `🚨【reconcile】ボットの買い注文が {N}日間 0件です。最終発注: {ts}` |
 | `reconcileJob` | 正常 | 通常 | `【reconcile】OK 未約定buy:{n}/{max_buy} 未約定sell:{m}/{max_sell} 残高乖離なし（手動保有 BTC:{x} ETH:{y} を除く）` |
@@ -631,7 +636,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 
 3日間のリトライ機会をすべて失敗し、売り注文が失効した場合:
 
-- `expireSweepJob` が該当の `sell_orders` レコードを `CANCELLED` にする。
+- `expireSweepJob` が該当の `sell_orders` レコードを `CANCELLED` にする。`[ROLLOVER_PENDING]` マーカーによる sweep の除外は「ローリングがまだ再試行しうる間」に限定されており、期限（または `expire_date` が NULL の旧レコードでは想定寿命30日）を過ぎたレコードは必ず sweep が回収する。
 - **親買い注文は `FILLED(SELL ORDER PLACED)` のまま維持し、`FILLED` に戻さない。**
 - **自動での売り注文の再発注は行わない。**
 - Slack に上記 §6.2 の「売り注文が失効しました」通知を出し、**ユーザーが手動で対応する**。

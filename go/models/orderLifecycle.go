@@ -92,9 +92,11 @@ const (
 	/*
 		RemarkRolloverPending は「キャンセルは成功したが再発注に失敗した」売り注文のマーカー。
 
-		このマーカーが付いたレコードは expireSweepJob の対象から除外する。
-		ローリング(rolloverSellOrderJob)の再試行と失効sweepが競合し、
-		再発注待ちのレコードを勝手にCANCELLEDへ落としてしまうのを防ぐため。
+		ローリング(rolloverSellOrderJob)がまだ再試行しうる間だけ expireSweepJob の対象から除外する。
+		再試行と失効sweepが競合し、再発注待ちのレコードを勝手にCANCELLEDへ落とすのを防ぐため。
+		ローリングの窓を過ぎたレコードは除外を解いて sweep の担当に移す
+		（除外したままにするとどのジョブにも拾われず恒久的に滞留するため。
+		詳細は GetExpiredUnfilledOrders / GetUnfilledOrdersWithoutExpireDate のコメントを参照）。
 	*/
 	RemarkRolloverPending = "[ROLLOVER_PENDING]"
 )
@@ -227,8 +229,16 @@ GetExpiredUnfilledOrders は有効期限を過ぎた未約定レコードを返�
     → 手動保有へ移管した130レコード(status='CANCELLED' / 'FILLED(SELL ORDER PLACED)')は構造的に対象外
   - expire_date IS NOT NULL かつ expire_date < (now - grace)
     → grace は時計ずれを吸収する猶予時間
-  - remarks に RemarkRolloverPending を含まない
-    → ローリングの再発注待ちレコードとの競合を防ぐ
+
+RemarkRolloverPending が付いたレコードを除外してはならない。
+ローリングの抽出条件(GetSellOrdersToRollover)は expire_date > now という下限を持つため、
+期限を過ぎたレコードはそもそもローリングの対象にならない。ここで併せて除外すると
+「キャンセル成功・再発注失敗のまま期限を過ぎたレコード」がどのジョブにも拾われず、
+status='UNFILLED' のまま恒久的に滞留してスロットを食い潰す（2026-05の障害と同じ構造）。
+本クエリの窓(expire_date < now - grace)とローリングの窓(expire_date > now)は
+排他なので、除外しなくても再発注待ちレコードと競合しない。
+（expire_date が NULL の旧レコードについては窓が重なりうるため、
+GetUnfilledOrdersWithoutExpireDate 側で rolloverRetryAfter による切り分けを行う）
 
 now はUTCへ正規化して比較する。limit は一度に処理する件数の安全弁。
 */
@@ -246,17 +256,15 @@ func GetExpiredUnfilledOrders(table OrderTable, now time.Time, grace time.Durati
 		query = fmt.Sprintf(`SELECT %s FROM %s
 			WHERE status = 'UNFILLED' AND order_id <> ''
 			  AND expire_date IS NOT NULL AND expire_date < $1
-			  AND (remarks IS NULL OR remarks NOT LIKE $2)
-			ORDER BY expire_date LIMIT $3`, orderRecordColumns(table), table)
+			ORDER BY expire_date LIMIT $2`, orderRecordColumns(table), table)
 	} else {
 		query = fmt.Sprintf(`SELECT %s FROM %s
 			WHERE status = 'UNFILLED' AND order_id <> ''
 			  AND expire_date IS NOT NULL AND expire_date < ?
-			  AND (remarks IS NULL OR remarks NOT LIKE ?)
 			ORDER BY expire_date LIMIT ?`, orderRecordColumns(table), table)
 	}
 
-	rows, err := AppDB.Query(query, threshold, rolloverPendingLikePattern, limit)
+	rows, err := AppDB.Query(query, threshold, limit)
 	if err != nil {
 		log.Printf("[ERROR] GetExpiredUnfilledOrders table:%s threshold(UTC):%s err:%v",
 			table, threshold.Format(time.RFC3339), err)
@@ -271,9 +279,19 @@ GetUnfilledOrdersWithoutExpireDate は expire_date が未設定の未約定レ�
 
 expire_date カラム追加より前に取り込まれた旧レコードの救済に使う。
 呼び出し側は取引所のACTIVE/COMPLETED一覧と突合し、どちらにも存在しないものだけを失効とみなすこと。
-RemarkRolloverPending が付いたレコードは方式Aと同様に除外する。
+
+rolloverRetryAfter は「ローリングがまだ再試行しうる」timestamp の下限(UTC)。
+expire_date が NULL のレコードに対するローリングの抽出条件は
+timestamp > now - (fallbackDays + daysBefore) 日 なので、同じ値を渡すこと。
+RemarkRolloverPending が付いたレコードは、この境界より新しい間だけ除外する
+（再発注待ちのレコードを sweep が勝手にCANCELLEDへ落とすのを防ぐため）。
+境界より古くなればローリングは二度と対象にしないため、除外を解いて sweep の担当に移す。
+除外したままにすると、キャンセル成功・再発注失敗のレコードがどのジョブにも拾われず
+status='UNFILLED' のまま恒久的に滞留する。ゼロ値を渡した場合は全期間で除外する（従来動作）。
 */
-func GetUnfilledOrdersWithoutExpireDate(table OrderTable, productCode string, limit int) ([]OrderRecord, error) {
+func GetUnfilledOrdersWithoutExpireDate(table OrderTable, productCode string,
+	rolloverRetryAfter time.Time, limit int) ([]OrderRecord, error) {
+
 	if !table.isValid() {
 		return nil, fmt.Errorf("GetUnfilledOrdersWithoutExpireDate: invalid table: %s", table)
 	}
@@ -283,25 +301,27 @@ func GetUnfilledOrdersWithoutExpireDate(table OrderTable, productCode string, li
 	if limit <= 0 {
 		return nil, fmt.Errorf("GetUnfilledOrdersWithoutExpireDate: invalid limit: %d", limit)
 	}
+	retryAfter := rolloverRetryAfter.UTC()
 
 	var query string
 	if database.CurrentDriver() == "postgres" {
 		query = fmt.Sprintf(`SELECT %s FROM %s
 			WHERE status = 'UNFILLED' AND order_id <> ''
 			  AND expire_date IS NULL AND product_code = $1
-			  AND (remarks IS NULL OR remarks NOT LIKE $2)
-			ORDER BY timestamp LIMIT $3`, orderRecordColumns(table), table)
+			  AND (remarks IS NULL OR remarks NOT LIKE $2 OR timestamp <= $3)
+			ORDER BY timestamp LIMIT $4`, orderRecordColumns(table), table)
 	} else {
 		query = fmt.Sprintf(`SELECT %s FROM %s
 			WHERE status = 'UNFILLED' AND order_id <> ''
 			  AND expire_date IS NULL AND product_code = ?
-			  AND (remarks IS NULL OR remarks NOT LIKE ?)
+			  AND (remarks IS NULL OR remarks NOT LIKE ? OR timestamp <= ?)
 			ORDER BY timestamp LIMIT ?`, orderRecordColumns(table), table)
 	}
 
-	rows, err := AppDB.Query(query, productCode, rolloverPendingLikePattern, limit)
+	rows, err := AppDB.Query(query, productCode, rolloverPendingLikePattern, retryAfter, limit)
 	if err != nil {
-		log.Printf("[ERROR] GetUnfilledOrdersWithoutExpireDate table:%s product_code:%s err:%v", table, productCode, err)
+		log.Printf("[ERROR] GetUnfilledOrdersWithoutExpireDate table:%s product_code:%s rolloverRetryAfter(UTC):%s err:%v",
+			table, productCode, retryAfter.Format(time.RFC3339), err)
 		return nil, err
 	}
 	defer rows.Close()

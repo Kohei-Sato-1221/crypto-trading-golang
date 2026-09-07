@@ -195,7 +195,8 @@ func TestAppendOrderRemark(t *testing.T) {
 	}
 
 	// マーカー付きレコードは expireSweep(方式B) の対象から外れる
-	recs, err := models.GetUnfilledOrdersWithoutExpireDate(models.TableSellOrders, "BTC_JPY", 10)
+	// ローリングがまだ再試行しうる窓の内側（timestamp=now）なので sweep からは外れる
+	recs, err := models.GetUnfilledOrdersWithoutExpireDate(models.TableSellOrders, "BTC_JPY", now.AddDate(0, 0, -30), 10)
 	if err != nil {
 		t.Fatalf("GetUnfilledOrdersWithoutExpireDate failed: %v", err)
 	}
