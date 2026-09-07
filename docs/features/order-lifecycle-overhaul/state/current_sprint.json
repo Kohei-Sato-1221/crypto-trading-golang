@@ -1,15 +1,14 @@
 {
-  "sprint_number": 7,
-  "phase": "Phase 3 コードレビュー指摘の修正（バッチC: F5 / F14 / F26）",
+  "sprint_number": 8,
+  "phase": "Phase 3 追加対応（F30: スケジュール登録の無言失敗を防ぐ・ユーザー指示による追加）",
   "status": "completed",
   "scope": [
     "go",
     "docs"
   ],
   "features_implemented": [
-    "F5: cancelBuyOrderJob が構造上1件もキャンセルできない問題への方針確定（提案(b)採用）と、設定値の整合を毎回点検してログに残す仕掛けの追加",
-    "F14: service.go にハードコードされていた \"22:45\"（cancelBuyOrderJob）/ \"01:20\"（gracefulShutdown）を trigger_time_08 / trigger_time_09 として config 化。不正値・未設定は既定値へフォールバック",
-    "F26: 未使用になった utils.BfCancelCriteria の撤去（OkexCancelCriteria / OkjCancelCriteria は使用中のため存置）"
+    "F30-1: trigger_time_01〜04 に NormalizeTriggerTime() による既定値フォールバックを追加。DefaultTriggerTime01〜04（06:30 / 06:45 / 18:00 / 06:00）は現行 config.ini と同一値のため正常設定時の挙動は不変",
+    "F30-2: jobRegistry を追加し、service.go の全スケジュール登録（Every().Day().At() 系・Every(N).Seconds() 系の両方）で Run() の戻り値を検査。登録失敗を集約し起動時に1通のSlackエラー通知を出す"
   ],
   "verify_commands": [
     "make build",
@@ -19,61 +18,59 @@
   ],
   "verify_results": {
     "build": "OK",
-    "vet": "OK（go vet ./... の指摘0件。バッチB終了時の状態を維持）",
+    "vet": "OK（go vet ./... の指摘0件。ベースラインを維持）",
     "gofmt": "OK（gofmt -l . は okex/okex.go のみ。ベースラインで今回未変更）",
-    "existing_tests": "OK（make test: top-level 79 PASS / FAIL 0。バッチB終了時の72件をすべて維持し +7件を追加）",
-    "readonly_api_checks": "今回は参照系APIの新規実行なし。F5 は設定値と decideCancelBuyOrder の関係、F14 は時刻文字列の検証で、いずれも純粋関数のユニットテストで裏を取れる範囲だった"
+    "existing_tests": "OK（make test: top-level 86 PASS / FAIL 0。バッチC終了時の79件をすべて維持し +7件を追加）",
+    "readonly_api_checks": "今回は参照系APIの新規実行なし。carlescere/scheduler v0.0.0-20170109141437 のソース（Job.At / Job.Run / parseTime）を直接読み、At() が Job.err に格納するだけであること・Run() が (*Job, error) を返すことをコードで確認した"
   },
   "changes": {
     "files_created": [
-      "go/config/triggerTime.go",
-      "go/config/triggerTime_test.go",
-      "go/app/bitflyerApp/cancelBuyOrderConfig_test.go"
+      "go/app/bitflyerApp/jobRegistry.go",
+      "go/app/bitflyerApp/jobRegistry_test.go"
     ],
     "files_modified": [
-      "go/app/bitflyerApp/cancelBuyOrderJob.go",
-      "go/app/bitflyerApp/service.go",
       "go/config/config.go",
+      "go/config/triggerTime.go",
+      "go/config/triggerTime_test.go",
       "go/config.ini",
-      "go/utils/util.go",
-      "docs/features/order-lifecycle-overhaul/design-dock.md",
-      "docs/features/order-lifecycle-overhaul/spec.md"
+      "go/app/bitflyerApp/service.go",
+      "docs/features/order-lifecycle-overhaul/design-dock.md"
     ]
   },
   "commits": [
-    "d2b8051 fix: F5 cancelBuyOrderJob が構造上キャンセルできない問題を解消",
-    "9ab6dbc fix: F14 service.go にハードコードされたジョブ実行時刻を config 化",
-    "312bf74 fix: F26 未使用になった utils.BfCancelCriteria を撤去する"
+    "c391d99 fix: F30-1 trigger_time_01〜04 に既定値フォールバックを追加",
+    "67c5e9a fix: F30-2 スケジュール登録の失敗を検知して起動時にSlack通知する"
   ],
   "design_decisions": [
     {
-      "finding": "F5",
-      "adopted": "提案(b)『期限切れは sweep 任せ』を確定方針として採用。buy_order_cancel_days は 7 のまま変更しない",
-      "rejected": "提案(a) buy_order_cancel_days を 5 等へ短縮する案",
+      "finding": "F30-2",
+      "question": "スケジュール登録に失敗したとき、プロセスを落とすか",
+      "adopted": "落とさない。起動時に1通のSlackエラー通知とログを出し、登録できたジョブはそのまま動かし続ける",
+      "rejected": "os.Exit(1) によるフェイルファスト",
       "rationale": [
-        "買い注文の期限を 2.5日 → 7日 に延ばしたのは約定率を上げるため(S5)。7日より手前で能動キャンセルするとその狙いを直接削ぐ。(a) はレビュー指摘の解消と引き換えに S5 の意思決定を巻き戻すことになる",
-        "期限切れのスロット解放は expireSweepJob(06:05 JST)が翌朝に担保しており、能動キャンセルが発火しなくてもスロットは滞留しない。買い注文ジョブ(06:30 JST)より前に走るため発注判定時のスロット数も正しい",
-        "現行設定での cancelBuyOrderJob の役割を『① expire_date が NULL の旧レコードの掃除 ② buy_order_cancel_days を短くチューニングしたときの早期スロット解放』と再定義した"
+        "実行環境は systemd の Restart=always / RestartSec=10。設定ミスは再起動しても直らないため、落とすと10秒間隔の再起動ループになり、そのたびにSlack通知が飛んで逆に埋もれる",
+        "部分稼働のほうが安全側。trigger_time_02（損益レポート）だけが壊れた場合にプロセスを落とすと syncBuyOrders / filledCheck / placeSellOrder まで止まり、既に取引所に出ている買い注文が約定しても売り注文が発注されない。『レポートが来ない』より『建玉が放置される』ほうが損害が大きい",
+        "F30-1 で trigger_time_01〜09 はすべて NormalizeTriggerTime() を通って既定値へ倒れるため、設定由来の At() 失敗はそもそも起きない。残る失敗要因は Every(0) やチェーン誤りといった実装バグで、ビルド・テストで捕捉すべきもの",
+        "この仕掛けの目的は『止めること』ではなく『無言をやめること』にある"
       ],
-      "misconfiguration_guard": "純粋関数 cancelBuyOrderConfigNote(cancelDays, buyMinuteToExpire) を追加し、実行のたびにどちらのモードで動いているかを実効値つきでログ出力する。出荷設定では『旧レコードのみ対象』が常態で異常ではないため Slack 通知はしない（日次ノイズを増やさない）",
       "documented_in": [
-        "コミットメッセージ d2b8051",
-        "go/app/bitflyerApp/cancelBuyOrderJob.go 冒頭コメント（# buy_order_cancel_days と buy_minute_to_expire の関係）および cancelBuyOrderConfigNote の関数コメント",
-        "docs/features/order-lifecycle-overhaul/design-dock.md §4.4.1"
+        "コミットメッセージ 67c5e9a（## 設計判断: 登録失敗時にプロセスを落とさない）",
+        "go/app/bitflyerApp/jobRegistry.go の jobRegistry 型コメント（# 登録失敗時にプロセスを落とさない理由）",
+        "docs/features/order-lifecycle-overhaul/design-dock.md §5.2.1"
       ]
     }
   ],
   "self_evaluation": {
-    "acceptance_criteria": "OK（指摘3件すべてに対応。F4 は指示どおり除外し、バッチ外の指摘には手を付けていない）",
+    "acceptance_criteria": "OK（B-1 / B-2 の指示をすべて満たす。1修正=1コミットで2コミットに分割し、各コミットにユニットテストとリグレッションテストを同梱。各コミット前に make build / make test の通過を確認した）",
     "build_vet": "OK（build 成功、go vet 0件、gofmt はベースラインの okex/okex.go のみ）",
-    "regression": "OK（既存 top-level 72件をすべて維持。追加7件を含め79件 PASS）",
-    "claude_md_compliance": "OK（ジョブは1ファイル分離を維持／時刻比較は UTC／機密情報の追加なし／設定は既定値フォールバック付き）",
-    "trading_safety": "OK（発注・キャンセルのロジックは変更していない。F5 は方針の明文化とログ追加のみで判定式は不変。F14 の既定値は移行前のハードコード値と同一）",
-    "code_quality": "OK（判定を純粋関数に切り出しテスト可能にした。未使用コードを1件撤去。デバッグ出力なし）"
+    "regression": "OK（バッチC終了時の top-level 79件をすべて維持し、追加7件を含め86件 PASS）",
+    "claude_md_compliance": "OK（ジョブ関数のファイル分離を維持／登録失敗は必ずSlack通知（ジョブ名・スケジュール指定・エラー内容を含む）／時刻の既定値は JST 前提を明記／機密情報の追加なし）",
+    "trading_safety": "OK（発注・キャンセルのロジックは一切変更していない。既定値は現行 config.ini と同一で、正常設定時の発注時刻・戦略・数量は不変。gracefulShutdown を wrapJob で包まない従来仕様も維持した）",
+    "code_quality": "OK（20本近い登録をヘルパー3種に集約して見通しを改善。集約ロジックは純粋関数として切り出しテスト可能。未使用 import（scheduler）を service.go から除去）"
   },
-  "verification_notes": "【F5】go/app/bitflyerApp/cancelBuyOrderJob.go に cancelBuyOrderConfigNote() を追加（API・DB・Slack に触れない純粋関数）。cancelBuyOrderJob 内で cancelDays と config.Config.BFBuyMinuteToExpire を渡して呼び、`【cancelBuyOrderJob】設定点検: effective:%t ...` としてログ出力する。cancelBuyOrderConfig_test.go の TestCancelBuyOrderEffectivenessMatchesDecision は placeBuyOrder と同じ式 expire_date = timestamp + buy_minute_to_expire でレコードを作り、経過時間を1時間刻み(0〜30日)で振って、設定点検の effective と decideCancelBuyOrder が cancelBuyOrderCancel に到達するかが一致することを検証している。判定式そのもの（decideCancelBuyOrder）は変更していない。【F14】go/config/triggerTime.go の NormalizeTriggerTime() が空文字・不正値を既定値へ倒す。service.go:250 付近の scheduler.Every().Day().At(\"22:45\") と At(\"01:20\") を triggerTime08 / triggerTime09 に置換。carlescere/scheduler の At() は不正値で Job にエラーを持たせるだけで Run() も静かに失敗し、service.go は戻り値を見ていないため、検証を config 層に置いた。【F26】grep -rn 'BfCancelCriteria' --include='*.go' の結果、実参照は0件（コメント内の言及のみ）だったため削除。OkexCancelCriteria は go/app/okextasks.go:282、OkjCancelCriteria は go/app/okjTasks.go:114 で使用中のため存置した。",
+  "verification_notes": "【F30-1】go/config/config.go に DefaultTriggerTime01〜04 を追加し、TriggerTime01〜04 の読み取りを NormalizeTriggerTime() 経由に変更（config.go:214付近）。既定値は 06:30 / 06:45 / 18:00 / 06:00 で現行 go/config.ini と同一。go/config/triggerTime_test.go の TestShippedConfigTriggerTimesArePassedThrough は実際の go/config.ini を ini.v1 で読み、trigger_time_01〜09 のすべてが NormalizeTriggerTime() を素通りする（値が変わらない）ことを検証しており、これが正常設定時のリグレッション担保になっている。TestTriggerTime01FallsBackWhenKeyMissing はキー欠落時に 06:30 へ倒れることを固定。【F30-2】go/app/bitflyerApp/jobRegistry.go の daily / dailyWithoutWrap / interval がいずれも scheduler.Run() の戻り値を record() に渡す。service.go の登録は全21本（本番20本 + IsTest 分岐2本）が registry 経由になっており、Every(N).Seconds() 系6本も interval() でカバーしている。registry.reportRegistrationResult() を runtime.Goexit() の直前で呼ぶ。集約ロジックのテストは jobRegistry_test.go の4件で、scheduler を起動する重いテストは作っていない（ユーザー指示に従う）。",
   "pending_user_approval": [],
   "issues": [],
-  "notes": "Phase 3 バッチC。ユーザーが『直す』と判断した F5 / F14 / F26 の3件を、1修正=1コミットで対応した。F4（systemd の時刻同期待ち）は指示どおり本バッチから除外している。F14 は指摘の対象欄に『01:20 も同様』とあったため、22:45 と 01:20 の両方を config 化した（trigger_time_08 / trigger_time_09）。あわせて既に既定値付きだった trigger_time_05〜07 も NormalizeTriggerTime を通すよう揃えたが、有効値に対する挙動は変わらない。trigger_time_01〜04 は既定値を持たない既存仕様のため今回は触っていない（別途フォールバックを持たせるかはユーザー判断）。本番の go/config.ini へ trigger_time_08 / trigger_time_09 を追記しなくても既定値（22:45 / 01:20）で従来どおり動作する。",
-  "log_entry": "Phase 3 バッチC 完了: レビュー指摘 F5 / F14 / F26 を3コミットで修正。F5 は提案(b)『期限切れは sweep 任せ』を採用し設定整合の点検ログを追加、F14 は trigger_time_08 / 09 として config 化（不正値は既定値へフォールバック）、F26 は未使用の utils.BfCancelCriteria を撤去。build/vet OK、gofmt はベースラインのみ、make test は top-level 79 PASS / FAIL 0。"
+  "notes": "ユーザー指示による追加対応 F30（案B）。バッチCの F14 対応中に発見した『スケジュール登録が4段階で無言化する』問題を、設定層（B-1）と登録層（B-2）の両方から塞いだ。1修正=1コミットの指示に従い2コミットに分割している。副次的な変更が2点ある: (1) go/config.ini の trigger_time_01〜04 に 05〜09 と同じ流儀のインラインコメントを付けた（値は不変）。(2) service.go の IsTest 分岐にあったコメントアウト済みの旧登録コード3行を削除した。scheduler.Every(...).Run(...) の直書きパターンを示す死んだコメントで、registry 経由に統一した本コミット後は誤解を招くため。復活が必要なら registry.interval / registry.daily で書ける。対象外として残した点: go/app/okextasks.go:310-341 と go/app/okjTasks.go:138-144 にも同じ『Run() の戻り値を捨てる』パターンがあるが、時刻がすべてソース内のリテラルで設定ミスの経路が無く、bitflyer 定期売買アプリでも使っていないため手を付けず、design-dock.md §5.2.1 に記載するに留めた。",
+  "log_entry": "F30 完了: スケジュール登録の無言失敗を案Bで2コミットに分けて解消。F30-1 は trigger_time_01〜04 に既定値フォールバック（既定値は現行値と同一）、F30-2 は jobRegistry で全21本の登録の Run() 戻り値を検査し失敗を起動時に1通Slack通知（登録失敗でもプロセスは落とさない設計判断を採用）。build/vet OK、gofmt はベースラインのみ、make test は top-level 86 PASS / FAIL 0。"
 }
