@@ -1,18 +1,15 @@
 {
   "sprint_number": 7,
-  "phase": "Phase 3 コードレビュー指摘の修正（バッチB: F9 / F7 / F16 / F17 / F18 / F28）",
+  "phase": "Phase 3 コードレビュー指摘の修正（バッチC: F5 / F14 / F26）",
   "status": "completed",
   "scope": [
     "go",
     "docs"
   ],
   "features_implemented": [
-    "F9: models 層のエラーを Slack へ通知（CheckFilledBuyOrders / SyncBuyOrders / UpdateOrderExpireDate の error 返却化）",
-    "F7: 手動売却の SELL 指値による reconcile の鳴りっぱなしを解消（取引所のみ ACTIVE / SELL をサマリ掲載に留める）",
-    "F16: [ROLLOVER_PENDING] の二重通知を専用通知へ一本化",
-    "F17: 残高サマリの余剰ラベルを実態（手動保有が主因）に合わせて修正",
-    "F18: sell 超過警告を24時間に1回へ集約（notificationThrottle）",
-    "F28: GetUnfilledOrderIDs の limit 打ち切りを truncated で返し Slack 通知"
+    "F5: cancelBuyOrderJob が構造上1件もキャンセルできない問題への方針確定（提案(b)採用）と、設定値の整合を毎回点検してログに残す仕掛けの追加",
+    "F14: service.go にハードコードされていた \"22:45\"（cancelBuyOrderJob）/ \"01:20\"（gracefulShutdown）を trigger_time_08 / trigger_time_09 として config 化。不正値・未設定は既定値へフォールバック",
+    "F26: 未使用になった utils.BfCancelCriteria の撤去（OkexCancelCriteria / OkjCancelCriteria は使用中のため存置）"
   ],
   "verify_commands": [
     "make build",
@@ -22,50 +19,61 @@
   ],
   "verify_results": {
     "build": "OK",
-    "vet": "OK（go vet ./... の指摘0件。バッチA終了時の状態を維持）",
+    "vet": "OK（go vet ./... の指摘0件。バッチB終了時の状態を維持）",
     "gofmt": "OK（gofmt -l . は okex/okex.go のみ。ベースラインで今回未変更）",
-    "existing_tests": "OK（make test: top-level 72 PASS / FAIL 0。バッチA終了時の44件をすべて維持し +28件を追加）",
-    "readonly_api_checks": "今回は参照系APIの新規実行なし。通知の振り分け・集約はすべて純粋関数に切り出しユニットテストで検証した"
+    "existing_tests": "OK（make test: top-level 79 PASS / FAIL 0。バッチB終了時の72件をすべて維持し +7件を追加）",
+    "readonly_api_checks": "今回は参照系APIの新規実行なし。F5 は設定値と decideCancelBuyOrder の関係、F14 は時刻文字列の検証で、いずれも純粋関数のユニットテストで裏を取れる範囲だった"
   },
   "changes": {
     "files_created": [
-      "go/app/bitflyerApp/notificationThrottle.go",
-      "go/app/bitflyerApp/syncBuyOrderFailure_test.go",
-      "go/app/bitflyerApp/reconcileOrderDiff_test.go",
-      "go/app/bitflyerApp/reconcileBalanceLabel_test.go",
-      "go/app/bitflyerApp/notificationThrottle_test.go",
-      "go/tests/models_error_test.go"
+      "go/config/triggerTime.go",
+      "go/config/triggerTime_test.go",
+      "go/app/bitflyerApp/cancelBuyOrderConfig_test.go"
     ],
     "files_modified": [
-      "go/models/events.go",
-      "go/models/orderLifecycle.go",
-      "go/app/bitflyerApp/placeSellOrder.go",
-      "go/app/bitflyerApp/syncBuyOrders.go",
-      "go/app/bitflyerApp/reconcileJob.go",
-      "go/app/bitflyerApp/placeBuyOrder.go",
-      "go/tests/reconcile_test.go",
-      "docs/features/order-lifecycle-overhaul/design-dock.md"
+      "go/app/bitflyerApp/cancelBuyOrderJob.go",
+      "go/app/bitflyerApp/service.go",
+      "go/config/config.go",
+      "go/config.ini",
+      "go/utils/util.go",
+      "docs/features/order-lifecycle-overhaul/design-dock.md",
+      "docs/features/order-lifecycle-overhaul/spec.md"
     ]
   },
   "commits": [
-    "317bed1 fix: F9 models 層のエラーを Slack に通知する",
-    "fceefdb fix: F7 手動売却の SELL 指値で reconcile が毎日鳴り続けるのを防ぐ",
-    "b72ff29 fix: F16 [ROLLOVER_PENDING] の二重通知を専用通知へ一本化する",
-    "41501a9 fix: F17 残高サマリの余剰ラベルを実態に合わせる",
-    "8327575 fix: F18 sell 超過警告を24時間に1回へ集約する",
-    "e45e11e fix: F28 GetUnfilledOrderIDs の打ち切りを Slack へ通知する"
+    "d2b8051 fix: F5 cancelBuyOrderJob が構造上キャンセルできない問題を解消",
+    "9ab6dbc fix: F14 service.go にハードコードされたジョブ実行時刻を config 化",
+    "312bf74 fix: F26 未使用になった utils.BfCancelCriteria を撤去する"
+  ],
+  "design_decisions": [
+    {
+      "finding": "F5",
+      "adopted": "提案(b)『期限切れは sweep 任せ』を確定方針として採用。buy_order_cancel_days は 7 のまま変更しない",
+      "rejected": "提案(a) buy_order_cancel_days を 5 等へ短縮する案",
+      "rationale": [
+        "買い注文の期限を 2.5日 → 7日 に延ばしたのは約定率を上げるため(S5)。7日より手前で能動キャンセルするとその狙いを直接削ぐ。(a) はレビュー指摘の解消と引き換えに S5 の意思決定を巻き戻すことになる",
+        "期限切れのスロット解放は expireSweepJob(06:05 JST)が翌朝に担保しており、能動キャンセルが発火しなくてもスロットは滞留しない。買い注文ジョブ(06:30 JST)より前に走るため発注判定時のスロット数も正しい",
+        "現行設定での cancelBuyOrderJob の役割を『① expire_date が NULL の旧レコードの掃除 ② buy_order_cancel_days を短くチューニングしたときの早期スロット解放』と再定義した"
+      ],
+      "misconfiguration_guard": "純粋関数 cancelBuyOrderConfigNote(cancelDays, buyMinuteToExpire) を追加し、実行のたびにどちらのモードで動いているかを実効値つきでログ出力する。出荷設定では『旧レコードのみ対象』が常態で異常ではないため Slack 通知はしない（日次ノイズを増やさない）",
+      "documented_in": [
+        "コミットメッセージ d2b8051",
+        "go/app/bitflyerApp/cancelBuyOrderJob.go 冒頭コメント（# buy_order_cancel_days と buy_minute_to_expire の関係）および cancelBuyOrderConfigNote の関数コメント",
+        "docs/features/order-lifecycle-overhaul/design-dock.md §4.4.1"
+      ]
+    }
   ],
   "self_evaluation": {
-    "acceptance_criteria": "OK（指摘6件すべてに対応。バッチ外の指摘には手を付けていない）",
+    "acceptance_criteria": "OK（指摘3件すべてに対応。F4 は指示どおり除外し、バッチ外の指摘には手を付けていない）",
     "build_vet": "OK（build 成功、go vet 0件、gofmt はベースラインの okex/okex.go のみ）",
-    "regression": "OK（既存 top-level 44件をすべて維持。追加28件を含め72件 PASS）",
-    "claude_md_compliance": "OK（エラーは Slack 通知しコンテキストを含める／ジョブは1ファイル分離を維持／時刻比較は UTC／機密情報の追加なし）",
-    "trading_safety": "OK（発注・キャンセルのロジックは変更していない。placeSellOrder は取得失敗時に発注しない側へ倒す変更のみ）",
-    "code_quality": "OK（判定・整形ロジックを純粋関数に切り出しテスト可能にした。未使用コード・デバッグ出力なし）"
+    "regression": "OK（既存 top-level 72件をすべて維持。追加7件を含め79件 PASS）",
+    "claude_md_compliance": "OK（ジョブは1ファイル分離を維持／時刻比較は UTC／機密情報の追加なし／設定は既定値フォールバック付き）",
+    "trading_safety": "OK（発注・キャンセルのロジックは変更していない。F5 は方針の明文化とログ追加のみで判定式は不変。F14 の既定値は移行前のハードコード値と同一）",
+    "code_quality": "OK（判定を純粋関数に切り出しテスト可能にした。未使用コードを1件撤去。デバッグ出力なし）"
   },
-  "verification_notes": "【F9】models/events.go の CheckFilledBuyOrders() を ([]BuyOrderInfo, error) に変更（Query / Scan / rows.Err の失敗をすべて返す）。app/bitflyerApp/placeSellOrder.go:18 で「0件」と「読み取り失敗」を区別し、失敗時は発注せず Slack 通知して return する。SyncBuyOrders() は []SyncBuyOrderFailure を返し（count / insert / expire_date の3経路。UpdateOrderExpireDate の失敗もここに含まれる）、app/bitflyerApp/syncBuyOrders.go の formatSyncBuyOrderFailures() が OrderID / ProductCode / Side / Price / Size / Strategy 付きの1通にまとめて通知する。\n【F7】app/bitflyerApp/reconcileJob.go の classifyOrderDiffs() が突合結果をエラー通知用(Alerts)とサマリ掲載用(Info)に振り分ける。「取引所のみ ACTIVE / SELL」だけを Info に落とし、「DBのみ UNFILLED」(buy/sell 両方)と「取引所のみ ACTIVE / BUY」は従来どおりエラー通知。Info は notifyReconcileResult() が日次サマリに件数と代表 order_id 付きで必ず出力する（通知を消していない）。\n【F16】reconcileJob() で reconcileRolloverPending() を注文突合より前に実行し、rolloverPendingOrderIDs() で得た order_id 集合を buildOrderDiff() に渡す。[ROLLOVER_PENDING] 付きは DBOnly ではなく RolloverPending に振り分けられ、classifyOrderDiffs() が Info に入れるためエラー通知は専用通知の1通のみになる。取得上限 reconcileRolloverPendingMax(50) を超えた分は従来どおり DBOnly としてエラー通知される。\n【F17】balanceStateLabel() に切り出し、余剰ラベルを『余剰(手動保有・未追跡分を含む。アラート対象外)』に修正。手動保有は AlertExpected から除外されているため、そのぶんは必ず余剰側に現れる。\n【F18】notificationThrottle（key 単位・mutex 保護・プロセス内メモリ）を追加し、placeBuyOrder.go の SellWarning 通知を sellOverLimitNotifyInterval(24h) に1回まで集約。ログは毎回出力し、reconcileJob も日次で1通通知するため通知経路は残る。システム時刻が巻き戻った場合は抑制せず通知する。\n【F28】models.GetUnfilledOrderIDs() が (orderIDs, truncated, error) を返すよう変更（空文字 order_id を除外しているため判定には取得行数を使用）。reconcileOrdersForProduct() が truncated を検知したら notifyReconcileError() で Slack 通知し、突合結果を鵜呑みにしないよう本文で促す。",
+  "verification_notes": "【F5】go/app/bitflyerApp/cancelBuyOrderJob.go に cancelBuyOrderConfigNote() を追加（API・DB・Slack に触れない純粋関数）。cancelBuyOrderJob 内で cancelDays と config.Config.BFBuyMinuteToExpire を渡して呼び、`【cancelBuyOrderJob】設定点検: effective:%t ...` としてログ出力する。cancelBuyOrderConfig_test.go の TestCancelBuyOrderEffectivenessMatchesDecision は placeBuyOrder と同じ式 expire_date = timestamp + buy_minute_to_expire でレコードを作り、経過時間を1時間刻み(0〜30日)で振って、設定点検の effective と decideCancelBuyOrder が cancelBuyOrderCancel に到達するかが一致することを検証している。判定式そのもの（decideCancelBuyOrder）は変更していない。【F14】go/config/triggerTime.go の NormalizeTriggerTime() が空文字・不正値を既定値へ倒す。service.go:250 付近の scheduler.Every().Day().At(\"22:45\") と At(\"01:20\") を triggerTime08 / triggerTime09 に置換。carlescere/scheduler の At() は不正値で Job にエラーを持たせるだけで Run() も静かに失敗し、service.go は戻り値を見ていないため、検証を config 層に置いた。【F26】grep -rn 'BfCancelCriteria' --include='*.go' の結果、実参照は0件（コメント内の言及のみ）だったため削除。OkexCancelCriteria は go/app/okextasks.go:282、OkjCancelCriteria は go/app/okjTasks.go:114 で使用中のため存置した。",
   "pending_user_approval": [],
   "issues": [],
-  "notes": "【Phase 3 バッチB（F9/F7/F16/F17/F18/F28）の修正】1修正=1コミットで6コミット作成した。各コミットに修正コード・ユニットテスト・リグレッションテスト・コミットメッセージを含め、コミット前に make build と make test の通過を確認している。\n\n■ F7 で採用した方針とその理由\nレビューの選択肢のうち (a)「サマリ掲載に留める」を採用した。\n・ユーザーの方針「手動保有はシステムから存在しないものとして無視する」に従う。F3 でオーファン注文を取り込む判断をしたが、F7 の対象はユーザーが手動保有65ポジションを売却するために置いた SELL 指値であり、これをボットが自分の注文として取り込んではならない。したがって (c) sell 側の取り込みは採らない。\n・残高突合が Manual を判定から除外しているのと同じ考え方を、注文突合側にも適用した（設計の一貫性）。\n・(b) 許容件数の設定値は、手動売却の進捗で件数が日々変わり閾値の維持が運用負担になるため採らなかった。件数によらずサマリに全件（代表10件）を載せる方が気づきやすい。\n・ボットが発注した売り注文の取りこぼし（再発注レスポンスの消失によるオーファン）は、F3 で入れた rolloverSellOrderJob の再発注前オーファン検出と、[ROLLOVER_PENDING] 残留通知（F16 で専用通知に一本化）で引き続き検知できる。\n\n■ そのほか判断が必要だった点\n(1) F9 の SyncBuyOrders: error 1つに畳まず []SyncBuyOrderFailure を返す形にした。1件の失敗で全体を止めないという既存の挙動を維持しつつ、OrderID / Price / Size / Strategy を通知に載せる開発ルールを満たすため。\n(2) F16 の実行順序: reconcileRolloverPending() を注文突合より前へ移した。移動しないと突合時点で [ROLLOVER_PENDING] の一覧が無く除外できないため。取得上限(50件)を超えた分は DBOnly としてエラー通知される（見落とすより鳴らす側に倒した）。\n(3) F18 の抑制状態: DB や設定ファイルではなくプロセス内メモリに持たせた。再起動のたびに必ず1回鳴るが、鳴らしすぎるより鳴らさない方が危険なため。Pi の時計が巻き戻る（RTC 非搭載・NTP 同期）ケースでも抑制されないようにしている。\n(4) F18 の対象は placeBuyOrder の sell 超過警告に限定した。placeSellOrder / rollover のループ内通知の集約は指摘の別項目（今回のバッチ外）のため触っていない。\n(5) 本バッチでは okex/ および app/okjTasks.go に一切変更を加えていない（bitflyer 定期売買アプリの対象範囲外）。\n\n■ ドキュメントの更新\ndesign-dock.md §4（GetUnfilledOrderIDs のシグネチャ）と §5（残高突合の余剰ラベル）、§6.2（通知一覧: placeSellOrder の取得失敗 / syncBuyOrders の取り込み失敗 / reconcileJob の SELL 側の扱い・[ROLLOVER_PENDING] の一本化・打ち切り通知 / placeBuyOrder の集約）を実装に合わせて更新した。\n\n■ 実行していないコマンド・操作\nmake run / make run-binary、更新系API（sendchildorder / cancelchildorder）、本番DBへの書き込み、make apply / atlas-apply / pg-remote-apply / reset-db はいずれも実行していない。DBを使うテストはローカル docker PostgreSQL（make test）のみ。\n\n■ 本バッチ外の指摘\nF4 / F5 / F11 / F12 / F13 / F14 / F15 / F19〜F27 には一切手を付けていない（後続バッチで対応予定）。F1 / F29 は対応しない決定済み。",
-  "log_entry": "Phase 3 バッチB 完了: レビュー指摘 F9（models 層のエラーが Slack に届かない）/ F7（手動売却の SELL 指値で reconcile が鳴り続ける）/ F16（[ROLLOVER_PENDING] の二重通知）/ F17（余剰ラベルの食い違い）/ F18（sell 超過警告の未集約）/ F28（GetUnfilledOrderIDs の打ち切りが未通知）を1修正=1コミットで修正。F7 はユーザー方針（手動保有はシステムから無視する）に沿って (a) サマリ掲載に留める案を採用。make build OK、make test は top-level 72 PASS / FAIL 0（バッチA終了時の44件を維持し+28件）、go vet 指摘0件、gofmt はベースラインの okex/okex.go のみ。"
+  "notes": "Phase 3 バッチC。ユーザーが『直す』と判断した F5 / F14 / F26 の3件を、1修正=1コミットで対応した。F4（systemd の時刻同期待ち）は指示どおり本バッチから除外している。F14 は指摘の対象欄に『01:20 も同様』とあったため、22:45 と 01:20 の両方を config 化した（trigger_time_08 / trigger_time_09）。あわせて既に既定値付きだった trigger_time_05〜07 も NormalizeTriggerTime を通すよう揃えたが、有効値に対する挙動は変わらない。trigger_time_01〜04 は既定値を持たない既存仕様のため今回は触っていない（別途フォールバックを持たせるかはユーザー判断）。本番の go/config.ini へ trigger_time_08 / trigger_time_09 を追記しなくても既定値（22:45 / 01:20）で従来どおり動作する。",
+  "log_entry": "Phase 3 バッチC 完了: レビュー指摘 F5 / F14 / F26 を3コミットで修正。F5 は提案(b)『期限切れは sweep 任せ』を採用し設定整合の点検ログを追加、F14 は trigger_time_08 / 09 として config 化（不正値は既定値へフォールバック）、F26 は未使用の utils.BfCancelCriteria を撤去。build/vet OK、gofmt はベースラインのみ、make test は top-level 79 PASS / FAIL 0。"
 }
