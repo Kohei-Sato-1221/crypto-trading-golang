@@ -164,7 +164,7 @@ StrategyUnknown(99) / StrategySaturatedUnknown(127) / StrategyManual(90001) は
 strategy カラムのゼロ値（未設定・NULL・スキャン失敗）とも区別がつかない。
 ゼロ値を「ボット発注」と数えると reconcileJob の発注ゼロ検知を取りこぼし、
 ボットが止まっていることに気づけなくなる。取りこぼすより鳴らす側へ倒す。
-本番データ上の strategy=0 は2021年頃の5件のみで、発注ゼロ検知が走査する
+本番データ上の strategy=0 は2025-11-13〜11-23の5件のみで、発注ゼロ検知が走査する
 直近200件には含まれないため、この除外による判定の変化はない。
 */
 func IsBotStrategy(strategy int) bool {

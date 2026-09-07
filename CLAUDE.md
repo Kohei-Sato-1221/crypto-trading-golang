@@ -160,7 +160,7 @@ sum((a.price * a.size) - (b.price * b.size))
 
 #### 手順（PostgreSQL）
 
-`buy_orders.order_id` / `sell_orders.order_id` には UNIQUE 制約（`orderId` インデックス）があるため、派生レコードには `-PARTIAL` を付けた別IDを使う。`varchar(50)` に対して Bitflyer の注文IDは25文字なので収まる。同じ注文で2回目の部分約定が起きた場合は `-PARTIAL2` のように連番にする。
+`buy_orders.order_id` / `sell_orders.order_id` には UNIQUE 制約（PostgreSQL では `buy_orders_order_id_key` / `sell_orders_order_id_key`、MySQL 版スキーマでは `orderId`）があるため、派生レコードには `-PARTIAL` を付けた別IDを使う。カラムは `varchar(50)`、実データの `order_id` は最長29文字なので `-PARTIAL`（8文字）を足しても収まる。同じ注文で2回目の部分約定が起きた場合は `-PARTIAL2` のように連番にする。
 
 ```sql
 BEGIN;
