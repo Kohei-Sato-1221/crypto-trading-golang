@@ -123,7 +123,7 @@ stateDiagram-v2
 | `sell_orders` | `expire_date` カラム追加（timestamp / NULL 許容 / デフォルトなし） | **必須** | ローリング対象の抽出条件に使う |
 | `buy_orders` | インデックス `idx_buy_orders_status_expire (status, expire_date)` 追加 | **必須** | sweep のクエリ用 |
 | `sell_orders` | インデックス `idx_sell_orders_status_expire (status, expire_date)` 追加 | **必須** | ローリング／sweep のクエリ用 |
-| `buy_orders` | `strategy` の型拡張（MySQL: `tinyint` → `int` / PostgreSQL: `smallint` → `integer`） | **任意**（§3.2.1） | MySQL 用スキーマ定義の是正と、将来の桁の余裕確保 |
+| `buy_orders` | `strategy` の型拡張（MySQL: `tinyint` → `int` / PostgreSQL: `smallint` → `integer`） | **任意**（§3.2.1）／**本番は 2026-09-06 に適用済み** | MySQL 用スキーマ定義の是正と、将来の桁の余裕確保 |
 | `sell_orders.remarks` | **変更なし** | — | MySQL `TEXT` = 65,535バイト、PostgreSQL `TEXT` = 実質無制限。追記する文言は1回あたり60バイト程度で、ローリング1回につき旧レコードに1回追記するのみ（新レコードは別行）。単一行に累積しないため十分 |
 | `price_histories` | **変更なし** | — | 記録頻度の変更のみでスキーマは不変 |
 
@@ -134,7 +134,7 @@ stateDiagram-v2
 **本番 PostgreSQL(Supabase) では `buy_orders.strategy` は既に `smallint`（上限 32767）であり、戦略値 10001〜20003 は問題なく格納できる。**（本番 DB を照会して確認済み）
 
 - 127 への飽和は **MySQL(RDS) 時代の `tinyint` に起因する過去の事象**であり、Supabase 移行後は**既に解消されている**。
-- したがって `ALTER TABLE buy_orders ALTER COLUMN strategy TYPE INTEGER;` は**将来の余裕を持たせるための任意の変更**であり、**これを適用しなくても本機能はすべて正しく動作する**。
+- したがって `ALTER TABLE buy_orders ALTER COLUMN strategy TYPE INTEGER;` は**将来の余裕を持たせるための任意の変更**であり、**これを適用しなくても本機能はすべて正しく動作する**。ただし**本番 Supabase には 2026-09-06 のマイグレーション `20260906000000_add_expire_date` で実際に適用済み**であり、現在の本番の型は `integer` である（§3.4）。
 - 一方 `schema.hcl`（MySQL 用）の `tinyint → int` は、**MySQL に戻した場合に同じ飽和を再発させないための対応**として必ず反映する。
 - 実装コード側は型変更の有無に依存しない（Go 側は一貫して `int` で扱う）。
 
@@ -186,34 +186,40 @@ stateDiagram-v2
 
 ### 3.4 本番 PostgreSQL(Supabase) への DDL
 
-配置先: `db/crypto-trading-db-postgres/migrations/20260906000000_add_expire_date.sql`（ディレクトリ新規作成。`make pg-apply` が参照するパスと一致する）。**エージェントは適用を実行しない。**
+配置先: `db/crypto-trading-db-postgres/migrations/20260906000000_add_expire_date.sql`。**エージェントは適用を実行しない。**
+
+> **【適用済み】2026-09-06 に本番 Supabase へ適用完了。** 適用後の状態は `Current Version: 20260906000000` / `Pending: 0`（`make pg-remote-status` で確認）。
+> 以下は**実際に適用したファイルの内容そのまま**である。設計段階の草案から次の2点が変わっているため、別環境へ再適用する場合はこのブロックを正とすること。
+>
+> 1. `ALTER TABLE buy_orders ALTER COLUMN strategy TYPE INTEGER;` は草案では「任意」としてコメントアウトしていたが、**実行文として適用済み**（本番の `buy_orders.strategy` は `smallint` → `integer`）。将来 MySQL に戻した場合や §3.5 のローカル初期化 SQL と型を揃えるため、実際には適用した。
+> 2. `COMMENT ON COLUMN` の文言を草案から簡潔な実文言に差し替えている。
+>
+> トランザクション制御（`BEGIN;` / `COMMIT;`）はマイグレーションツール側が行うため、ファイル内には書いていない。
 
 ```sql
-BEGIN;
+-- 注文の有効期限(expire_date)を記録できるようにする。
+-- 失効検出(expireSweepJob)と売り注文の27日ローリング(rolloverSellOrderJob)の基盤。
+-- 既存行には正しい値が存在しない(取引所APIは失効注文の期限を返さない)ため NULL 許容。
 
--- ▼ 必須: 失効検出とローリングに不可欠
 ALTER TABLE buy_orders  ADD COLUMN IF NOT EXISTS expire_date TIMESTAMP NULL;
 ALTER TABLE sell_orders ADD COLUMN IF NOT EXISTS expire_date TIMESTAMP NULL;
 
+COMMENT ON COLUMN buy_orders.expire_date  IS '注文の有効期限(UTC)。取引所APIのexpire_dateまたは発注時刻+minute_to_expire。NULLは期限不明';
+COMMENT ON COLUMN sell_orders.expire_date IS '注文の有効期限(UTC)。取引所APIのexpire_dateまたは発注時刻+minute_to_expire。NULLは期限不明';
+
+-- sweep / ローリングの抽出クエリ用
 CREATE INDEX IF NOT EXISTS idx_buy_orders_status_expire  ON buy_orders  (status, expire_date);
 CREATE INDEX IF NOT EXISTS idx_sell_orders_status_expire ON sell_orders (status, expire_date);
 
-COMMENT ON COLUMN buy_orders.expire_date  IS '注文の有効期限(UTC)';
-COMMENT ON COLUMN sell_orders.expire_date IS '注文の有効期限(UTC)';
-
--- ▼ 任意: 適用しなくても本機能はすべて正しく動作する。
---   本番の strategy は既に smallint(上限32767)で、戦略値 10001-20003 は格納可能。
---   127への飽和はMySQL(tinyint)時代の過去の事象であり既に解消済み。
---   将来の桁の余裕を確保したい場合にのみ実行する。
--- ALTER TABLE buy_orders ALTER COLUMN strategy TYPE INTEGER;
-
-COMMENT ON COLUMN buy_orders.strategy IS
-  '99:not recorded / 127:旧MySQL tinyint飽和により判別不能 / 10001-10004:LTP系 / 20001-20003:7日安値ブレンド系 / 90001:手動発注';
-
-COMMIT;
+-- strategy の拡幅(任意): PostgreSQL では smallint(上限32767)で戦略値10001〜20003は既に格納可能。
+-- 将来の余裕のための変更であり、適用しなくても機能は正しく動作する。
+ALTER TABLE buy_orders ALTER COLUMN strategy TYPE INTEGER;
+COMMENT ON COLUMN buy_orders.strategy IS '買い戦略ID。99=未記録, 127=MySQL時代のtinyint飽和値(集計から除外)';
 ```
 
 **適用順序**: DDL を先に適用し、その後で新バイナリをデプロイする。`ADD COLUMN` は旧コードと互換なので DDL 先行で問題ない。
+
+**適用手段**: `db/Makefile` の `pg-remote-status` / `pg-remote-dry-run` / `pg-remote-apply` を使う。接続情報は gitignore 済みの `db/envs/.pg.env`（`PG_SUPABASE_URL`）から読み、**ポート 5432 の session pooler 経由**で接続する。`pg-remote-apply` は**エージェントが実行しない**（ユーザーが判断・実行する）。
 
 ### 3.5 `db/crypto-trading-db-postgres/init/001_init.sql` の変更
 
