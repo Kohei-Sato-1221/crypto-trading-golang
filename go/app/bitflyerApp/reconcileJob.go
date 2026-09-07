@@ -515,6 +515,24 @@ func reconcileRolloverPending(summary *reconcileSummary) {
 	slackClient.PostMessage(msg, true)
 }
 
+/*
+balanceStateLabel は残高突合の状態ラベルを返す。
+
+余剰の主因は手動保有(models.RemarkManualHold)である。手動保有は AlertExpected から
+除外されているため、そのぶんは必ず「実残高 > 判定用のDB想定」の側に出る。
+以前のラベル「余剰(DB未追跡分。アラート対象外)」は untracked_holding_btc /
+untracked_holding_eth の設定漏れと誤解されるため、実態に合わせて手動保有にも言及する。
+*/
+func balanceStateLabel(diff balanceDiff) string {
+	if diff.isShortfall() {
+		return "🚨不足"
+	}
+	if diff.isSurplus() {
+		return "余剰(手動保有・未追跡分を含む。アラート対象外)"
+	}
+	return "乖離なし"
+}
+
 // formatReconcileTime は通知用に時刻(UTC)を文字列化する。未取得は "なし"。
 func formatReconcileTime(t *time.Time) string {
 	if t == nil {
@@ -544,12 +562,7 @@ func notifyReconcileResult(summary *reconcileSummary) {
 
 	balanceTexts := make([]string, 0, len(summary.balanceDiffs))
 	for _, diff := range summary.balanceDiffs {
-		state := "乖離なし"
-		if diff.isShortfall() {
-			state = "🚨不足"
-		} else if diff.isSurplus() {
-			state = "余剰(DB未追跡分。アラート対象外)"
-		}
+		state := balanceStateLabel(diff)
 		balanceTexts = append(balanceTexts, fmt.Sprintf(
 			"%s %s 取引所:%v 判定用DB想定:%v 差分:%v（判定対象の内訳 bot:%v 裸の保有:%v 既知の未追跡分:%v / 閾値:%v）"+
 				"（参考・判定対象外 手動保有:%v）",
