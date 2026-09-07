@@ -16,8 +16,8 @@ PlaceOrder のレスポンスを取りこぼしたまま [ROLLOVER_PENDING] で�
 2本目の売り注文を発注してしまう。拘束されていない現物（手動保有分）があると
 2本とも約定しうるため、再発注の前にオーファン注文を検出する必要がある。
 
-ここでは取引所API・DB・Slackに触れない純粋関数のみを検証する
-（slackClient はサービス起動時に初期化されるため、ジョブ関数はそのまま呼べない）。
+ここでは取引所API・DB・Slackに触れない純粋関数を検証する。
+resolveRolloverOrphan() 自体のフェイルセーフは rolloverOrphanResolve_test.go で検証する。
 */
 
 func orphanTestRecord() models.SellOrderRecord {
@@ -130,19 +130,5 @@ func TestRolloverOrphanExpireDate(t *testing.T) {
 	diff := fallback.Sub(time.Now().UTC().Add(60 * time.Minute))
 	if diff > time.Minute || diff < -time.Minute {
 		t.Errorf("fallback expire = %v, want about now+60m", fallback)
-	}
-}
-
-// ACTIVE一覧を取得できていない場合は再発注を見送ること（フェイルセーフ）。
-func TestResolveRolloverOrphanRequiresActiveList(t *testing.T) {
-	record := orphanTestRecord()
-	// index==nil / activeOK==false のどちらも「判定不能」として扱う。
-	// slackClient を伴わない純粋な判定部分のみを findRolloverOrphanCandidates で確認する。
-	index := &rolloverOrderIndex{completed: map[string]bool{}, activeOK: false}
-	if index.activeOK {
-		t.Fatal("precondition")
-	}
-	if got := findRolloverOrphanCandidates(index.active, record); len(got) != 0 {
-		t.Errorf("ACTIVE一覧が空なら候補は0件: %v", got)
 	}
 }
