@@ -331,14 +331,28 @@ func (t *Ticker) GetMiddlePrice() float64 {
 	return (t.BestBid + t.BestAsk) / 2
 }
 
+/*
+DateTime は Ticker の timestamp を UTC の time.Time として返す。
+
+Bitflyer の ticker が返す timestamp はタイムゾーンサフィックスを持たない
+（例: "2026-09-07T01:01:31.42"）ため、time.Parse(time.RFC3339, ...) では
+常にパースに失敗する。child_order_date / expire_date と同じ形式であり、
+解釈を1箇所に揃えるため utils.ParseBitflyerTime に委譲する。
+
+パースできない場合はゼロ値を返す（従来の契約を維持）。呼び出し側でゼロ値を
+区別する必要がある場合は time.Time.IsZero() で判定すること。
+*/
 func (t *Ticker) DateTime() time.Time {
-	dateTime, err := time.Parse(time.RFC3339, t.Timestamp)
+	dateTime, err := utils.ParseBitflyerTime(t.Timestamp)
 	if err != nil {
-		log.Printf("action=DateTime, err=%s", err.Error())
+		log.Printf("action=DateTime, timestamp=%s, err=%s", t.Timestamp, err.Error())
+		return time.Time{}
 	}
 	return dateTime
 }
 
+// TruncateDateTime は DateTime() を duration 単位で切り捨てて返す。
+// DateTime() がパースに失敗した場合はゼロ値の切り捨て結果を返す。
 func (t *Ticker) TruncateDateTime(duration time.Duration) time.Time {
 	return t.DateTime().Truncate(duration)
 }
