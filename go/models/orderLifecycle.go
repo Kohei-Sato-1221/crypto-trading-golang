@@ -396,7 +396,14 @@ MarkOrderCancelledWithRemark は status を CANCELLED にし、remarks に追記
 
 status = 'UNFILLED' の行のみを対象にすることで、
 他ジョブが同時に FILLED / CANCELLED へ更新したレコードを上書きしない。
-更新行数が0の場合はエラーにせず、その旨をログに残す。
+更新行数が0の場合はエラーにせず、その旨をログに残す
+（他ジョブが先に FILLED / CANCELLED へ更新した正常な競合であり、sweep として為すべきことは無い）。
+
+一方、更新行数を確認できなかった場合（RowsAffected がエラー）は「CANCELLEDにできた」と
+断定できないためエラーを返す。成功扱いにすると sweep が失効処理を完了したものとして
+集計・通知してしまい、実際には UNFILLED のまま残ったレコードが誰にも拾われなくなる。
+RolloverSellOrder / UpdateOrderSizeWithRemark と流儀を揃え、確認できないものは失敗側へ倒す
+（呼び出し側の expireSweepJob はSlack通知したうえで翌日再試行する）。
 */
 func MarkOrderCancelledWithRemark(table OrderTable, orderID, remark string) error {
 	if !table.isValid() {
@@ -426,8 +433,9 @@ func MarkOrderCancelledWithRemark(table OrderTable, orderID, remark string) erro
 	}
 	rows, rowsErr := result.RowsAffected()
 	if rowsErr != nil {
-		log.Printf("MarkOrderCancelledWithRemark table:%s order_id:%s updated(rows unknown)", table, orderID)
-		return nil
+		log.Printf("[ERROR] MarkOrderCancelledWithRemark table:%s order_id:%s could not confirm the update err:%v",
+			table, orderID, rowsErr)
+		return fmt.Errorf("could not confirm the CANCELLED update (table:%s order_id:%s): %w", table, orderID, rowsErr)
 	}
 	if rows == 0 {
 		log.Printf("MarkOrderCancelledWithRemark table:%s order_id:%s no row updated (already updated by another job?)", table, orderID)
