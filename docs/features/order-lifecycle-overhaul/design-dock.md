@@ -612,7 +612,7 @@ scheduler.Every().Day().At(config.Config.TriggerTime07).Run(wrapJob(reconcileJob
 | `reconcileJob` | 発注ゼロ検知 | エラー | `🚨【reconcile】ボットの買い注文が {N}日間 0件です。最終発注: {ts}` |
 | `reconcileJob` | 正常 | 通常 | `【reconcile】OK 未約定buy:{n}/{max_buy} 未約定sell:{m}/{max_sell} 残高乖離なし（手動保有 BTC:{x} ETH:{y} を除く）` |
 | `placeBuyOrder` | buy 側スロット枯渇でスキップ | エラー | `🚨【buyingJob】発注スキップ: 未約定buy {n}/{max_buy}（上限到達）未約定sell {m}/{max_sell}` |
-| `placeBuyOrder` | sell 側スロット超過（**発注は続行**） | エラー | `🚨【buyingJob】売り注文が上限超過: 未約定sell {m}/{max_sell}。発注は続行します。JPY残高の歯止め(budget_criteria)を確認してください` |
+| `placeBuyOrder` | sell 側スロット超過（**発注は続行**） | エラー | `🚨【buyingJob】売り注文が上限超過: 未約定sell {m}/{max_sell}。発注は続行します。JPY残高の歯止め(budget_criteria)を確認してください`<br>※超過状態は解消まで数週間続きうる一方、買い注文ジョブは1日に最大12本走る。同一内容の警告が埋もれないよう **24時間に1回まで集約する**（`notificationThrottle`、F18）。通知は消さず、解消するまで `reconcileJob` も日次で1通通知する |
 | `placeSellOrder` | 個別失敗 | エラー | 既存の本文を維持しつつ `break` → `continue`。末尾に `成功:{M}/{N}` のサマリを追加 |
 | `placeSellOrder` | 約定済み買い注文の取得失敗 | エラー | `🚨【sellOrderjob】約定済み買い注文の取得に失敗したため売り注文を発注しません: {err}`<br>※`CheckFilledBuyOrders()` は「0件」と「読み取り失敗」を区別できるよう `([]BuyOrderInfo, error)` を返す。以前は失敗時も nil を返し、売り注文の発注が無言でスキップされていた（F9） |
 | `syncBuyOrders` | 取り込み失敗（count / insert / expire_date） | エラー | `🚨【syncBuyOrders】注文の取り込みに失敗しました product_code:{pc} {N}件` ＋ 明細（`op` / OrderID / ProductCode / Side / Price / Size / Strategy / err）を先頭10件<br>※`models.SyncBuyOrders()` は失敗を `[]SyncBuyOrderFailure` で返し、通知は app 層で行う（F9） |

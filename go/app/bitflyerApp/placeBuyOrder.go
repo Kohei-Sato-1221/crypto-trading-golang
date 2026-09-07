@@ -59,6 +59,19 @@ func validateBuyPriceSources(strategy int, productCode string, ticker *bitflyer.
 	return nil
 }
 
+/*
+売り注文の上限超過の警告は、解消まで数週間続きうる一方で買い注文ジョブは1日に最大12本走る。
+同一内容の警告が件数ぶん飛んで本物の通知が埋もれるのを避けるため、この間隔まで集約する。
+通知は消さない（reconcileJob も日次で1通通知する）。
+*/
+const (
+	sellOverLimitNotifyInterval = 24 * time.Hour
+	// スロット上限は通貨ペアごとではなく全体で1つなので、キーも1つにする
+	sellOverLimitThrottleKey = "sell_over_limit"
+)
+
+var sellOverLimitThrottle = newNotificationThrottle(sellOverLimitNotifyInterval)
+
 func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bitflyer.APIClient, weekday *string) {
 	weekdayStr := "nil"
 	if weekday != nil {
@@ -119,7 +132,13 @@ func placeBuyOrder(strategy int, productCode string, size float64, apiClient *bi
 		// 売り注文の滞留では発注をブロックしない（現物積み上がりの歯止めはbudget_criteria）
 		warnMsg := fmt.Sprintf("🚨【buyingJob】売り注文が上限超過: %s （発注は続行します）", slotStatus.Message)
 		log.Println(warnMsg)
-		slackClient.PostMessage(warnMsg, true)
+		// 超過状態は解消まで数週間続きうる。買い注文ジョブは1日に最大12本走るため、
+		// 毎回通知すると同一内容の 🚨 が1日に何通も流れて本物の通知が埋もれる。
+		// 通知を消すのではなく間隔をあけて鳴らす（reconcileJob も日次で1通通知する）
+		if sellOverLimitThrottle.shouldNotify(sellOverLimitThrottleKey, time.Now()) {
+			slackClient.PostMessage(warnMsg+fmt.Sprintf("\n※同一の警告は%v に1回まで集約しています（解消するまで reconcileJob が日次でも通知します）",
+				sellOverLimitNotifyInterval), true)
+		}
 	}
 
 	// 発注価格の算出に必要な価格情報を取得する。
