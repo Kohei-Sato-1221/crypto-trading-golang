@@ -520,7 +520,7 @@ func ParseBitflyerTime(s string) (time.Time, error)
 | `[bitflyer]` | `buy_minute_to_expire` | `10080`（7日） | S5 | 買い注文の有効期限。旧 3600（2.5日）から変更 |
 | `[bitflyer]` | `sell_minute_to_expire` | `43200`（30日・Bitflyer 上限） | S2 | 売り注文の有効期限 |
 | `[bitflyer]` | `child_orders_count` | `500` | S1 | `getchildorders` の1回あたり取得件数 |
-| `[bitflyer]` | `buy_order_cancel_days` | `7` | S3 | `cancelBuyOrderJob` が能動キャンセルする経過日数（`buy_minute_to_expire` と整合させる） |
+| `[bitflyer]` | `buy_order_cancel_days` | `7` | S3 | `cancelBuyOrderJob` が能動キャンセルする経過日数（`buy_minute_to_expire` と整合させる）。**この値と `buy_minute_to_expire` の関係でジョブの実効範囲が変わる → §4.4.1** |
 | `[bitflyer]` | `sell_rollover_days_before_expire` | `3` | S4 | 期限の何日前にローリングするか（30 − 3 = 27日） |
 | `[bitflyer]` | `sell_rollover_fallback_days` | `27` | S4 | `expire_date` が NULL の旧レコードのフォールバック日数 |
 | `[bitflyer]` | `sell_rollover_max_per_run` | `20` | S4 | 1回のジョブで処理する上限件数（レート制限とリスクの上限） |
@@ -538,6 +538,32 @@ func ParseBitflyerTime(s string) (time.Time, error)
 `private_config.ini` への追加は**なし**。手動保有マーカーは設定ではなく Go の定数 `models.RemarkManualHold` として持つ（§4.2）。
 
 `trigger_time_03` / `trigger_time_04` および `config.go` の `TriggerTime03` / `TriggerTime04` は**変更しない**（価格履歴は1日2回記録のまま据え置き）。
+
+#### 4.4.1 `buy_order_cancel_days` と `buy_minute_to_expire` の関係（F5・確定方針）
+
+`placeBuyOrder` は `expire_date = timestamp + buy_minute_to_expire` を記録する。`cancelBuyOrderJob` の判定順は
+
+1. `expire_date <= now` → **skip**（取引所側では失効済みでキャンセル API が成功しない。DB の後始末は `expireSweepJob` の担当）
+2. `timestamp <= now - buy_order_cancel_days` → **cancel**
+
+であるため、`buy_order_cancel_days * 1440 >= buy_minute_to_expire` の設定では **2 を満たすレコードが必ず 1 に吸収される**。この状態では能動キャンセルは `expire_date` が NULL の旧レコードにしか効かない。
+
+出荷設定（`buy_minute_to_expire=10080`（7日） / `buy_order_cancel_days=7`）はまさにこの状態にあたる。**これは意図した設定として確定する**（レビュー指摘 F5 の提案 (b) を採用）。
+
+**採用理由:**
+
+- 買い注文の期限を 2.5日 → 7日 に延ばしたのは**約定率を上げるため**（S5）。7日より手前で能動キャンセルすると、その狙いを直接削いでしまう。設定値を短くする案 (a) は、レビュー指摘の解消と引き換えに S5 の意思決定を巻き戻すことになる。
+- 期限切れによるスロット解放は `expireSweepJob`（06:05 JST）が翌朝に担保しており、**能動キャンセルが発火しなくてもスロットは滞留しない**。買い注文ジョブ（06:30 JST）より前に走るため、発注判定時のスロット数も正しい。
+- したがって現行設定における `cancelBuyOrderJob` の役割は「期限切れの後始末」ではなく、**① `expire_date` が NULL の旧レコードの掃除**、**② 将来 `buy_order_cancel_days` を短くチューニングしたときの早期スロット解放**の2つである。
+
+**誤設定を検知する仕掛け:**
+
+設定値の関係を取り違えるとジョブが黙って無効化されるため、`cancelBuyOrderJob` は実行のたびに `cancelBuyOrderConfigNote(cancelDays, buyMinuteToExpire)`（純粋関数）で整合を点検し、どちらのモードで動いているかを実効値つきでログに出力する。
+
+- `buy_order_cancel_days * 1440 < buy_minute_to_expire` → `能動キャンセル有効: ...`
+- それ以外 → `能動キャンセルは expire_date が NULL の旧レコードのみ対象: ...`（早期解放したい場合の対処も文言に含める）
+
+出荷設定では後者が常態であり異常ではないため、**Slack 通知はせずログのみ**とする（毎日の定常ノイズを増やさない）。
 
 ### 4.5 remarks に記録する文言（定数化）
 
