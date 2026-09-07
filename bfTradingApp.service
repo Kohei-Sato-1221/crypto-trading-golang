@@ -1,0 +1,39 @@
+[Unit]
+Description=Crypto Trading Application (bfTradingApp)
+# Raspberry Pi は RTC を持たないため、起動直後のシステム時刻は不正確である。
+# 全ジョブが scheduler.Every().Day().At() でシステムTZの時刻に依存しており、
+# 時刻が狂った状態で起動すると次回発火時刻の計算が狂い、NTPで時刻が前方へ
+# 補正された瞬間に買い注文ジョブが即時発火しうる（2026-09-07に実際に発生）。
+# そのため time-sync.target を待ってから起動する。
+#
+# 【重要】time-sync.target が実際に同期完了を待つには、Pi 側で
+#   sudo systemctl enable --now systemd-time-wait-sync.service
+# が有効化されている必要がある。未有効だと target は即座に到達扱いになる。
+#
+# mysql.service は DB が Supabase(PostgreSQL) に移行したため依存から削除。
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/workspace/crypto-trading-golang/go
+ExecStart=/home/pi/workspace/crypto-trading-golang/go/bfTradingApp
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/pi/workspace/crypto-trading-golang/go/trading.log
+StandardError=append:/home/pi/workspace/crypto-trading-golang/go/trading.log
+
+# 環境変数が必要な場合は以下に追加
+# Environment="KEY=value"
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+
+
+
+
+

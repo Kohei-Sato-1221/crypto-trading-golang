@@ -2,3 +2,4 @@
 .db_staging.env
 .db_production.env
 .db.env
+.pg.env

@@ -44,11 +44,11 @@ test: ## run integration tests with docker-compose PostgreSQL ## test
 	@echo "Waiting for PostgreSQL to be ready..."
 	@until docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
 	@echo "PostgreSQL is ready."
-	cd go && go test ./tests/ -v -count=1
+	cd go && go test ./... -v -count=1
 	docker compose down
 
 test-keep-db: ## run tests without stopping PostgreSQL (for repeated runs) ## test-keep-db
-	cd go && go test ./tests/ -v -count=1
+	cd go && go test ./... -v -count=1
 
 migrate-dump: ## Dump MySQL data from AWS RDS and convert to PostgreSQL format ## migrate-dump
 	PATH="/opt/homebrew/opt/mysql-client/bin:$$PATH" bash scripts/migration/dump_mysql.sh

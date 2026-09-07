@@ -6,15 +6,31 @@ import (
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/config"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
 )
 
 func placeSellOrder(apiClient *bitflyer.APIClient) {
 	log.Println("【sellOrderjob】start of job")
-	buyOrderInfos := models.CheckFilledBuyOrders()
-	if buyOrderInfos == nil {
+	// DBの読み取り失敗と「対象が0件」を区別する。
+	// 以前は失敗時も nil が返るため「売る対象なし」と解釈され、
+	// 約定済み買い注文への売り注文発注が無言でスキップされていた
+	buyOrderInfos, err := models.CheckFilledBuyOrders()
+	if err != nil {
+		errMsg := fmt.Sprintf("🚨【sellOrderjob】約定済み買い注文の取得に失敗したため売り注文を発注しません: %v", err)
+		log.Println(errMsg)
+		slackClient.PostMessage(errMsg, true)
+		return
+	}
+	if len(buyOrderInfos) == 0 {
 		log.Println("【sellOrderjob】 : No order ids ")
 		return
+	}
+
+	// 売り注文の有効期限(分)。Bitflyerの上限は43200分(30日)
+	sellMinuteToExpire := config.Config.BFSellMinuteToExpire
+	if sellMinuteToExpire <= 0 {
+		sellMinuteToExpire = config.DefaultSellMinuteToExpire
 	}
 
 	for i, buyOrderInfo := range buyOrderInfos {
@@ -22,7 +38,14 @@ func placeSellOrder(apiClient *bitflyer.APIClient) {
 		productCode := buyOrderInfo.ProductCode
 		size := buyOrderInfo.Size
 		sellPrice := buyOrderInfo.CalculateSellOrderPrice()
-		log.Printf("No%d Id:%v sellPrice:%10.2f strategy:%v", i, orderID, sellPrice, buyOrderInfo.Strategy)
+		// 利確率は買い戦略ごとに変わる。マッピングに無い戦略値は既定値にフォールバックする
+		profitRate, knownStrategy := buyOrderInfo.SellProfitRate()
+		profitRateLog := fmt.Sprintf("%.3f", profitRate)
+		if !knownStrategy {
+			profitRateLog += "(fallback)"
+		}
+		log.Printf("No%d Id:%v buyPrice:%10.2f sellPrice:%10.2f strategy:%v profitRate:%s",
+			i, orderID, buyOrderInfo.Price, sellPrice, buyOrderInfo.Strategy, profitRateLog)
 
 		sellOrder := &bitflyer.Order{
 			ProductCode:     productCode,
@@ -30,7 +53,7 @@ func placeSellOrder(apiClient *bitflyer.APIClient) {
 			Side:            "SELL",
 			Price:           sellPrice,
 			Size:            size,
-			MinuteToExpires: 43200, // 30days
+			MinuteToExpires: sellMinuteToExpire,
 			TimeInForce:     "GTC",
 		}
 
@@ -38,39 +61,48 @@ func placeSellOrder(apiClient *bitflyer.APIClient) {
 		res, err := apiClient.PlaceOrder(sellOrder)
 		log.Printf("sell res:%v\n", res)
 		if err != nil {
-			errMsg := fmt.Sprintf("SellOrder failed.... Failure in [apiClient.PlaceOrder()] err:%v (BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v)", err, orderID, buyOrderInfo.Price, buyOrderInfo.Strategy)
+			errMsg := fmt.Sprintf("SellOrder failed.... Failure in [apiClient.PlaceOrder()] err:%v (BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v, ProfitRate: %s, SellProductCode: %s, SellPrice: %.2f, SellSize: %v)",
+				err, orderID, buyOrderInfo.Price, buyOrderInfo.Strategy, profitRateLog, productCode, sellPrice, size)
 			log.Println(errMsg)
 			slackClient.PostMessage(errMsg, true)
-			break
+			continue
 		}
 		if res == nil {
-			errMsg := fmt.Sprintf("SellOrder failed.... no response (BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v)", orderID, buyOrderInfo.Price, buyOrderInfo.Strategy)
+			errMsg := fmt.Sprintf("SellOrder failed.... no response (BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v, ProfitRate: %s, SellProductCode: %s, SellPrice: %.2f, SellSize: %v)",
+				orderID, buyOrderInfo.Price, buyOrderInfo.Strategy, profitRateLog, productCode, sellPrice, size)
 			log.Println(errMsg)
 			slackClient.PostMessage(errMsg, true)
-			break
+			continue
 		}
 		// Check for API error response (e.g., Insufficient funds)
 		if res.Status != 0 || res.OrderId == "" {
 			var errMsg string
 			if res.ErrorMessage != "" {
-				errMsg = fmt.Sprintf("SellOrder failed: %s (Status: %d, BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v, SellProductCode: %s, SellPrice: %.2f, SellSize: %v)", res.ErrorMessage, res.Status, orderID, buyOrderInfo.Price, buyOrderInfo.Strategy, productCode, sellPrice, size)
+				errMsg = fmt.Sprintf("SellOrder failed: %s (Status: %d, BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v, ProfitRate: %s, SellProductCode: %s, SellPrice: %.2f, SellSize: %v)", res.ErrorMessage, res.Status, orderID, buyOrderInfo.Price, buyOrderInfo.Strategy, profitRateLog, productCode, sellPrice, size)
 			} else {
-				errMsg = fmt.Sprintf("SellOrder failed: No order ID returned (Status: %d, BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v, SellProductCode: %s, SellPrice: %.2f, SellSize: %v)", res.Status, orderID, buyOrderInfo.Price, buyOrderInfo.Strategy, productCode, sellPrice, size)
+				errMsg = fmt.Sprintf("SellOrder failed: No order ID returned (Status: %d, BuyOrderID: %s, BuyPrice: %.2f, Strategy: %v, ProfitRate: %s, SellProductCode: %s, SellPrice: %.2f, SellSize: %v)", res.Status, orderID, buyOrderInfo.Price, buyOrderInfo.Strategy, profitRateLog, productCode, sellPrice, size)
 			}
 			log.Println(errMsg)
 			slackClient.PostMessage(errMsg, true)
-			break
+			continue
 		}
 
 		err = models.UpdateFilledOrderWithBuyOrder(orderID)
 		if err != nil {
-			log.Println("Failure to update records..... / #UpdateFilledOrderWithBuyOrder")
-			break
+			// 取引所には売り注文が出ている状態でDB更新に失敗している。
+			// 次回以降の sellOrderjob で同じ買い注文が再度対象になり得るため、手動確認を促す
+			errMsg := fmt.Sprintf("SellOrder failed.... Failure in [models.UpdateFilledOrderWithBuyOrder()] err:%v ※売り注文は発注済みのため要手動確認 (SellOrderID: %s, BuyOrderID: %s, ProductCode: %s, SellPrice: %.2f, SellSize: %v, Strategy: %v, ProfitRate: %s)",
+				err, res.OrderId, orderID, productCode, sellPrice, size, buyOrderInfo.Strategy, profitRateLog)
+			log.Println(errMsg)
+			slackClient.PostMessage(errMsg, true)
+			continue
 		}
 		log.Printf("Buy Order updated successfully!! #UpdateFilledOrderWithBuyOrder  orderId:%s", orderID)
 
 		utc, _ := time.LoadLocation("UTC")
 		utcCurrentDate := time.Now().In(utc)
+		// 注文の有効期限(UTC)を記録する。ローリング(期限3日前の再発注)の判定に使う
+		expireDate := utcCurrentDate.Add(time.Duration(sellMinuteToExpire) * time.Minute)
 		event := models.OrderEvent{
 			OrderID:     res.OrderId,
 			Time:        utcCurrentDate,
@@ -80,11 +112,14 @@ func placeSellOrder(apiClient *bitflyer.APIClient) {
 			Size:        size,
 			Exchange:    "bitflyer",
 		}
-		err = event.SellOrder(orderID)
+		err = event.SellOrderWithMeta(orderID, "", &expireDate)
 		if err != nil {
-			log.Println("BuyOrder failed.... Failure in [event.BuyOrder()]")
+			errMsg := fmt.Sprintf("SellOrder failed.... Failure in [event.SellOrderWithMeta()] err:%v (SellOrderID: %s, BuyOrderID: %s, ProductCode: %s, SellPrice: %.2f, SellSize: %v, Strategy: %v)",
+				err, res.OrderId, orderID, productCode, sellPrice, size, buyOrderInfo.Strategy)
+			log.Println(errMsg)
+			slackClient.PostMessage(errMsg, true)
 		} else {
-			log.Printf("BuyOrder Succeeded! OrderId:%v", res.OrderId)
+			log.Printf("SellOrder Succeeded! OrderId:%v expire(UTC):%s", res.OrderId, expireDate.Format(time.RFC3339))
 		}
 	}
 	log.Println("【sellOrderjob】end of job")

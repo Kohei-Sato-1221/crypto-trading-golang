@@ -1,0 +1,235 @@
+{
+  "sprint_number": 9,
+  "phase": "Phase 3 - 最終回帰確認（レビュー指摘31件 + 追加対応5件の総まとめ）",
+  "scope": [
+    "go",
+    "docs",
+    "deploy(systemd)"
+  ],
+  "status": "pass",
+  "target_range": "a6afaa5..HEAD（Phase 3 の45コミット + 検証中に追加された docs のみのコミット ea37aa3 = go/CLAUDE.md の同期。HEAD=ea37aa3 でもゲート・テストは再確認済み）",
+  "gate": {
+    "build": "pass（cd go && go build ./... : エラー0）",
+    "vet": "pass（go vet ./... : 指摘0件。レビュー時点のベースライン bitbank/bitbank.go の指摘は F6/F20 のリファクタで解消済み）",
+    "fmt": "pass（gofmt -l . は okex/okex.go のみ = ベースライン・スコープ外）",
+    "terraform_plan": "not_applicable（terraform/ に変更なし）"
+  },
+  "scores": {
+    "機能完成度": 9,
+    "バグ": 9,
+    "回帰": 10,
+    "取引安全性": 9
+  },
+  "thresholds_met": true,
+  "verification": {
+    "existing_tests": "pass（make test: 139 passed / 0 failed / exit 0。app/bitflyerApp・bitbank・bitflyer・config・enums・tests の全パッケージ ok）",
+    "static_check_after_mutation_restore": "pass（ミューテーション検証後にワーキングツリーを完全復元。git diff は空、未追跡は lambda/crypto-regular-purchase と terraform/build/crypto-regular-purchase のみ）",
+    "focus_1_修正どうしの干渉": {
+      "F2 x E3": {
+        "result": "OK（ローカル docker PostgreSQL で網羅検証）",
+        "method": "expire_date を 05:00〜07:00 JST の1分刻み121件生成し、rollover(05:30) と sweep(06:05) を30日ぶん実行して抽出集合を突き合わせた（Evaluator が独自に作成した一時テストで実施、実行後に削除）",
+        "evidence": "grace=45分: どのジョブにも拾われないレコード 0件 / 同日重複 0件。grace=10分(E3前): 同日重複 24件（expire_date 05:31〜05:54 JST）。E3 が消したのはまさにこの窓であり、E3 適用後も F2 の『rollover と sweep のどちらからも漏れる隙間が無い』性質は維持されている（05:20〜05:30 の10分ぶんは当日どちらにも入らないが、翌日の sweep が確実に拾うため恒久滞留にはならない）",
+        "code": "go/models/orderLifecycle.go:252-303（方式Aは RemarkRolloverPending を除外しない）/ :320-357（方式Bは rolloverRetryAfter より新しい間だけ除外）/ :529-577（rollover は expire_date > now の下限を持つ）"
+      },
+      "F3 x F12 x G1": {
+        "result": "OK",
+        "evidence": "go/app/bitflyerApp/rolloverSellOrderJob.go:672-810 で処理順序が①約定確認 →(F12) record.Size を8桁丸め →②最小単位チェック →③キャンセル前照会(G1: average_price 取得) →④adjustSizeForPartialFill(DBのsizeを残数量へ先行補正) →⑤CancelOrder＋事後照会 →⑥オーファン確認(F3, alreadyCancelled のときのみ) →⑦再発注 →⑧単一トランザクション、の順で保たれていることを確認。record は値渡しなので丸め後の値が再発注・INSERT・オーファン照合(matchesRolloverOrder, size epsilon 1e-9)まで一貫して使われ、残数量計算(remainingSize も8桁丸め)と矛盾しない。alreadyCancelled 経路では前回実行時に既に残数量へ補正済みのDB値を使い、再度 adjust しても同じ値に収束する（冪等）"
+      },
+      "F9 x F18 x G2": {
+        "result": "OK（通知の消失・過剰いずれも無し）",
+        "evidence": "F9: models 層は error / SyncBuyOrderFailure を返し、app 層(placeSellOrder.go:15-22, syncBuyOrders.go:49-76,143-147)が必ず Slack 通知。F18: placeBuyOrder は notificationThrottle(24h, key=sell_over_limit)で集約、reconcileJob は日次1通（合計 最大2通/日。修正前は最大5通/日）。F16: buildOrderDiff が [ROLLOVER_PENDING] を DBOnly から除いて専用通知へ一本化（二重通知の解消）。G2: partialFillManualFixNote が7項目（ParentID/OrderID/product_code/average_price/executed_size/元size/残数量）を必ず本文に含む。通知が消える経路は無く、いずれも 🚨 は残っている"
+      },
+      "F30 x F14 x F5": {
+        "result": "OK",
+        "evidence": "service.go の登録は registry 経由 28箇所（daily 21 / interval 6 / dailyWithoutWrap 1）。本番モード(!IsTest)では daily 19 + interval 6 + shutdown 1 = 26本で、a6afaa5 時点の scheduler 直呼び 26本と完全に一致（ジョブの増減・時刻変更なし。F14 は service.go にハードコードされていた \"22:45\"/\"01:20\" を trigger_time_08/09 に移しただけで既定値も同一）。F30-1: NormalizeTriggerTime が trigger_time_01〜09 すべてに掛かり、未設定・不正値で既定値へ倒れることを実測確認。F5 はユーザー確定方針どおり挙動変更ではなく cancelBuyOrderConfigNote() による毎回の整合ログ出力で対処"
+      }
+    },
+    "focus_2_Phase2成果の非破壊_本番DB_SELECTのみ": {
+      "getResultsPostgres_損益": "OK。Total = 60,134.14（171日ぶん）。FILLED の売り注文440件に対し parentid の重複は 0件（cnt_per_parent=1 が440件）＝買いコストの二重計上なし",
+      "parentid紐付け": "OK。parentid が buy_orders に存在しない sell_orders は 0件。parentid が空の FILLED 売り注文も 0件",
+      "MANUAL_HOLD_130件": "OK。buy_orders 65件 / sell_orders 65件 = 130件。うち status='UNFILLED' は両テーブルとも 0件のため、全ジョブ（rollover / sweep / cancelBuy / reconcile の突合）から構造的に対象外",
+      "裸の保有": "OK。GetExpectedHoldings の naked 条件（FILLED(SELL ORDER PLACED) かつ生存する売り注文が無い）に合致する buy_orders は 0件",
+      "expire_date_UTC": "OK。buy_orders / sell_orders とも timestamp without time zone で定義され、本番の全 UNFILLED レコードは expire_date が NULL（＝新バイナリ未デプロイのため未書き込み。旧コードは書かない）。取引所APIの child_order_date と DB timestamp はアプリ発注ぶん（strategy=10003）で秒まで一致しており UTC 保存が保たれている",
+      "DBと取引所の完全一致": "OK。DB UNFILLED buy 7件 = 取引所 ACTIVE BUY 7件（order_id 完全一致）、DB UNFILLED sell 4件 = 取引所 ACTIVE SELL 4件（order_id 完全一致）。reconcileJob は乖離0件を報告する状態",
+      "exchange列": "OK。buy_orders 714件 / sell_orders 509件ともすべて exchange='bitflyer'、NULL なし（F11 の exchange フィルタ追加で既存レコードが取りこぼされないことを裏取り）"
+    },
+    "focus_3_デプロイ可能性": {
+      "max_buy_orders_max_sell_orders": "⚠️ 要注意（必須確認項目の回答）。config/config.go:157-158 は MustInt()（既定値なし）のため、本番 config.ini にキーが無いと 0 になる。models.GetBuyOrderSlotStatus の ShouldSkip は `未約定buy件数 >= max_buy_orders` なので max_buy_orders=0 では常に true となり買い注文が全停止する。実測でキー欠落時 MustInt()=0 を確認済み。倒れる方向はフェイルセーフ側（発注しない）で、かつ買いジョブごとに 🚨 Slack 通知が出るため無言では止まらないが、既定値が効かないのは事実。なお go/config.ini は git 追跡下でキーは存在するため、リポジトリごとデプロイすれば問題は起きない。Pi 側で config.ini を手編集している場合のみリスクがある",
+      "新規キーの既定値実測": {
+        "既定値が効く（本番config.iniに無くても安全）": [
+          "trigger_time_01〜09（NormalizeTriggerTime で 06:30/06:45/18:00/06:00/05:30/06:05/06:15/22:45/01:20）",
+          "expire_sweep_grace_minutes（45）",
+          "sell_rollover_days_before_expire（3） / sell_rollover_fallback_days（27） / sell_rollover_max_per_run（20）",
+          "buy_minute_to_expire（10080） / sell_minute_to_expire（43200） / buy_order_cancel_days（7） / child_orders_count（0→実効500）",
+          "no_order_alert_days（3） / balance_diff_threshold_btc（0.0005） / balance_diff_threshold_eth（0.005） / untracked_holding_btc・eth（0） / budget_criteria（500000）"
+        ],
+        "既定値が効かない（本番config.iniへの反映が必須）": [
+          "[bitflyer] max_buy_orders（未設定＝0 → 買い注文が全停止）",
+          "[bitflyer] max_sell_orders（未設定＝0 → sell超過警告が常時発火。買い注文はブロックされない）"
+        ],
+        "値そのものが変わったので反映が必要": [
+          "max_buy_orders 15 → 28",
+          "max_sell_orders 25 → 60",
+          "expire_sweep_grace_minutes 10 → 45（Pi の config.ini に旧値 10 が明示的に残っていると E3 が無効化され rollover と sweep の同日競合が復活する）"
+        ]
+      },
+      "inline_comment": "OK。go-ini は `key=値 # コメント` のインラインコメントを既定で除去することを実測確認（trigger_time_01 の String() は \"06:30\" を返す）",
+      "systemd_F4": "OK。bfTradingApp.service / restart-bftradingapp.service とも After/Wants に network-online.target time-sync.target を設定。Pi 側の追加作業（sudo systemctl enable --now systemd-time-wait-sync.service）は .service ファイル内コメントとコミット d2aa9b1 のメッセージ双方に明記されている。mysql.service 依存の削除も記載済み",
+      "初回起動時の想定挙動（要周知）": "cancelBuyOrderJob(22:45 JST)の初回実行で、取引所側でまだ ACTIVE な買い注文3件（JRF20260810-223720-006155 / JRF20260810-223736-004358 / JRF20260824-041919-077747。いずれも発注から7日超で expire_date が DB 上 NULL）が能動キャンセルされる。仕様どおりの挙動（expire_date が NULL の旧レコードの掃除）だが、意図しない場合はデプロイ前に buy_order_cancel_days を調整すること"
+    },
+    "focus_4_G1_G2_G3": {
+      "G1": "OK。lookupRolloverOrder が average_price を rolloverOrderSnapshot.averagePrice に取り込む（rolloverSellOrderJob.go:475-497）。呼び出しは③キャンセル前照会のみで、⑤のキャンセル後照会の結果は afterCancel という別変数に受けており、通知に載る averagePrice は必ずキャンセル前の値。実APIで average_price フィールドの存在を確認済み（GET /v1/me/getchildorders?child_order_state=COMPLETED）",
+      "G2": "OK。partialFillManualFixNote が7項目（親買い注文ID=ParentID / 売り注文ID=OrderID / product_code / average_price / executed_size / 元size / 残数量）をすべて含む。partialFillRolloverMessage（パターン①）と partialFillSkipMessage（パターン②・F13 で ACTIVE / 非ACTIVE を文言分岐）の双方から呼ばれる。定数 partialFillDocSection = \"売り注文の部分約定が起きたときの対応\" は CLAUDE.md:104 の見出しと完全一致",
+      "G3_手順の実機再現": "OK。Evaluator がローカル docker PostgreSQL に対し CLAUDE.md 記載の SQL をそのまま（プレースホルダを実値に置換して）実行し、構文エラー・制約違反なしで完走することを確認。対応前 -4,747.87 → 手順どおり +356.51（真の損益 (511000-500000)*0.01+(512345-500000)*0.02=356.90 に手数料率0.9989 を掛けた値と一致）。検証クエリ①買い数量合計 0.03（不変）②同一 parentid の FILLED 売り重複 0件 も再現。手順2の INSERT...SELECT は status を引き継ぐため FILLED(SELL ORDER PLACED) となり、placeSellOrder（CheckFilledBuyOrders は status='FILLED' のみ抽出）が再度売り注文を出さないことをコード追跡で確認。order_id の UNIQUE 制約（buy_orders_order_id_key / sell_orders_order_id_key）はローカル・本番とも存在し、varchar(50) に対し本番の order_id 最大長は29文字なので -PARTIAL(8文字)付与後も37文字で収まる",
+      "G3_CLAUDE.mdの非破壊": "OK。git diff a6afaa5..HEAD -- CLAUDE.md は追加行のみ（削除行ゼロ）。見出し構成も『## テスト』→『## 売り注文の部分約定が起きたときの対応』→『## ハーネスエンジニアリング』の順で、ハーネスエンジニアリング配下の全サブセクション（前提／承認フロー／概要／エージェント定義／状態管理／実行ルール／制約）が保持されている"
+    },
+    "focus_5_スコープ": {
+      "F1": "手つかず（git diff a6afaa5..HEAD -- scripts/ は空）",
+      "F29": "手つかず（bitflyer.go のレスポンス全文ログは残存。差分は httpClientTimeout と DateTime() のみ）",
+      "F27": "恒久対応は未実施。G1〜G3 による代替のみ",
+      "okex": "変更なし（git diff a6afaa5..HEAD -- go/okex/ は空。main...HEAD でも空）。go/app/okjTasks.go のみ F6 の bitbank.GetBBTicker シグネチャ変更への追従で +19/-2",
+      "未追跡ディレクトリ": "lambda/crypto-regular-purchase/ と terraform/build/crypto-regular-purchase/ は未追跡のまま。コミット履歴にも含まれない"
+    },
+    "focus_6_テストの質": {
+      "件数": "27 → 139（トップレベル PASS 139 / FAIL 0）",
+      "評価": "機械的な水増しではない。ミューテーション検証で 5/5 の修正が回帰テストに捕捉されることを実測した",
+      "mutation_results": [
+        "F12: remainingSize() の丸めを除去 → TestRemainingSizeCancelledPathHasNoFloatingNoise が FAIL（0.009999999999999998）",
+        "F19: StrategyZeroValue ガード除去＋botStrategies に Stg0BtcLtp3low7 を復活 → TestIsBotStrategyRejectsZeroValue が FAIL",
+        "E3: DefaultExpireSweepGraceMinutes を 45→10 → TestExpireSweepGraceHasNoOverlapWithRollover / TestExpireSweepGraceDefault が FAIL",
+        "F2: 方式Aに [ROLLOVER_PENDING] 除外を再追加 → TestNoUnfilledSellOrderFallsBetweenSweepAndRollover が FAIL（恒久滞留を検知）",
+        "E2: resolveRolloverOrphan の !activeOK 時を proceed=true に改変 → TestResolveRolloverOrphanRequiresActiveList / TestResolveRolloverOrphanNilIndex が FAIL（二重売りのフェイルセーフを実際に守っている）",
+        "F15: lookupExchangeBalance の未検出時を found=true に改変 → TestLookupExchangeBalanceNotFound が FAIL"
+      ],
+      "E2のフェイルセーフテスト": "質は高い。内部ヘルパーではなく resolveRolloverOrphan() を直接呼び、slackClient を httptest サーバへ、models.AppDB をダミー sql ドライバへ差し替えて exists=true/false/DB照合失敗の3経路を網羅している。外部へのリクエストは飛ばない",
+      "G3の手順検証テスト": "質は高い。tests/partial_fill_manual_fix_test.go が (a) 手動対応なしの過小計上 (b) 単純INSERTのアンチパターンによる悪化 (c) 手順どおりの正解 (d) GetExpectedHoldings への非影響 の4本を実クエリ（models.GetResults）で固定しており、Evaluator の生SQL再現とも数値が一致した"
+    },
+    "readonly_api_checks": [
+      {
+        "endpoint": "GET /v1/ticker?product_code=BTC_JPY（公開）",
+        "purpose": "F21 の前提（Bitflyer の timestamp はTZサフィックス無し）の裏取り",
+        "result": "OK（timestamp=\"2026-09-07T08:55:48.847\"。RFC3339 では常にパース失敗するため utils.ParseBitflyerTime への差し替えは妥当）"
+      },
+      {
+        "endpoint": "GET /v1/me/getchildorders?product_code=BTC_JPY&child_order_state=COMPLETED&count=1",
+        "purpose": "G1 が参照する average_price フィールドの実在と型の確認",
+        "result": "OK（average_price が number で返却。outstanding_size / cancel_size / executed_size も実装のフィールド名と一致）"
+      },
+      {
+        "endpoint": "GET /v1/me/getchildorders?product_code={BTC_JPY,ETH_JPY}&child_order_state=ACTIVE&count=500",
+        "purpose": "DBの UNFILLED と取引所 ACTIVE の突合（reconcileJob が返すはずの結果の事前確認）",
+        "result": "OK（BUY 7件 / SELL 4件。DB の UNFILLED と order_id が完全一致し乖離0件）"
+      },
+      {
+        "endpoint": "GET /v1/me/getchildorders?...&child_order_state=COMPLETED&count=500",
+        "purpose": "F8 の oldestCompleted（遡り限界）が実データで十分に古いかの確認",
+        "result": "OK（1ページ目500件の最古が BTC=2025-01-20 / ETH=2025-11-15。DB の UNFILLED レコードはすべてこれより新しく、方式A/Bとも判定保留に落ちない）"
+      }
+    ],
+    "acceptance_criteria_checked": [
+      {
+        "criterion": "F2 [ROLLOVER_PENDING] の恒久滞留が解消している",
+        "result": "OK",
+        "evidence": "models/orderLifecycle.go:252-303 に remarks 除外なし。ローカルDBで grace=45 の網羅検証でも漏れ0件"
+      },
+      {
+        "criterion": "F3 レスポンス消失時の二重発注を防ぐ",
+        "result": "OK",
+        "evidence": "rolloverSellOrderJob.go:797-808 で alreadyCancelled のときのみ resolveRolloverOrphan を実行し、判定不能(activeOK=false / DB照合失敗)なら再発注を見送る。ミューテーションでテストが落ちることも確認"
+      },
+      {
+        "criterion": "F6 GetTicker のエラーで panic しない",
+        "result": "OK",
+        "evidence": "placeBuyOrder.go:32-61 の validateBuyPriceSources が err / nil / 非正価格を検査し、不足時は 🚨 通知して return。bitbank.GetBBTicker も (*ReturnTicker, error) 化"
+      },
+      {
+        "criterion": "F8 方式Aにも遡り限界ガードがある",
+        "result": "OK",
+        "evidence": "expireSweepJob.go:212-247 の decideSweepAction を方式A・B双方が applySweepDecision 経由で共有"
+      },
+      {
+        "criterion": "F10 Timestamp ゼロ値でキャンセルしない",
+        "result": "OK",
+        "evidence": "cancelBuyOrderJob.go:96-107 の decideCancelBuyOrder が TimestampValid / IsZero を先に検査し、見送り件数を Slack 通知"
+      },
+      {
+        "criterion": "F22 MarkOrderCancelledWithRemark の RowsAffected エラーを失敗側へ倒す",
+        "result": "OK",
+        "evidence": "models/orderLifecycle.go の rowsErr != nil で fmt.Errorf を返す（RolloverSellOrder / UpdateOrderSizeWithRemark と挙動が揃った）"
+      },
+      {
+        "criterion": "F28 GetUnfilledOrderIDs の limit 到達を Slack へ通知",
+        "result": "OK",
+        "evidence": "models が truncated を返し reconcileJob.go:279-284 が notifyReconcileError で通知"
+      },
+      {
+        "criterion": "E1 サマリの『うちアラート対象外 SELL』に pending が混ざらない",
+        "result": "OK",
+        "evidence": "orderDiffDetails.ExchangeOnlySellCount を新設し notifyReconcileResult が InfoCount ではなくこれを使用"
+      },
+      {
+        "criterion": "F23 design-dock §3.4 の DDL が実マイグレーションと一致",
+        "result": "OK",
+        "evidence": "20260906000000_add_expire_date.sql と design-dock.md §3.4 のSQLブロックが逐語一致。『適用済み』注記あり"
+      },
+      {
+        "criterion": "F30-2 スケジュール登録失敗を起動時に Slack 通知",
+        "result": "OK",
+        "evidence": "jobRegistry.record が Run() の error を集約し reportRegistrationResult が1通だけ通知。プロセスは落とさない（理由も明文化）"
+      }
+    ],
+    "claude_md_compliance": "OK。(1) ジョブのファイル分離: 新規ジョブは expireSweepJob.go / rolloverSellOrderJob.go / reconcileJob.go / cancelBuyOrderJob.go に分離され、jobRegistry.go / notificationThrottle.go は登録・通知の共通基盤として別ファイル化。(2) エラー時のSlack通知: F9 で models 層の残存経路（CheckFilledBuyOrders / SyncBuyOrders / UpdateOrderExpireDate）を error 返却化し app 層で OrderID/ParentID/ProductCode/Price/Size/Strategy 付きで通知するよう是正。(3) TZ: 全ジョブが冒頭で local/UTC 両方をログ出力、比較は UTC 同士、F4 で systemd が時刻同期を待つよう修正。(4) 機密情報: private_config.ini / terraform.tfvars / db/envs/.pg.env はいずれも未コミット。新規追加した systemd ユニット・スクリプトにも認証情報なし（F1 のみユーザー判断で未対応のまま残存）。(5) 更新系API: Evaluator は sendchildorder / cancelchildorder を一切実行していない。本番DBへの書き込みも行っていない（SELECT のみ）"
+  },
+  "pending_user_approval": [],
+  "issues": [
+    {
+      "severity": "Medium",
+      "description": "max_buy_orders / max_sell_orders だけ既定値が効かず、本番 config.ini にキーが無いと 0 になって買い注文が全停止する",
+      "location": "go/config/config.go:157-158",
+      "expected": "他の設定キーと同様に MustInt(既定値) で安全な値へ倒れること（例: MustInt(28) / MustInt(60)）",
+      "actual": "MustInt()（引数なし）のため未設定時は 0。models.GetBuyOrderSlotStatus の ShouldSkip が `件数 >= 0` で常に true となり、全12本の買い注文ジョブが 🚨 を出してスキップする",
+      "fix_suggestion": "config.go に DefaultBFMaxBuyOrders=28 / DefaultBFMaxSellOrders=60 を定義して MustInt(既定値) にする。当面はデプロイ前チェックリストで本番 config.ini に両キーが存在することを目視確認する",
+      "note": "本ブランチで作り込んだ劣化ではなく main から存在する既存挙動。倒れる方向はフェイルセーフ側で、無言では止まらない（ジョブごとに Slack 通知が出る）ため合否には影響させていない"
+    },
+    {
+      "severity": "Low",
+      "description": "go/enums/strategy.go の IsBotStrategy コメントで strategy=0 のレコードを『2021年頃の5件』と記載しているが、本番データの実際の期間は 2025-11-13〜2025-11-23",
+      "location": "go/enums/strategy.go:159-172",
+      "expected": "コメントの日付が実データと一致すること",
+      "actual": "件数（5件）と『直近200件には含まれない』という判断は本番DBで裏取り済みで正しいが、年が誤っている",
+      "fix_suggestion": "コメントの『2021年頃』を『2025-11』に修正する。挙動への影響はなし"
+    },
+    {
+      "severity": "Low",
+      "description": "CLAUDE.md の部分約定手順で UNIQUE 制約のインデックス名と order_id の文字数が実態とわずかに食い違う",
+      "location": "CLAUDE.md:141（『UNIQUE 制約（orderId インデックス）』『Bitflyer の注文IDは25文字』）",
+      "expected": "PostgreSQL 側の制約名（buy_orders_order_id_key / sell_orders_order_id_key）を書くか、名前に言及しない。文字数は本番実測の最大29文字",
+      "actual": "orderId は MySQL 側 schema.hcl のインデックス名。本番 PostgreSQL の order_id 最大長は29文字",
+      "fix_suggestion": "『order_id には UNIQUE 制約がある』とだけ書くか、PostgreSQL 側の制約名に直す。varchar(50) に収まるという結論は 29+8=37 文字でも成立するため手順自体は正しい"
+    },
+    {
+      "severity": "Low",
+      "description": "【情報】デプロイ初回に cancelBuyOrderJob が取引所側でまだ生きている買い注文3件を能動キャンセルする",
+      "location": "go/app/bitflyerApp/cancelBuyOrderJob.go:96-107",
+      "expected": "仕様どおり（expire_date が NULL の旧レコードの掃除）",
+      "actual": "対象: JRF20260810-223720-006155 / JRF20260810-223736-004358 / JRF20260824-041919-077747（発注から7日超・DB上 expire_date は NULL・取引所では ACTIVE）。初回の 22:45 JST でキャンセルされ Slack 通知が3通出る",
+      "fix_suggestion": "意図しない場合はデプロイ前に buy_order_cancel_days を大きくするか、対象注文を先に手動処理する。バグではないため対応不要でも構わない"
+    }
+  ],
+  "deploy_checklist": [
+    "【必須】本番 Pi の go/config.ini に [bitflyer] max_buy_orders と max_sell_orders が存在することを確認する（既定値が効かない唯一のキー。欠落すると買い注文が全停止する）",
+    "【必須】max_buy_orders を 15 → 28、max_sell_orders を 25 → 60 に更新する",
+    "【必須】expire_sweep_grace_minutes を 45 にする（旧値 10 が残っていると E3 が無効化され、rollover(05:30) と sweep(06:05) の同日競合が復活して誤った失効通知が飛ぶ）",
+    "【推奨】config.ini はリポジトリの go/config.ini をそのまま配置するのが最も安全（trigger_time_05〜09 やその他の新キーはすべて既定値が効くため、未反映でも動作するが実値が明示されている方が運用しやすい）",
+    "【必須・Pi側】sudo systemctl enable --now systemd-time-wait-sync.service を実行する（未有効だと time-sync.target が即座に到達扱いになり F4 の修正が効かない）",
+    "【必須・Pi側】NetworkManager-wait-online.service（または systemd-networkd-wait-online.service）が有効であることを確認する",
+    "【必須・Pi側】bfTradingApp.service / restart-bftradingapp.service をリポジトリの内容で /etc/systemd/system/ へ配置し、sudo systemctl daemon-reload を実行する（mysql.service 依存の削除と time-sync.target 依存の追加が入っている）",
+    "【確認】DBマイグレーション 20260906000000_add_expire_date は本番 Supabase に適用済み（Current Version: 20260906000000 / Pending: 0）。追加のマイグレーションは無い",
+    "【周知】デプロイ後の初回 cancelBuyOrderJob（22:45 JST）で、7日超・expire_date が NULL の買い注文3件が能動キャンセルされる（JRF20260810-223720-006155 / JRF20260810-223736-004358 / JRF20260824-041919-077747）。想定どおりの挙動",
+    "【周知】デプロイ後は syncBuyOrders（90秒周期）が既存の UNFILLED レコードに expire_date を書き込み始める。それまでの間は expireSweepJob の方式B（一覧からの消滅）で判定される",
+    "【周知】初回起動時、スケジュール登録に失敗したジョブがあれば起動直後に Slack へ1通通知される（F30-2）。通知が来なければ全26本の登録に成功している",
+    "【任意】F1（scripts/migration/*.sh の本番パスワード平文コミット）は今回未対応。デプロイとは独立に、パスワードのローテーションを検討する",
+    "【任意】trading.log は StandardOutput=append で無期限に追記される。F29 未対応のため残高がログに残り続ける。clear-trading-log.sh によるローテーション運用を継続する"
+  ],
+  "recommendation": "合格。ゲート（build / vet 0件 / gofmt はベースラインのみ）を通過し、make test は 139件すべて PASS。重点1の干渉検証では F2×E3 をローカル docker PostgreSQL で網羅的に確認し、grace=45 では『どちらのジョブにも拾われないレコード 0件・同日重複 0件』、grace=10（E3前）では同日重複24件という形で E3 の効果と F2 の性質の両立を実測で裏取りした。F3×F12×G1 の処理順序、F9×F18×G2 の通知経路、F30×F14×F5 のジョブ登録（本番モード26本が a6afaa5 と完全一致）にも干渉は無い。重点2の Phase 2 成果は本番DBの SELECT で非破壊を確認（損益の二重計上0・parentid 健全・MANUAL_HOLD 130件は全ジョブ対象外・裸の保有0件・DBと取引所の UNFILLED/ACTIVE が order_id レベルで完全一致）。重点4の G3 手順は Evaluator 自身がローカルDBで生SQLを実行し、構文・制約・損益値（-4,747.87 → +356.51）まで再現できた。重点6のテストはミューテーション6件すべてが回帰テストに捕捉され、水増しではないことを確認した。デプロイに関しては、新規キーのうち既定値が効かないのは max_buy_orders / max_sell_orders の2つのみで、これは本ブランチの劣化ではなく main から存在する既存挙動（フェイルセーフ方向・Slack 通知あり）。ただしデプロイ前チェックリストの筆頭項目として必ず確認すること。issues は Medium 1件・Low 3件で、いずれも閾値に影響しない。"
+}

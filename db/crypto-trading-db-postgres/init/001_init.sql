@@ -11,11 +11,14 @@ CREATE TABLE IF NOT EXISTS buy_orders (
     size DOUBLE PRECISION,
     exchange VARCHAR(50),
     status VARCHAR(100) DEFAULT 'UNFILLED',
-    strategy SMALLINT NOT NULL DEFAULT 99,
+    -- 99:not recorded / 127:旧MySQL tinyint飽和により判別不能 / 10001-10004:LTP系 / 20001-20003:7日安値ブレンド系 / 90001:手動発注
+    strategy INTEGER NOT NULL DEFAULT 99,
     remarks TEXT,
+    expire_date TIMESTAMP,  -- 注文の有効期限(UTC)
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_buy_orders_status_expire ON buy_orders (status, expire_date);
 
 -- sell_orders (bitflyer)
 CREATE TABLE IF NOT EXISTS sell_orders (
@@ -29,9 +32,11 @@ CREATE TABLE IF NOT EXISTS sell_orders (
     exchange VARCHAR(50),
     status VARCHAR(100) DEFAULT 'UNFILLED',
     remarks TEXT,
+    expire_date TIMESTAMP,  -- 注文の有効期限(UTC)
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatetime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_sell_orders_status_expire ON sell_orders (status, expire_date);
 
 -- price_histories
 CREATE TABLE IF NOT EXISTS price_histories (

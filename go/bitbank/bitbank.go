@@ -2,13 +2,27 @@ package bitbank
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"log"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 const baseUrl = "https://public.bitbank.cc/"
+
+/*
+httpClientTimeout は bitbank の公開APIへのHTTPリクエストのタイムアウト。
+
+http.Get はタイムアウトを持たない http.DefaultClient を使うため、bitbank 側が
+ハングするとジョブが無期限にブロックする。GetBBTicker は買い注文の価格算出に
+使われるため、応答が返らないと発注ジョブごと止まる。さらに gracefulShutdown は
+実行中ジョブを最大5分待って os.Exit(0) するため、ハングしたジョブごとプロセスが落ちる。
+*/
+const httpClientTimeout = 30 * time.Second
+
+// httpClient はタイムアウト付きのHTTPクライアント。http.Get(= DefaultClient)は使わないこと。
+var httpClient = &http.Client{Timeout: httpClientTimeout}
 
 type Ticker01 struct {
 	Success int       `json:"success"`
@@ -35,25 +49,79 @@ type ReturnTicker struct {
 	Timestamp int
 }
 
-func GetBBTicker(pair string) *ReturnTicker {
-	resp, _ := http.Get(baseUrl + pair + "/ticker")
+/*
+GetBBTicker は bitbank の公開Ticker APIから価格を取得する。
+
+以前は HTTP エラー・JSONパース失敗・data が null のレスポンスをいずれも握り潰し、
+resp.Body / ticker01.Data を nil のまま参照して panic していた。
+戻り値は発注価格の算出に使われるため、取得できなかった場合は必ず error を返し、
+呼び出し側が「発注しない」側に倒せるようにする。
+*/
+func GetBBTicker(pair string) (*ReturnTicker, error) {
+	resp, err := httpClient.Get(baseUrl + pair + "/ticker")
+	if err != nil {
+		return nil, fmt.Errorf("failed to call bitbank ticker API (pair=%s): %w", pair, err)
+	}
 	defer resp.Body.Close()
 
-	byteArray, _ := ioutil.ReadAll(resp.Body)
-
-	var ticker01 Ticker01
-	err := json.Unmarshal(byteArray, &ticker01)
+	byteArray, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("ERROR! GetBBTicker err=%s resp.Body=%s", err.Error(), string(byteArray))
+		return nil, fmt.Errorf("failed to read bitbank ticker response (pair=%s): %w", pair, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bitbank ticker API returned status %d (pair=%s)", resp.StatusCode, pair)
+	}
+	return parseBBTicker(pair, byteArray)
+}
+
+/*
+parseBBTicker はレスポンスボディを ReturnTicker に変換する。
+
+data が欠けているレスポンス（エラー応答）や数値として解釈できない価格を
+nil 参照・ゼロ値のまま通さず、error として返す。
+vol だけは小数を含む値が返ることがあり整数化に失敗しても価格算出に影響しないため、
+best-effort（失敗時は0）で扱う。
+*/
+func parseBBTicker(pair string, body []byte) (*ReturnTicker, error) {
+	var ticker01 Ticker01
+	if err := json.Unmarshal(body, &ticker01); err != nil {
+		return nil, fmt.Errorf("failed to parse bitbank ticker response (pair=%s): %w", pair, err)
+	}
+	if ticker01.Data == nil {
+		return nil, fmt.Errorf("bitbank ticker response has no data (pair=%s success=%d)", pair, ticker01.Success)
 	}
 
-	tsell, _ := strconv.ParseFloat(ticker01.Data.Sell, 64)
-	tbuy, _ := strconv.ParseFloat(ticker01.Data.Buy, 64)
-	thigh, _ := strconv.ParseFloat(ticker01.Data.High, 64)
-	tlow, _ := strconv.ParseFloat(ticker01.Data.Low, 64)
-	tlast, _ := strconv.ParseFloat(ticker01.Data.Last, 64)
+	parse := func(name, value string) (float64, error) {
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse bitbank ticker %s (pair=%s value=%q): %w", name, pair, value, err)
+		}
+		return parsed, nil
+	}
+
+	tsell, err := parse("sell", ticker01.Data.Sell)
+	if err != nil {
+		return nil, err
+	}
+	tbuy, err := parse("buy", ticker01.Data.Buy)
+	if err != nil {
+		return nil, err
+	}
+	thigh, err := parse("high", ticker01.Data.High)
+	if err != nil {
+		return nil, err
+	}
+	tlow, err := parse("low", ticker01.Data.Low)
+	if err != nil {
+		return nil, err
+	}
+	tlast, err := parse("last", ticker01.Data.Last)
+	if err != nil {
+		return nil, err
+	}
 	tvol, _ := strconv.Atoi(ticker01.Data.Vol)
-	retTicker := ReturnTicker{
+
+	return &ReturnTicker{
 		Sell:      tsell,
 		Buy:       tbuy,
 		High:      thigh,
@@ -61,6 +129,5 @@ func GetBBTicker(pair string) *ReturnTicker {
 		Last:      tlast,
 		Vol:       tvol,
 		Timestamp: ticker01.Data.Timestamp,
-	}
-	return &retTicker
+	}, nil
 }

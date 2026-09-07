@@ -1,0 +1,16 @@
+[Unit]
+Description=Restart bfTradingApp service on boot
+# bfTradingApp.service と同様に時刻同期を待つ。
+# mysql.service は Supabase 移行により依存から削除。
+After=network-online.target time-sync.target bfTradingApp.service
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/workspace/crypto-trading-golang/restart-bftradingapp.sh
+RemainAfterExit=yes
+User=root
+
+[Install]
+WantedBy=multi-user.target
+

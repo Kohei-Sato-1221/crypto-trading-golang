@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 	"time"
@@ -32,7 +33,14 @@ func StartOKJService(exchange string) {
 	)
 
 	buyingJob01 := func() {
-		bbClient := bitbank.GetBBTicker("btc_jpy")
+		bbClient, err := bitbank.GetBBTicker("btc_jpy")
+		if err != nil || bbClient == nil {
+			// 価格を取得できないまま発注すると桁違いの指値になりうるため発注しない
+			errMsg := fmt.Sprintf("🚨【okjBuyingJob】bitbank Ticker を取得できないため発注しません: pair=btc_jpy err=%v", err)
+			log.Println(errMsg)
+			slackClient.PostMessage(errMsg, true)
+			return
+		}
 		prices := getBuyPrices(bbClient.Low, bbClient.Last, 4)
 		for _, price := range prices {
 			log.Printf("#### BTC-JPY price:%v ", price)
@@ -41,7 +49,14 @@ func StartOKJService(exchange string) {
 	}
 
 	buyingJob02 := func() {
-		bbClient := bitbank.GetBBTicker("eth_jpy")
+		bbClient, err := bitbank.GetBBTicker("eth_jpy")
+		if err != nil || bbClient == nil {
+			// 価格を取得できないまま発注すると桁違いの指値になりうるため発注しない
+			errMsg := fmt.Sprintf("🚨【okjBuyingJob】bitbank Ticker を取得できないため発注しません: pair=eth_jpy err=%v", err)
+			log.Println(errMsg)
+			slackClient.PostMessage(errMsg, true)
+			return
+		}
 		prices := getBuyPrices(bbClient.Low, bbClient.Last, 4)
 		for _, price := range prices {
 			log.Printf("#### ETH-JPY price:%v ", price)

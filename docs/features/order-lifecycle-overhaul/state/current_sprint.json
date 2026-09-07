@@ -1,0 +1,65 @@
+{
+  "sprint_number": 9,
+  "phase": "Phase 3 バッチF（F27 スコープ外決定に伴う代替対応 G1 / G2 / G3）",
+  "status": "completed",
+  "scope": [
+    "go",
+    "docs"
+  ],
+  "features_implemented": [
+    "G1: rolloverOrderSnapshot に averagePrice を追加し、lookupRolloverOrder が bitflyer.Order.AveragePrice を保持するよう変更。キャンセルした注文は取引所APIから即座に消えるため、ここで拾わないと部分約定の平均約定価格は二度と取得できず手動対応が原理的に不可能になる",
+    "G2: 部分約定の Slack 通知2箇所（パターン①=adjustSizeForPartialFill の再発注続行通知 / パターン②=partialFillSkipMessage の中止通知）に、システムが部分約定の損益計算に未対応であること・損益レポートが実態より過小に出ること・手動対応が必要であること・手動対応に必要な実値一式・ルート CLAUDE.md の該当セクションへの参照を追記。通知文の組み立ては partialFillManualFixNote / partialFillRolloverMessage へ切り出した",
+    "G3: ルート CLAUDE.md に「売り注文の部分約定が起きたときの対応」を追記（追加のみ・既存セクションは無変更）。実行可能な SQL 付きの手動対応手順、プレースホルダとSlack通知項目の対応表、検証クエリ3本、パターン②の対応方針、アンチパターン（売り注文だけ INSERT すると買いコスト二重計上で悪化）を明文化。手順の正しさは go/tests/partial_fill_manual_fix_test.go でローカル docker PostgreSQL に対して検証済み。design-dock.md には §11 として F27 をスコープ外とした判断と理由を追記"
+  ],
+  "verify_commands": [
+    "make build",
+    "cd go && go vet ./...",
+    "cd go && gofmt -l .",
+    "make test"
+  ],
+  "verify_results": {
+    "build": "OK（3コミットそれぞれの直前に実行して確認）",
+    "vet": "OK（go vet ./... の指摘0件。ベースラインを維持）",
+    "gofmt": "OK（gofmt -l . は okex/okex.go のみ。ベースラインで今回未変更・スコープ外）",
+    "existing_tests": "OK（make test: top-level 139 PASS / FAIL 0。バッチ開始時の128件をすべて維持し、G1で3件・G2で4件・G3で4件を追加）",
+    "local_db_verification": "ローカル docker PostgreSQL(5433) に対して G3 の手動対応手順を実クエリ（models.GetResults / getResultsPostgres）で検証。買い 0.03 @500,000 / 部分約定 0.01 @511,000 / 残り 0.02 @512,345 のシナリオで、手動対応なし=-4,747.87 / 売り注文だけINSERT(アンチパターン)=-14,626.99 / CLAUDE.md の手順=+356.51（真の損益 356.507 と一致）。本番DBへの書き込みは一切行っていない",
+    "readonly_api_checks": "今回は実APIの追加呼び出しなし。bitflyer.Order.AveragePrice のフィールド定義（bitflyer/bitflyer.go:401）と、キャンセル後に注文がAPIから消えることの実測結果（既存スプリントで確認済み）をコード追跡で確認。lookupRolloverOrder の検証は httptest サーバへ config.BaseURL を差し替えて行い、外部へリクエストは飛ばしていない"
+  },
+  "changes": {
+    "files_created": [
+      "go/app/bitflyerApp/rolloverAveragePrice_test.go",
+      "go/tests/partial_fill_manual_fix_test.go"
+    ],
+    "files_modified": [
+      "go/app/bitflyerApp/rolloverSellOrderJob.go",
+      "go/app/bitflyerApp/rolloverPartialFillMessage_test.go",
+      "CLAUDE.md",
+      "docs/features/order-lifecycle-overhaul/design-dock.md"
+    ]
+  },
+  "commits": [
+    "ac7b6dd fix: G1 部分約定の平均約定価格を取得して手動対応を可能にする",
+    "6f1b543 fix: G2 部分約定のSlack通知に手動対応が必要である旨と必要な実値を明記する",
+    "89d7adf docs: G3 売り注文の部分約定が起きたときの手動対応手順を CLAUDE.md に追記する"
+  ],
+  "design_decisions": [
+    "手動対応手順は『買い注文側も分割する』方式を採用した。売り注文だけ INSERT すると同一 parentid に FILLED の売りが2行並び、損益クエリ sum((a.price*a.size)-(b.price*b.size)) の b.price*b.size（買いコスト全量）が行ごとに引かれて二重計上になる。ローカル検証で -4,747.87 → -14,626.99 と悪化することを確認し、テストで固定した",
+    "派生レコードの order_id は {元order_id}-PARTIAL とした。buy_orders.order_id / sell_orders.order_id には UNIQUE 制約（index \"orderId\"）があり元IDを再利用できないため。varchar(50) に対して Bitflyer の注文ID（例 JRF20260907-010131-018801）は25文字なので -PARTIAL を足しても収まることを確認済み",
+    "派生した買い注文の status は元レコードから引き継ぐ（FILLED(SELL ORDER PLACED)）。FILLED にすると placeSellOrder が新たに売り注文を出してしまう。またこの status かつ FILLED の売りが紐づく状態では GetExpectedHoldings の bot / naked いずれにも計上されないため、残高乖離アラートを誤発火させないことをテストで確認した",
+    "CLAUDE.md のセクション名は Go 側の定数 partialFillDocSection として固定し、通知文と見出しがずれないようにした。ずれると通知から手順に辿り着けなくなるため",
+    "パターン②の通知には ACTIVE のまま残すケースの経過（期限最長30日で失効 → 裸の保有）も明示した。ユーザー指示に基づく"
+  ],
+  "self_evaluation": {
+    "acceptance_criteria": "OK（G1 / G2 / G3 の3件をすべて対応。1修正=1コミットで3コミットに分割し、各コミットの直前に make build と make test の通過を確認した）",
+    "build_vet": "OK（build 成功、go vet 0件、gofmt はベースラインの okex/okex.go のみ）",
+    "regression": "OK（バッチ開始時の 128 PASS をすべて維持し 139 PASS / 0 FAIL。既存の F13 回帰テスト3件もそのまま通過）",
+    "claude_md_compliance": "OK（ジョブのファイル分離を維持し新規ファイルは作っていない。Slack通知には OrderID / ParentID / product_code / price / size のコンテキストを含む。private_config.ini・.pg.env は未コミット。TZ の扱いは変更なし）",
+    "trading_safety": "OK（発注・キャンセルの判定ロジックは1行も変更していない。G1 はフィールド追加のみ、G2 は通知文のみ、G3 はドキュメントとテストのみ）",
+    "code_quality": "OK（デバッグ出力・コメントアウト・未使用importなし。通知文の組み立ては関数へ切り出してユニットテスト可能にした）"
+  },
+  "verification_notes": "G1: go/app/bitflyerApp/rolloverSellOrderJob.go の lookupRolloverOrder が order.AveragePrice を snapshot へ取り込む。averagePrice の代入を外すと go/app/bitflyerApp/rolloverAveragePrice_test.go の TestLookupRolloverOrderKeepsAveragePriceOnPartialFill が落ちることを実際に確認済み（取りこぼしを検知できる）。G2: partialFillManualFixNote / partialFillRolloverMessage / partialFillSkipMessage の3関数を go/app/bitflyerApp/rolloverPartialFillMessage_test.go で検証。必要な実値7項目と CLAUDE.md のセクション名が通知に含まれることを固定した。G3: go/tests/partial_fill_manual_fix_test.go の4テストで、現状の過小計上・アンチパターンの悪化・手順による是正・残高照合への無影響をローカル PostgreSQL に対して確認した。",
+  "pending_user_approval": [],
+  "issues": [],
+  "notes": "Phase 3 バッチF。F27（部分約定時の損益按分の恒久対応）はユーザー判断でスコープ外となり、代わりに『発生時にスムーズに手動対応できる状態にする』方針（パターン①）で G1〜G3 を実施した。最優先は G1 で、これが無いと平均約定価格がキャンセル後に失われて手動対応が原理的に不可能になる。G3 の手順は推測ではなくローカル docker PostgreSQL 上で実クエリを流して導出・検証しており、特に『売り注文だけ INSERT する』直感的な対応がかえって悪化することをテストで固定した。本番DBへの書き込み、更新系API（sendchildorder / cancelchildorder）の実行、make run / make run-binary / make apply / make atlas-apply / make pg-remote-apply / make reset-db はいずれも実行していない。ルート CLAUDE.md は追記のみで既存セクションは1行も変更していない（git diff: 142 追加 / 0 削除）。未追跡の lambda/crypto-regular-purchase/ と terraform/build/crypto-regular-purchase/ は別機能のため触っていない。対応しないと決定済みの F1 / F29 にも手を付けていない。okex/ と app/okjTasks.go も対象外として未変更。",
+  "log_entry": "Phase 3 バッチF 完了: F27 スコープ外決定に伴う代替対応として G1（rolloverOrderSnapshot への averagePrice 追加）/ G2（部分約定Slack通知への手動対応案内と実値の付与）/ G3（CLAUDE.md への手動対応手順の追記とローカルDBでの検証）を3コミットで実施。make build OK / go vet 0件 / gofmt はベースラインのみ / make test 139 PASS 0 FAIL。G3 の手順はローカル PostgreSQL で -4,747.87 → +356.51（真の損益と一致）になることを実クエリで検証済み。"
+}
