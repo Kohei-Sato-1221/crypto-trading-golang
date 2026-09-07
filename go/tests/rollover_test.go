@@ -265,3 +265,109 @@ func TestUpdateOrderSizeWithRemark(t *testing.T) {
 		t.Error("expected an error when the row is no longer UNFILLED")
 	}
 }
+
+/*
+F3 の回帰テスト（DB側）。
+
+前回の PlaceOrder がレスポンスを取りこぼしただけで成立していた場合、取引所には
+DBに紐づかない売り注文（オーファン注文）が残る。これを「未知の注文」と判定する
+models.OrderIDExists と、再発注せずにDBへ取り込む経路を検証する。
+*/
+func TestOrderIDExists(t *testing.T) {
+	setupTestDB(t)
+	defer teardownTestDB(t)
+
+	now := time.Now().UTC()
+	exp := now.AddDate(0, 0, 2)
+	insertRolloverSellOrder(t, "P-EXIST", "S-KNOWN", "ETH_JPY", 512345, 0.02, "UNFILLED", nil, &exp, now.AddDate(0, 0, -28))
+	// status に関係なく「DBに存在するか」で判定する（約定済み・キャンセル済みも既知の注文）
+	insertRolloverSellOrder(t, "P-EXIST2", "S-KNOWN-CANCELLED", "ETH_JPY", 512345, 0.02, "CANCELLED", nil, &exp, now.AddDate(0, 0, -28))
+
+	for _, id := range []string{"S-KNOWN", "S-KNOWN-CANCELLED"} {
+		exists, err := models.OrderIDExists(models.TableSellOrders, id)
+		if err != nil {
+			t.Fatalf("OrderIDExists(%s) failed: %v", id, err)
+		}
+		if !exists {
+			t.Errorf("%s はDBに存在するのに未知の注文と判定された（オーファンと誤認して取り込む恐れ）", id)
+		}
+	}
+
+	exists, err := models.OrderIDExists(models.TableSellOrders, "S-ORPHAN")
+	if err != nil {
+		t.Fatalf("OrderIDExists failed: %v", err)
+	}
+	if exists {
+		t.Error("DBに無い order_id が既知と判定された（オーファンを見逃して二重売りになる）")
+	}
+
+	// buy_orders 側と混線しないこと
+	insertTestBuyOrder(t, "B-KNOWN", "ETH_JPY", 500000, 0.02, "UNFILLED")
+	if exists, err := models.OrderIDExists(models.TableSellOrders, "B-KNOWN"); err != nil || exists {
+		t.Errorf("buy_orders の order_id が sell_orders に存在すると判定された: exists=%v err=%v", exists, err)
+	}
+
+	if _, err := models.OrderIDExists(models.TableSellOrders, ""); err == nil {
+		t.Error("空の order_id はエラーにすべき")
+	}
+}
+
+// オーファン注文をDBへ取り込むと、再発注せずにローリングが完了すること。
+func TestAdoptOrphanSellOrderKeepsSingleActiveOrder(t *testing.T) {
+	setupTestDB(t)
+	defer teardownTestDB(t)
+
+	now := time.Now().UTC()
+	pending := " " + models.RemarkRolloverPending
+	exp := now.AddDate(0, 0, 2)
+	insertRolloverSellOrder(t, "BUY-PARENT-ORPHAN", "OLD-SELL-ORPHAN", "ETH_JPY", 512345, 0.02,
+		"UNFILLED", &pending, &exp, now.AddDate(0, 0, -28))
+
+	records, err := models.GetSellOrdersToRollover(now, 3, 27, 20)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("setup failed: len=%d err=%v", len(records), err)
+	}
+	old := records[0]
+
+	// 取引所にだけ存在していたオーファン注文を、再発注せずそのまま取り込む
+	orphanExpire := now.AddDate(0, 0, 30)
+	if err := models.RolloverSellOrder(old, "ORPHAN-SELL-1", old.Price, orphanExpire); err != nil {
+		t.Fatalf("adopt failed: %v", err)
+	}
+
+	var status string
+	models.AppDB.QueryRow(`SELECT status FROM sell_orders WHERE order_id='OLD-SELL-ORPHAN'`).Scan(&status)
+	if status != "CANCELLED" {
+		t.Errorf("old status = %s, want CANCELLED", status)
+	}
+
+	var parentID string
+	var price, size float64
+	var newStatus string
+	err = models.AppDB.QueryRow(
+		`SELECT parentid, price, size, status FROM sell_orders WHERE order_id='ORPHAN-SELL-1'`).
+		Scan(&parentID, &price, &size, &newStatus)
+	if err != nil {
+		t.Fatalf("query adopted record failed: %v", err)
+	}
+	if parentID != "BUY-PARENT-ORPHAN" {
+		t.Errorf("parentid = %s, want BUY-PARENT-ORPHAN（損益計算の紐付け）", parentID)
+	}
+	if price != 512345 || size != 0.02 {
+		t.Errorf("adopted record mismatch: price=%v size=%v", price, size)
+	}
+	if newStatus != "UNFILLED" {
+		t.Errorf("adopted status = %s, want UNFILLED", newStatus)
+	}
+
+	// 取り込み後は order_id が既知になり、翌日以降にオーファンと誤認されない
+	if exists, err := models.OrderIDExists(models.TableSellOrders, "ORPHAN-SELL-1"); err != nil || !exists {
+		t.Errorf("取り込んだ注文が既知と判定されない: exists=%v err=%v", exists, err)
+	}
+	// UNFILLED の売り注文はこの1本だけ（＝二重売りになっていない）
+	var unfilled int
+	models.AppDB.QueryRow(`SELECT COUNT(*) FROM sell_orders WHERE status='UNFILLED'`).Scan(&unfilled)
+	if unfilled != 1 {
+		t.Errorf("UNFILLED の売り注文が %d 本。二重売りになっている", unfilled)
+	}
+}

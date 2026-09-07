@@ -742,6 +742,36 @@ func GetUnfilledOrderIDs(table OrderTable, productCode string, limit int) ([]str
 }
 
 /*
+OrderIDExists は指定した order_id のレコードがテーブルに存在するかを返す。
+
+取引所には存在するがDBに紐づかない注文（オーファン注文）の判定に使う。
+status は問わない。ローリングの再発注でレスポンスを取りこぼした場合、
+取引所側にだけ注文が残るため、その注文を「未知の注文」と判定するために参照する。
+*/
+func OrderIDExists(table OrderTable, orderID string) (bool, error) {
+	if !table.isValid() {
+		return false, fmt.Errorf("OrderIDExists: invalid table: %s", table)
+	}
+	if orderID == "" {
+		return false, errors.New("OrderIDExists: order_id is empty")
+	}
+
+	var query string
+	if database.CurrentDriver() == "postgres" {
+		query = fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE order_id = $1)`, table)
+	} else {
+		query = fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE order_id = ?)`, table)
+	}
+
+	var exists bool
+	if err := AppDB.QueryRow(query, orderID).Scan(&exists); err != nil {
+		log.Printf("[ERROR] OrderIDExists table:%s order_id:%s err:%v", table, orderID, err)
+		return false, err
+	}
+	return exists, nil
+}
+
+/*
 GetUnfilledOrdersWithRemark は remarks に指定文言を含む未約定レコードを返す。
 
 reconcileJob が RemarkRolloverPending（キャンセル成功・再発注失敗）のマーカーが

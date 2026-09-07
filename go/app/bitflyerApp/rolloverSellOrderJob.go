@@ -3,12 +3,14 @@ package bitflyerApp
 import (
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/bitflyer"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/config"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/models"
+	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/utils"
 )
 
 /*
@@ -32,6 +34,13 @@ Bitflyerの注文有効期限の上限は43200分(30日)で、無期限注文は
   ④ 同一 product_code / price / size で再発注する（価格の再計算は一切行わない）
   ⑤ 旧レコードのCANCELLED化と新レコードのINSERTを単一トランザクションで実行する
      （新レコードは parentid を引き継ぐため損益計算の紐付けが維持される）
+
+  ※ models.RemarkRolloverPending 付きレコードの再試行では、④の前に取引所のACTIVE一覧から
+    「同一 product_code / price / size / side=SELL で、DBに紐づかない注文」を探す。
+    前回 PlaceOrder のリクエストは届いたがレスポンスを取りこぼした場合、取引所側にだけ
+    注文が存在する（オーファン注文）。これを確認せずに再発注すると売り注文が2本並び、
+    拘束されていない現物（手動保有分）まで売られる恐れがあるため、
+    見つかった場合は再発注せずその order_id をDBへ取り込む（二重売りの防止）。
 
 異常系:
   - キャンセル成功・再発注失敗は「現物を保有しているのに売り注文が無い（裸の保有）」状態になるため
@@ -73,6 +82,7 @@ type rolloverSellOrderSummary struct {
 	failed    int // キャンセル失敗・再発注失敗・DB更新失敗の件数
 
 	partiallyFilled int // 部分約定を検出し、残数量で再発注した件数
+	adopted         int // 前回のレスポンス取りこぼしで生まれたオーファン注文をDBに取り込んだ件数
 }
 
 // rolloverDaysBeforeExpire は「有効期限の何日前に巻き直すか」を返す。
@@ -133,17 +143,35 @@ func rolloverRecordContext(record models.SellOrderRecord) string {
 }
 
 /*
-buildRolloverCompletedIndex は通貨ペアごとのCOMPLETED注文一覧をマップ化する。
+rolloverOrderIndex は通貨ペアごとに1回だけ取得した取引所の注文一覧。
 
-ループ前に、ローリング対象に実際に含まれる通貨ペアについてのみ1回だけ取得し、
-各レコードの「処理前の約定」判定に使う（不要な一覧取得でレート制限を消費しないため）。
-取得に失敗した通貨ペアは索引に載せず、そのレコードは処理をスキップする
-（約定済みかどうか分からないままキャンセルAPIを叩かないためのフェイルセーフ）。
+completed は「処理前の約定」判定に使う（キャンセルAPIを約定済み注文に叩かないため）。
+active は models.RemarkRolloverPending 付きレコードの再試行で、
+前回のレスポンス取りこぼしによるオーファン注文を探すために使う。
+activeOK は ACTIVE 一覧を取得できたかどうか。取得できていない場合は
+オーファンの有無を判定できないため、再発注そのものを見送る（二重売りを避けるフェイルセーフ）。
 */
-func buildRolloverCompletedIndex(apiClient *bitflyer.APIClient, productCodes []string,
-	summary *rolloverSellOrderSummary) map[string]map[string]bool {
+type rolloverOrderIndex struct {
+	completed map[string]bool
+	active    []bitflyer.Order
+	activeOK  bool
+}
 
-	indexes := make(map[string]map[string]bool, len(productCodes))
+/*
+buildRolloverOrderIndex は通貨ペアごとのCOMPLETED / ACTIVE注文一覧を取得して索引を作る。
+
+ループ前に、ローリング対象に実際に含まれる通貨ペアについてのみ1回だけ取得する
+（不要な一覧取得でレート制限を消費しないため）。
+COMPLETED の取得に失敗した通貨ペアは索引に載せず、そのレコードは処理をスキップする
+（約定済みかどうか分からないままキャンセルAPIを叩かないためのフェイルセーフ）。
+ACTIVE の取得だけが失敗した場合は activeOK=false として索引に載せる。
+通常のローリング（個別照会でキャンセル可否を確認する経路）は続行できるが、
+オーファン確認が必要な再試行経路だけは見送られる。
+*/
+func buildRolloverOrderIndex(apiClient *bitflyer.APIClient, productCodes []string,
+	summary *rolloverSellOrderSummary) map[string]*rolloverOrderIndex {
+
+	indexes := make(map[string]*rolloverOrderIndex, len(productCodes))
 	for _, productCode := range productCodes {
 		orders, _, err := apiClient.GetChildOrdersAll(productCode, "COMPLETED")
 		if err != nil {
@@ -158,10 +186,157 @@ func buildRolloverCompletedIndex(apiClient *bitflyer.APIClient, productCodes []s
 		for _, order := range orders {
 			completed[order.ChildOrderAcceptanceID] = true
 		}
-		indexes[productCode] = completed
-		log.Printf("【rolloverSellOrder】product_code:%s completed:%d", productCode, len(completed))
+
+		index := &rolloverOrderIndex{completed: completed}
+		activeOrders, _, activeErr := apiClient.GetChildOrdersAll(productCode, "ACTIVE")
+		if activeErr != nil {
+			msg := fmt.Sprintf("🚨【rolloverSellOrder】ACTIVE一覧の取得に失敗: product_code=%s err=%v "+
+				"→ %s 付きレコードの再発注は、オーファン注文の有無を確認できないため見送ります",
+				productCode, activeErr, models.RemarkRolloverPending)
+			log.Println(msg)
+			slackClient.PostMessage(msg, true)
+		} else {
+			index.active = activeOrders
+			index.activeOK = true
+		}
+
+		indexes[productCode] = index
+		log.Printf("【rolloverSellOrder】product_code:%s completed:%d active:%d activeOK:%v",
+			productCode, len(completed), len(index.active), index.activeOK)
 	}
 	return indexes
+}
+
+/*
+rolloverSizeEpsilon / rolloverPriceEpsilon はオーファン注文の同一性判定に使う許容誤差。
+
+size はDBの double precision とAPIのJSON数値を比較するため、表現誤差を吸収する幅を取る
+（最小取引単位 BTC 0.001 / ETH 0.01 に対して十分小さい）。
+price は円単位の指値なので1円未満の差は同一とみなす。
+*/
+const (
+	rolloverSizeEpsilon  = 1e-9
+	rolloverPriceEpsilon = 0.5
+)
+
+/*
+matchesRolloverOrder は取引所の注文が、ローリング対象レコードの再発注結果とみなせるかを返す。
+
+再発注は product_code / price / size / side="SELL" を機械的に引き継ぐため、
+この4点が一致する ACTIVE 注文は「前回の再発注が実際には成立していた」可能性がある。
+旧注文そのもの（同じ order_id）は除外する。
+*/
+func matchesRolloverOrder(order bitflyer.Order, record models.SellOrderRecord) bool {
+	if order.ChildOrderAcceptanceID == "" || order.ChildOrderAcceptanceID == record.OrderID {
+		return false
+	}
+	if order.Side != "SELL" {
+		return false
+	}
+	if record.ProductCode != "" && order.ProductCode != "" && order.ProductCode != record.ProductCode {
+		return false
+	}
+	if math.Abs(order.Price-record.Price) > rolloverPriceEpsilon {
+		return false
+	}
+	return math.Abs(order.Size-record.Size) <= rolloverSizeEpsilon
+}
+
+// findRolloverOrphanCandidates は再発注結果とみなせるACTIVE注文を抽出する（DBは参照しない純粋関数）。
+func findRolloverOrphanCandidates(active []bitflyer.Order, record models.SellOrderRecord) []bitflyer.Order {
+	candidates := make([]bitflyer.Order, 0, 1)
+	for _, order := range active {
+		if matchesRolloverOrder(order, record) {
+			candidates = append(candidates, order)
+		}
+	}
+	return candidates
+}
+
+/*
+rolloverOrphanExpireDate はオーファン注文の有効期限(UTC)を返す。
+
+取引所が返す expire_date をパースできない場合は、再発注に使う予定だった期限で代用する
+（DBの expire_date が未設定のままだと次回のローリング判定から漏れるため、必ず値を入れる）。
+*/
+func rolloverOrphanExpireDate(order bitflyer.Order, minuteToExpire int) time.Time {
+	if expire, err := utils.ParseBitflyerTime(order.ExpireDate); err == nil {
+		return expire
+	}
+	log.Printf("【rolloverSellOrder】オーファン注文の expire_date をパースできませんでした(値:%q)。now+%d分で代用します",
+		order.ExpireDate, minuteToExpire)
+	return time.Now().UTC().Add(time.Duration(minuteToExpire) * time.Minute)
+}
+
+/*
+resolveRolloverOrphan は「前回の再発注が実は成立していた」注文を探す。
+
+前回 PlaceOrder のリクエストは取引所に届いたがレスポンスを取りこぼした場合、
+DBには記録が無いまま取引所にだけ売り注文が残る。旧 order_id の個別照会では
+見つからないため、確認せずに再発注すると同一ポジションに売り注文が2本並ぶ。
+拘束されていない現物（手動保有分）があると2本とも約定しうるため、必ず確認する。
+
+戻り値:
+  - order != nil : オーファン注文が見つかった。再発注してはならない
+  - proceed=false: 判定できなかった。再発注を見送る（フェイルセーフ）
+  - order == nil かつ proceed=true: オーファンは無い。再発注してよい
+*/
+func resolveRolloverOrphan(index *rolloverOrderIndex, record models.SellOrderRecord) (*bitflyer.Order, bool) {
+	if index == nil || !index.activeOK {
+		msg := fmt.Sprintf("🚨【rolloverSellOrder】ACTIVE一覧が無いためオーファン注文を確認できません: %s "+
+			"→ 二重売りを避けるため再発注せず次回リトライします", rolloverRecordContext(record))
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
+		return nil, false
+	}
+
+	for _, candidate := range findRolloverOrphanCandidates(index.active, record) {
+		exists, err := models.OrderIDExists(models.TableSellOrders, candidate.ChildOrderAcceptanceID)
+		if err != nil {
+			msg := fmt.Sprintf("🚨【rolloverSellOrder】オーファン注文の照合(DB参照)に失敗: %s CandidateOrderID=%s err=%v "+
+				"→ 二重売りを避けるため再発注せず次回リトライします",
+				rolloverRecordContext(record), candidate.ChildOrderAcceptanceID, err)
+			log.Println(msg)
+			slackClient.PostMessage(msg, true)
+			return nil, false
+		}
+		if exists {
+			// DBに紐づく注文は他レコードのもの。オーファンではない
+			continue
+		}
+		orphan := candidate
+		return &orphan, true
+	}
+	return nil, true
+}
+
+/*
+adoptRolloverOrphan はオーファン注文をDBへ取り込み、再発注せずにローリングを完了させる。
+
+旧レコードのCANCELLED化と新レコードのINSERTは通常の巻き直しと同じトランザクションで行うため、
+parentid が引き継がれ損益計算の紐付けも維持される。
+*/
+func adoptRolloverOrphan(record models.SellOrderRecord, orphan bitflyer.Order,
+	minuteToExpire int, summary *rolloverSellOrderSummary) {
+
+	newExpire := rolloverOrphanExpireDate(orphan, minuteToExpire)
+	if err := models.RolloverSellOrder(record, orphan.ChildOrderAcceptanceID, record.Price, newExpire); err != nil {
+		summary.failed++
+		msg := fmt.Sprintf("🚨🚨【rolloverSellOrder】オーファン注文のDB取り込みに失敗: %s OrphanOrderID=%s err=%v "+
+			"→ 取引所には売り注文が存在します。再発注はしていません。手動での確認をお願いします",
+			rolloverRecordContextWithPrefix(record, "Old"), orphan.ChildOrderAcceptanceID, err)
+		log.Println(msg)
+		slackClient.PostMessage(msg, true)
+		return
+	}
+
+	summary.adopted++
+	msg := fmt.Sprintf("🚨【rolloverSellOrder】前回の再発注は実際には成立していました（レスポンスの取りこぼし）。"+
+		"二重売りを避けるため再発注せずDBへ取り込みます: %s OrphanOrderID=%s expire_date(UTC)=%s。"+
+		"※この注文が手動で発注したものでないか、取引所のコンソールでご確認ください",
+		rolloverRecordContextWithPrefix(record, "Old"), orphan.ChildOrderAcceptanceID, newExpire.Format(time.RFC3339))
+	log.Println(msg)
+	slackClient.PostMessage(msg, true)
 }
 
 // rolloverTargetProductCodes はローリング対象に含まれる通貨ペアを重複なく返す。
@@ -359,10 +534,10 @@ rolloverOneSellOrder は1件の売り注文を巻き直す。
 ジョブ全体を止めないため（1件の失敗で他のレコードを巻き添えにしない）。
 */
 func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrderRecord,
-	completed map[string]bool, minuteToExpire int, summary *rolloverSellOrderSummary) {
+	index *rolloverOrderIndex, minuteToExpire int, summary *rolloverSellOrderSummary) {
 
 	// ① 処理前の約定確認: 既に約定していればキャンセルAPIを叩かずFILLEDに更新する
-	if completed[record.OrderID] {
+	if index.completed[record.OrderID] {
 		markRolloverOrderFilled(record, "処理前に約定を検出", summary)
 		return
 	}
@@ -475,6 +650,21 @@ func rolloverOneSellOrder(apiClient *bitflyer.APIClient, record models.SellOrder
 		}
 	}
 
+	// 再試行経路（前回キャンセル成功・再発注失敗）では、④の前に必ずオーファン注文を確認する。
+	// 前回の PlaceOrder がレスポンスを取りこぼしただけで成立していた場合、
+	// 確認せずに再発注すると同一ポジションに売り注文が2本並ぶ（二重売り）
+	if alreadyCancelled {
+		orphan, proceed := resolveRolloverOrphan(index, record)
+		if !proceed {
+			summary.failed++
+			return
+		}
+		if orphan != nil {
+			adoptRolloverOrphan(record, *orphan, minuteToExpire, summary)
+			return
+		}
+	}
+
 	// ④ 同一 product_code / price / size（部分約定時は残数量）で再発注する
 	newOrderID, err := placeRolloverSellOrder(apiClient, record, minuteToExpire)
 	if err != nil {
@@ -545,11 +735,11 @@ func rolloverSellOrderJob(apiClient *bitflyer.APIClient) {
 		return
 	}
 
-	// 処理前の約定確認に使うCOMPLETED一覧を、対象に含まれる通貨ペアぶんだけ取得する
-	completedIndexes := buildRolloverCompletedIndex(apiClient, rolloverTargetProductCodes(records), summary)
+	// 処理前の約定確認とオーファン確認に使う注文一覧を、対象に含まれる通貨ペアぶんだけ取得する
+	indexes := buildRolloverOrderIndex(apiClient, rolloverTargetProductCodes(records), summary)
 
 	for _, record := range records {
-		completed, ok := completedIndexes[record.ProductCode]
+		index, ok := indexes[record.ProductCode]
 		if !ok {
 			// COMPLETED一覧を取得できなかった通貨ペアは約定済みか判定できないためキャンセルしない
 			summary.skipped++
@@ -557,13 +747,14 @@ func rolloverSellOrderJob(apiClient *bitflyer.APIClient) {
 			continue
 		}
 		// 1件の失敗で全体を止めない（breakせずcontinueする）
-		rolloverOneSellOrder(apiClient, record, completed, minuteToExpire, summary)
+		rolloverOneSellOrder(apiClient, record, index, minuteToExpire, summary)
 		// レート制限に配慮して1件ごとに間隔をあける
 		time.Sleep(rolloverAPIInterval)
 	}
 
-	msg := fmt.Sprintf("【rolloverSellOrder】対象:%d 巻き直し成功:%d 約定判明:%d 部分約定(残数量で再発注):%d スキップ:%d 失敗:%d",
-		summary.target, summary.succeeded, summary.filled, summary.partiallyFilled, summary.skipped, summary.failed)
+	msg := fmt.Sprintf("【rolloverSellOrder】対象:%d 巻き直し成功:%d 約定判明:%d 部分約定(残数量で再発注):%d オーファン取込:%d スキップ:%d 失敗:%d",
+		summary.target, summary.succeeded, summary.filled, summary.partiallyFilled, summary.adopted,
+		summary.skipped, summary.failed)
 	log.Println(msg)
 	slackClient.PostMessage(msg, false)
 	log.Println("【rolloverSellOrder】end of job")
