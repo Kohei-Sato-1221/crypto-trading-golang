@@ -22,9 +22,27 @@ const (
 	// buy_minute_to_expire(10080分 = 7日)と整合させている。
 	DefaultBuyOrderCancelDays = 7
 
-	// DefaultExpireSweepGraceMinutes は expireSweepJob が「期限切れ」とみなすまでの猶予(分)の既定値。
-	// アプリと取引所の時計ずれを吸収し、期限直前のレコードを早まってCANCELLEDにしないためのもの。
-	DefaultExpireSweepGraceMinutes = 10
+	/*
+		DefaultExpireSweepGraceMinutes は expireSweepJob が「期限切れ」とみなすまでの猶予(分)の既定値。
+
+		本来の役割はアプリと取引所の時計ずれの吸収（期限直前のレコードを早まってCANCELLEDにしない）だが、
+		値の決定はローリングとの競合ウィンドウで決まる。
+
+		rolloverSellOrderJob は 05:30(JST) に始まり、対象件数によって最大25分程度かかりうる。
+		一方 expireSweepJob は 06:05(JST) に走るため、猶予10分では判定境界が
+		06:05 - 10分 = 05:55 となり、ローリングの実行時間帯(05:30〜05:55)と重なる。
+		この窓では、ローリングがキャンセル→再発注している最中のレコードを sweep が
+		同じ日のうちに拾いうる（decideSweepAction は「取引所でACTIVEなら状態を変えない」に倒れるため
+		DBが壊れることはないが、🚨🚨の失効通知が誤って飛ぶ）。
+
+		猶予を45分にすると判定境界が 06:05 - 45分 = 05:20 となり、ローリング開始(05:30)より前になる。
+		これで同日競合の窓が消える。sweep はもともと「期限を過ぎたレコードの後始末」であり、
+		1日1回しか走らないため、猶予を35分伸ばしても後始末が遅れるのは最大でも当日の1回分である。
+
+		※ trigger_time_05(ローリング) / trigger_time_06(sweep) を変更する場合は、
+		  この値も「sweep時刻 − 猶予 < ローリング開始時刻」を満たすよう見直すこと。
+	*/
+	DefaultExpireSweepGraceMinutes = 45
 
 	// DefaultTriggerTime06 は expireSweepJob のスケジュール既定値(JST)。
 	// EC2の稼働窓(3:00〜12:30 / 16:30〜23:00 JST)の内側かつ、買い注文ジョブ(06:30)より前に置く。
@@ -151,7 +169,7 @@ func NewConfig() {
 		// cancelBuyOrderJob が能動キャンセルする経過日数。0以下ならDefaultBuyOrderCancelDays(7日)
 		BFBuyOrderCancelDays: cfg.Section("bitflyer").Key("buy_order_cancel_days").MustInt(DefaultBuyOrderCancelDays),
 
-		// expireSweepJob が失効とみなすまでの猶予(分)。0以下ならDefaultExpireSweepGraceMinutes(10分)
+		// expireSweepJob が失効とみなすまでの猶予(分)。0以下ならDefaultExpireSweepGraceMinutes(45分)
 		BFExpireSweepGraceMinutes: cfg.Section("bitflyer").Key("expire_sweep_grace_minutes").MustInt(DefaultExpireSweepGraceMinutes),
 
 		// rolloverSellOrderJob が売り注文を巻き直す「有効期限の何日前か」。0以下ならDefaultSellRolloverDaysBeforeExpire(3日)
@@ -247,7 +265,7 @@ type ConfigList struct {
 
 	BFBuyOrderCancelDays int // cancelBuyOrderJobが能動キャンセルする経過日数。0以下ならDefaultBuyOrderCancelDays(7日)
 
-	BFExpireSweepGraceMinutes int // expireSweepJobが失効とみなすまでの猶予(分)。0以下ならDefaultExpireSweepGraceMinutes(10分)
+	BFExpireSweepGraceMinutes int // expireSweepJobが失効とみなすまでの猶予(分)。0以下ならDefaultExpireSweepGraceMinutes(45分)
 
 	BFSellRolloverDaysBeforeExpire int // rolloverSellOrderJobが売り注文を巻き直す有効期限の何日前か。0以下ならDefaultSellRolloverDaysBeforeExpire(3日)
 

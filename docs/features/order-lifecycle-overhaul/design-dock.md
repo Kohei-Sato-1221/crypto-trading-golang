@@ -87,7 +87,7 @@ stateDiagram-v2
 |---|---|---|
 | 05:30 | `rolloverSellOrderJob`（`trigger_time_05`） | 期限が近い売り注文を巻き直す。失敗分にはマーカーを付ける |
 | 06:00 / 18:00 | `savePriceHistoryJob`（`trigger_time_04` / `trigger_time_03`・変更なし） | 価格記録 |
-| 06:05 | `expireSweepJob`（`trigger_time_06`） | 幽霊レコードを `CANCELLED` に落としスロットを解放 |
+| 06:05 | `expireSweepJob`（`trigger_time_06`） | 幽霊レコードを `CANCELLED` に落としスロットを解放。判定境界は `06:05 − expire_sweep_grace_minutes(45分)` = 05:20 で、ローリング開始（05:30）より前 → §4.4.2 |
 | 06:15 | `reconcileJob`（`trigger_time_07`） | 取引所と DB の乖離・発注ゼロを検知して通知 |
 | 06:30 | 買い注文ジョブ群（`trigger_time_01`） | 発注 |
 | 06:45 | `sendResultsJob`（`trigger_time_02`） | 日次損益レポート |
@@ -527,7 +527,7 @@ func ParseBitflyerTime(s string) (time.Time, error)
 | `[bitflyer]` | `sell_rollover_days_before_expire` | `3` | S4 | 期限の何日前にローリングするか（30 − 3 = 27日） |
 | `[bitflyer]` | `sell_rollover_fallback_days` | `27` | S4 | `expire_date` が NULL の旧レコードのフォールバック日数 |
 | `[bitflyer]` | `sell_rollover_max_per_run` | `20` | S4 | 1回のジョブで処理する上限件数（レート制限とリスクの上限） |
-| `[bitflyer]` | `expire_sweep_grace_minutes` | `10` | S3 | 期限経過とみなすまでの猶予（時計ずれ吸収） |
+| `[bitflyer]` | `expire_sweep_grace_minutes` | `45`（S3 の `10` から変更） | S3 / E3 | 期限経過とみなすまでの猶予（時計ずれ吸収＋ローリングとの同日競合回避）。判定境界は「sweep 実行時刻 − 猶予」であり、`06:05 − 45分 = 05:20` がローリング開始（05:30）より前になる。`10` のままだと境界が 05:55 となりローリングの実行時間帯（05:30〜最大約25分）と重なる → §4.4.2 |
 | `[tradeSetting]` | `trigger_time_01` | `06:30`（**変更しない**） | F30 | 買い注文ジョブ群(12本)。既定値フォールバックのみ追加 |
 | `[tradeSetting]` | `trigger_time_02` | `06:45`（**変更しない**） | F30 | `sendResultsJob`。既定値フォールバックのみ追加 |
 | `[tradeSetting]` | `trigger_time_03` | `18:00`（**変更しない**） | F30 | `savePriceHistoryJob`（夕）。既定値フォールバックのみ追加 |
@@ -575,6 +575,23 @@ func ParseBitflyerTime(s string) (time.Time, error)
 - それ以外 → `能動キャンセルは expire_date が NULL の旧レコードのみ対象: ...`（早期解放したい場合の対処も文言に含める）
 
 出荷設定では後者が常態であり異常ではないため、**Slack 通知はせずログのみ**とする（毎日の定常ノイズを増やさない）。
+
+#### 4.4.2 `expire_sweep_grace_minutes` とローリングの同日競合（E3・確定方針）
+
+`expireSweepJob` が「期限切れ」とみなす判定境界は **`sweep 実行時刻 − expire_sweep_grace_minutes`** である。
+
+猶予の本来の役割はアプリと取引所の時計ずれの吸収だが、実際の値は `rolloverSellOrderJob` との競合ウィンドウで決まる。
+
+| 猶予 | 判定境界 | ローリング(05:30 開始・最大約25分) との関係 |
+|---|---|---|
+| `10`（S3 の初期値） | `06:05 − 10分 = 05:55` | **05:30〜05:55 が重なる**。ローリングがキャンセル→再発注している最中のレコードを、同じ日の sweep が拾いうる |
+| `45`（現行） | `06:05 − 45分 = 05:20` | ローリング開始（05:30）より前。**競合ウィンドウが消える** |
+
+猶予 `10` でも DB が壊れることはない。`decideSweepAction` は「取引所で ACTIVE なら状態を変えない」に倒れるためである。ただし `🚨🚨` の失効通知が誤って飛び、ユーザーが「売り注文が失効した」と誤認する。設定値を `45` にするだけで窓自体が消えるため、ロジックではなく設定で解消する。
+
+sweep は「期限を過ぎたレコードの後始末」であり 1 日 1 回しか走らないため、猶予を 35 分伸ばしても後始末が遅れるのは最大で当日の 1 回分にとどまる。スロット解放は買い注文ジョブ（06:30）より前に完了する。
+
+**`trigger_time_05`（ローリング） / `trigger_time_06`（sweep）を変更する場合は、`sweep 実行時刻 − 猶予 < ローリング開始時刻` を満たすようこの値も見直すこと。** 既定値 `config.DefaultExpireSweepGraceMinutes` にも同じ注意書きを置いている。
 
 ### 4.5 remarks に記録する文言（定数化）
 

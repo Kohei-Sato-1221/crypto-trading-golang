@@ -88,7 +88,14 @@ func expireSweepRolloverRetryAfter(now time.Time) time.Time {
 	return now.UTC().AddDate(0, 0, -(rolloverFallbackDays() + rolloverDaysBeforeExpire()))
 }
 
-// expireSweepGrace は失効とみなすまでの猶予時間を返す。
+/*
+expireSweepGrace は失効とみなすまでの猶予時間を返す。
+
+時計ずれの吸収に加えて、rolloverSellOrderJob(05:30 JST 開始・最大25分程度)との
+同日競合を避ける役割を持つ。判定境界は「sweep実行時刻 − 猶予」であり、
+これがローリング開始時刻より前になるよう設定する
+（既定45分: 06:05 − 45分 = 05:20 < 05:30）。詳細は config.DefaultExpireSweepGraceMinutes を参照。
+*/
 func expireSweepGrace() time.Duration {
 	minutes := config.Config.BFExpireSweepGraceMinutes
 	if minutes <= 0 {
