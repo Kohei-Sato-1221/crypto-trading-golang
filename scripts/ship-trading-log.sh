@@ -63,9 +63,14 @@ RETENTION_DAYS=${RETENTION_DAYS:-90}
 SLACK_WEBHOOK=${SLACK_WEBHOOK:-}
 CURL_MAX_TIME=${CURL_MAX_TIME:-120}
 
-# Supabase（方式A: REST + サービスキー）
+# Supabase（方式A: REST + シークレットキー）
+#
+# キーは新旧2方式ある。どちらでも動く。
+#   新: SUPABASE_SECRET_KEY=sb_secret_...   （現行。ダッシュボードの Secret keys）
+#   旧: SUPABASE_SERVICE_KEY=eyJ...         （Legacy anon, service_role API keys タブ）
+# 新方式を推奨する。用途ごとに別のキーを発行でき、漏れたときにそれ1本だけ失効できるため。
 SUPABASE_URL=${SUPABASE_URL:-}
-SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY:-${SUPABASE_SERVICE_KEY:-}}
 SUPABASE_BUCKET=${SUPABASE_BUCKET:-}
 
 STORAGE_API="${SUPABASE_URL%/}/storage/v1"
@@ -93,7 +98,7 @@ trim_ship_log() {
 require_conf() {
   local missing=""
   [ -n "$SUPABASE_URL" ]         || missing="$missing SUPABASE_URL"
-  [ -n "$SUPABASE_SERVICE_KEY" ] || missing="$missing SUPABASE_SERVICE_KEY"
+  [ -n "$SUPABASE_SECRET_KEY" ]  || missing="$missing SUPABASE_SECRET_KEY"
   [ -n "$SUPABASE_BUCKET" ]      || missing="$missing SUPABASE_BUCKET"
   if [ -n "$missing" ]; then
     say "[ERROR] 設定が足りない:$missing （$CONF を確認）"
@@ -121,14 +126,19 @@ fi
 # アップロード（1ファイル）
 #   POST {STORAGE_API}/object/{bucket}/{key}
 #   x-upsert: true を付けないと同名オブジェクトへのPOSTが409で弾かれる
+#
+#   【重要】apikey と Authorization の両方を送る。
+#   新方式の sb_secret_... はJWTではないため、Authorization: Bearer だけを送ると
+#   ゲートウェイがJWTとしてデコードしようとして失敗し 401 になる。apikey ヘッダーが
+#   あればキーの直接参照で解決される。両方送れば新旧どちらのキー形式でも通る。
 # =============================================================================
 upload_one() {
   local f=$1 key=$2 code body
   body=$(mktemp)
   code=$(curl -sS -o "$body" -w '%{http_code}' --max-time "$CURL_MAX_TIME" \
     -X POST "${STORAGE_API}/object/${SUPABASE_BUCKET}/${key}" \
-    -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
-    -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_SECRET_KEY}" \
+    -H "apikey: ${SUPABASE_SECRET_KEY}" \
     -H "x-upsert: true" \
     -H "Content-Type: application/gzip" \
     --data-binary @"$f" 2>>"$SHIP_LOG")
@@ -248,7 +258,7 @@ prune() {
     return 1
   fi
 
-  STORAGE_API="$STORAGE_API" SUPABASE_SERVICE_KEY="$SUPABASE_SERVICE_KEY" \
+  STORAGE_API="$STORAGE_API" SUPABASE_SECRET_KEY="$SUPABASE_SECRET_KEY" \
   SUPABASE_BUCKET="$SUPABASE_BUCKET" KEY_PREFIX="$KEY_PREFIX" \
   RETENTION_DAYS="$RETENTION_DAYS" HOSTTAG="$HOSTTAG" DRY="$dry" \
   python3 - <<'PY' 2>&1 | while IFS= read -r line; do say "[PRUNE] $line"; done
@@ -256,7 +266,7 @@ import json, os, re, sys, urllib.request, urllib.error
 from datetime import date, timedelta
 
 API    = os.environ["STORAGE_API"]
-KEY    = os.environ["SUPABASE_SERVICE_KEY"]
+KEY    = os.environ["SUPABASE_SECRET_KEY"]
 BUCKET = os.environ["SUPABASE_BUCKET"]
 PREFIX = os.environ["KEY_PREFIX"]
 KEEP   = int(os.environ["RETENTION_DAYS"])
@@ -275,16 +285,27 @@ def call(method, path, body=None):
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.loads(r.read() or b"null")
     except urllib.error.HTTPError as e:
+        # 認証エラー(401)や容量超過はここに出る
         print(f"HTTP {e.code} on {method} {path}: {e.read()[:200]!r}")
         return None
+    except (urllib.error.URLError, OSError) as e:
+        # 通信断。削除は「失敗したら何もしない」で倒す（消しすぎるより消さない方が安全）
+        print(f"接続失敗 {method} {path}: {e}")
+        return None
+
+FAILED = []
 
 def listing(prefix):
-    """prefix 直下のエントリ名を返す。folder は id が None で返る"""
+    """prefix 直下のエントリ名を返す。folder は id が None で返る。
+    取得に失敗した場合は空を返しつつ FAILED に記録する（成功して0件だった場合と区別するため）"""
     out, offset = [], 0
     while True:
         res = call("POST", f"/object/list/{BUCKET}",
                    {"prefix": prefix, "limit": 100, "offset": offset,
                     "sortBy": {"column": "name", "order": "asc"}})
+        if res is None:
+            FAILED.append(prefix)
+            break
         if not res:
             break
         out += res
@@ -318,6 +339,9 @@ for y in listing(PREFIX):
                 else:
                     print(f"skip (想定外の名前なので触らない): {base}/{f['name']}")
 
+if FAILED:
+    print(f"[WARN] 一覧取得に失敗したプレフィックスが {len(FAILED)} 件あるため、"
+          f"取りこぼしがある。削除は行った分のみ（先頭: {FAILED[0]}）")
 print(f"cutoff={cutoff} 削除対象 {len(victims)} 件" + ("（dry-run）" if DRY else ""))
 if not victims or DRY:
     sys.exit(0)
