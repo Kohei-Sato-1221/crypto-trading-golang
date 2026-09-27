@@ -81,12 +81,18 @@ func TestDefaultTriggerTimesAreValid(t *testing.T) {
 		}
 	}
 
-	// 移行前の service.go にハードコードされていた値と一致していること（挙動を変えない）
+	// 既定値が意図せず書き換わるのを防ぐ固定。変更するときは運用上の理由を伴うはずなので、
+	// このテストも一緒に直すこと。
+	//
+	// TriggerTime08 は移行前の service.go にハードコードされていた値のまま。
+	// TriggerTime09 は 2026-09-27 に 01:20 から 10:30 へ変更した。旧値は Raspberry Pi が
+	// 01:30 JST に電源断される運用に合わせたものだったが、毎晩の電源断をやめて24時間稼働へ
+	// 移行したため前提が消えた。異常時に人が気づける日中へ移している。
 	if DefaultTriggerTime08 != "22:45" {
 		t.Errorf("cancelBuyOrderJob の既定時刻が変わっている: %q", DefaultTriggerTime08)
 	}
-	if DefaultTriggerTime09 != "01:20" {
-		t.Errorf("グレースフルシャットダウンの既定時刻が変わっている: %q", DefaultTriggerTime09)
+	if DefaultTriggerTime09 != "10:30" {
+		t.Errorf("日次リフレッシュ(gracefulShutdown)の既定時刻が変わっている: %q", DefaultTriggerTime09)
 	}
 }
 
