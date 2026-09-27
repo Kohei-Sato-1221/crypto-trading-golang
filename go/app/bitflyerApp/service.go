@@ -1,6 +1,7 @@
 package bitflyerApp
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -14,6 +15,11 @@ import (
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/slack"
 	"github.com/Kohei-Sato-1221/crypto-trading-golang/go/utils"
 )
+
+// shutdownWaitMinutes は gracefulShutdown が終了する前に静止する時間(分)。
+// この間は新規ジョブがすべてブロックされる。trigger_time_09 と合わせて
+// 「毎日いつからいつまでボットが止まるか」が決まる。
+const shutdownWaitMinutes = 15
 
 var (
 	slackClient    *slack.APIClient
@@ -51,15 +57,34 @@ func wrapJob(job func()) func() {
 	}
 }
 
-// gracefulShutdown は実行中のジョブが完了するまで待機し、その後15分間ウェイトしてから終了します
+/*
+gracefulShutdown は新規ジョブをブロックし、実行中のジョブの完了を待ってから終了する。
+
+終了後は systemd の Restart=always / RestartSec=10 により約10秒後に再起動される。
+これが日次リフレッシュの実体であり、ジョブのハングからの唯一の復旧手段でもある
+（scheduler の runJob() は実行中フラグが立ったままのジョブを二度と起動しないため）。
+
+実行中ジョブの完了を待ったあと、終了前に shutdownWaitMinutes ぶんウェイトする。
+この間 wrapJob() が新規ジョブをすべてブロックするため、90秒/180秒間隔のジョブ
+(syncBuyOrders / filledCheck / sellOrder) も止まる。これは意図した静止時間である。
+trigger_time_09=10:30 なら 10:30〜10:45 がその窓にあたり、再開は 10:45 頃になる。
+
+暗号資産市場は24時間動いており、この窓を昼夜どちらに置いても市場条件は変わらない。
+日中に置いているのは、異常が起きたとき人が気づいて対処できるようにするためである。
+(2026-09-27 に毎晩の電源断をやめて24時間稼働へ移行したのに伴い 01:20 から移動した)
+*/
 func gracefulShutdown(timeoutMinutes int) {
 	log.Println("【app】グレースフルシャットダウン開始 - 新しいジョブの実行をブロックします")
 
-	// シャットダウンフラグを設定して、新しいジョブの実行をブロック
+	// シャットダウンフラグを設定して、新しいジョブの実行をブロック。
+	// Slack通知より先に行う。通知は最大15秒かかるため、先に投げると
+	// その間に新しいジョブが走り出してしまう
 	shuttingDown.Lock()
 	isShuttingDown = true
 	shuttingDown.Unlock()
 	log.Println("【app】新しいジョブの実行をブロックしました")
+
+	notifyShutdown(timeoutMinutes)
 
 	log.Println("【app】実行中のジョブの完了を待機します")
 	// タイムアウト付きで待機
@@ -77,14 +102,69 @@ func gracefulShutdown(timeoutMinutes int) {
 		log.Printf("【app】タイムアウト（%d分）経過 - 強制終了します", timeoutMinutes)
 	}
 
-	// 15分間ウェイトして、新しいジョブが発生しないようにする
-	waitMinutes := 15
-	log.Printf("【app】%d分間ウェイトして、新しいジョブが発生しないようにします", waitMinutes)
-	time.Sleep(time.Duration(waitMinutes) * time.Minute)
-	log.Printf("【app】%d分間のウェイトが完了しました", waitMinutes)
+	// 終了前の静止時間。この間は wrapJob() が新規ジョブをブロックし続ける
+	log.Printf("【app】%d分間ウェイトして、新しいジョブが発生しないようにします", shutdownWaitMinutes)
+	time.Sleep(time.Duration(shutdownWaitMinutes) * time.Minute)
+	log.Printf("【app】%d分間のウェイトが完了しました", shutdownWaitMinutes)
 
-	log.Println("【app】アプリケーションを終了します")
+	log.Println("【app】アプリケーションを終了します（systemdが約10秒後に再起動します）")
 	os.Exit(0)
+}
+
+/*
+notifyShutdown は日次リフレッシュによる停止をSlackへ通知する。
+
+Slack送信は15秒でタイムアウトする（go/slack のhttpClientTimeout）。ここでハングすると
+プロセスが終了できず再起動も起きないため、タイムアウトが設定されていることが前提になる。
+*/
+func notifyShutdown(timeoutMinutes int) {
+	if slackClient == nil {
+		return
+	}
+	now := time.Now()
+	msg := fmt.Sprintf(
+		"🔄 bfTradingApp を停止します（日次リフレッシュ）\n"+
+			"時刻: %s\n"+
+			"実行中ジョブの完了を待機（最大%d分）→ %d分ウェイト → 終了\n"+
+			"この間すべてのジョブが止まります。systemd により約10秒後に再起動します（再開見込み %s頃）",
+		now.Format("2006-01-02 15:04:05 MST"), timeoutMinutes, shutdownWaitMinutes,
+		now.Add(time.Duration(shutdownWaitMinutes)*time.Minute).Format("15:04"))
+	if err := slackClient.PostMessage(msg, false); err != nil {
+		log.Printf("【app】停止通知のSlack送信に失敗しました: %v", err)
+	}
+}
+
+/*
+notifyStartup は起動をSlackへ通知する。
+
+日次リフレッシュ以外の時刻にこの通知が届いたら、クラッシュして自動再起動したことを
+意味する。無言のクラッシュに気づくための監視点として機能させる。
+
+注意: systemd の Restart=always / RestartSec=10 と組み合わさるため、万一クラッシュ
+ループに陥ると10秒間隔でSlackへ通知が飛ぶ。頻発する場合は unit に
+StartLimitIntervalSec / StartLimitBurst を設定して再起動回数を制限すること。
+*/
+func notifyStartup(r *jobRegistry) {
+	if slackClient == nil {
+		return
+	}
+	testLabel := "false"
+	if config.Config.IsTest {
+		testLabel = "true ⚠️テストモード（本番の買い注文ジョブは登録されません）"
+	}
+	msg := fmt.Sprintf(
+		"🟢 bfTradingApp を起動しました\n"+
+			"起動時刻: %s\n"+
+			"ジョブ登録: 成功 %d件 / 失敗 %d件\n"+
+			"取引所: %s / is_test: %s\n"+
+			"次回の自動再起動: %s（gracefulShutdown）",
+		time.Now().Format("2006-01-02 15:04:05 MST"),
+		r.registered, len(r.failures),
+		config.Config.Exchange, testLabel,
+		config.Config.TriggerTime09)
+	if err := slackClient.PostMessage(msg, false); err != nil {
+		log.Printf("【StartBfService】起動通知のSlack送信に失敗しました: %v", err)
+	}
 }
 
 func StartBfService() {
@@ -280,8 +360,10 @@ func StartBfService() {
 		// 23:45でも発火していた。22:45もPi停止時間帯(01:30〜02:45 JST)を避けており支障がないため据え置いている
 		registry.daily("cancelBuyOrderJob", triggerTime08, cancelBuyOrderJobFunc)
 
-		// アプリをグレースフルシャットダウン（trigger_time_09=01:20 JST。実行中のジョブ完了を待機）。
-		// Pi停止(01:30 JST)の直前に置いている。
+		// アプリの日次リフレッシュ（trigger_time_09=10:30 JST。10:30〜10:45 が停止窓）。
+		// 終了後は systemd の Restart=always により約10秒後に再起動される。
+		// かつては Pi が 01:30 JST に電源断される運用に合わせて 01:20 に置いていたが、
+		// 2026-09-27 に24時間稼働へ移行したため、状態を確認しやすい日中へ移した。
 		// 自分自身が runningJobs の完了を待つため、wrapJob() は通さない（dailyWithoutWrap）
 		registry.dailyWithoutWrap("gracefulShutdown", triggerTime09, func() {
 			gracefulShutdown(5) // 最大5分待機
@@ -294,6 +376,9 @@ func StartBfService() {
 
 	// 登録結果をログに残し、失敗があれば起動時に1通Slack通知する
 	registry.reportRegistrationResult()
+
+	// 起動したことをSlackへ通知する。想定外の時刻に届けばクラッシュ再起動の合図になる
+	notifyStartup(registry)
 
 	runtime.Goexit()
 }

@@ -99,7 +99,7 @@ const (
 	// DefaultTriggerTime09 はグレースフルシャットダウンのスケジュール既定値(JST)。
 	// 実行環境のRaspberry Piが停止する 01:30 JST の直前に置き、
 	// 実行中のジョブを完了させてからアプリを終了させる。
-	DefaultTriggerTime09 = "01:20"
+	DefaultTriggerTime09 = "10:30"
 
 	// DefaultNoOrderAlertDays は「ボットの買い注文が何日間0件ならアラートするか」の既定値。
 	DefaultNoOrderAlertDays = 3
@@ -226,7 +226,7 @@ func NewConfig() {
 		TriggerTime07: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_07").String(), DefaultTriggerTime07),
 		// cancelBuyOrderJob の実行時刻(JST)。未設定ならDefaultTriggerTime08(22:45)
 		TriggerTime08: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_08").String(), DefaultTriggerTime08),
-		// グレースフルシャットダウンの実行時刻(JST)。未設定ならDefaultTriggerTime09(01:20)
+		// グレースフルシャットダウンの実行時刻(JST)。未設定ならDefaultTriggerTime09(10:30)
 		TriggerTime09: NormalizeTriggerTime(cfg.Section("tradeSetting").Key("trigger_time_09").String(), DefaultTriggerTime09),
 
 		SlackAPIURL: pcfg.Section("slack").Key("api_url").String(),

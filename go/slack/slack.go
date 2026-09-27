@@ -7,9 +7,21 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 const baseURL = "https://slack.com/api/chat.postMessage"
+
+/*
+httpClientTimeout は Slack へのHTTPリクエストのタイムアウト。
+
+無制限にすると、応答の無いSlackにジョブがぶら下がったまま戻らなくなる。
+scheduler の runJob() は実行中フラグが立ったままのジョブを二度と起動しないため、
+1本のハングがそのジョブを恒久的に沈黙させる。さらに gracefulShutdown から呼ぶ場合は
+プロセスが終了できず、systemd による再起動も発生しない。
+取引所クライアント(bitflyer/bitbank)と同じくタイムアウトを必ず設定する。
+*/
+const httpClientTimeout = 15 * time.Second
 
 type APIClient struct {
 	token      string
@@ -20,7 +32,7 @@ type APIClient struct {
 }
 
 func NewSlack(token, channel, errChannel, apiURL string) *APIClient {
-	apiClient := &APIClient{token, channel, errChannel, apiURL, &http.Client{}}
+	apiClient := &APIClient{token, channel, errChannel, apiURL, &http.Client{Timeout: httpClientTimeout}}
 	return apiClient
 }
 
@@ -70,7 +82,8 @@ func (apiClient *APIClient) sendMessageToSlackV2(message string) (err error) {
 	if err != nil {
 		return err
 	}
-	resp, err := http.PostForm(apiURL, url.Values{"payload": {string(p)}})
+	// http.PostForm ではなく自前のクライアントを使う（DefaultClient はタイムアウトを持たない）
+	resp, err := apiClient.httpClient.PostForm(apiURL, url.Values{"payload": {string(p)}})
 	if err != nil {
 		return err
 	}
